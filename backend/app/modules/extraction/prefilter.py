@@ -54,6 +54,23 @@ def _sentences(pages: Sequence[PageInput], exclude: frozenset[int]) -> list[tupl
     return out
 
 
+def _split(text: str, limit: int) -> list[str]:
+    """Cut a chunk longer than `limit` at word boundaries (a hard cut inside a longer word), so
+    text without sentence punctuation (sheets, lists, dense OCR) still fits a window."""
+    pieces: list[str] = []
+    while len(text) > limit:
+        cut = text.rfind(" ", 0, limit + 1)
+        if cut <= 0:
+            pieces.append(text[:limit])
+            text = text[limit:]
+        else:
+            pieces.append(text[:cut])
+            text = text[cut + 1 :]
+    if text:
+        pieces.append(text)
+    return pieces
+
+
 def _pack(chunks: list[tuple[int, str]], limit: int) -> list[Window]:
     windows: list[Window] = []
     text: list[str] = []
@@ -87,7 +104,8 @@ def prefilter(
         for i in selected:
             keep.update({max(0, i - 1), i, min(len(sentences) - 1, i + 1)})
         chunks = [sentences[i] for i in sorted(keep)]
-    windows = _pack(chunks, window_chars)
+    pieces = [(page, piece) for page, chunk in chunks for piece in _split(chunk, window_chars)]
+    windows = _pack(pieces, window_chars)
     capped = len(windows) > max_windows
     low_yield = (
         not deep_scan

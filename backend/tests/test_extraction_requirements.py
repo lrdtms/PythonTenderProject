@@ -75,7 +75,32 @@ def test_prefilter_batches_by_size_and_applies_the_window_cap() -> None:
     )
     result = ex.prefilter([page(1, body)], window_chars=1000, max_windows=3)
     assert len(result.windows) == 3 and result.capped is True
-    assert all(len(w.text) <= 1100 for w in result.windows)
+    assert all(len(w.text) <= 1000 for w in result.windows)
+
+
+def _sheet_text() -> str:
+    # Sheet-like text with no sentence punctuation: one "sentence" of 50k characters.
+    words = [
+        f"cell{i} tenderers must price row {i}" if i % 50 == 0 else f"cell{i}" for i in range(9000)
+    ]
+    return " ".join(words)
+
+
+@pytest.mark.parametrize("deep", [False, True])
+@pytest.mark.parametrize("limit", [5400, 1000])
+def test_window_chars_is_a_hard_cap_without_sentence_punctuation(deep: bool, limit: int) -> None:
+    text = _sheet_text()
+    assert len(text) >= 50_000
+    result = ex.prefilter([page(1, text)], deep_scan=deep, window_chars=limit, max_windows=10_000)
+    assert result.windows and all(len(w.text) <= limit for w in result.windows)
+    assert " ".join(w.text for w in result.windows).split() == text.split()  # nothing lost
+
+
+def test_a_word_longer_than_the_window_is_hard_cut() -> None:
+    blob = "x" * 2500 + " must " + "y" * 30
+    result = ex.prefilter([page(1, blob)], deep_scan=True, window_chars=1000)
+    assert all(len(w.text) <= 1000 for w in result.windows)
+    assert "".join("".join(w.text.split()) for w in result.windows) == "".join(blob.split())
 
 
 def test_prefilter_reports_low_yield_on_long_text_with_few_candidates() -> None:
