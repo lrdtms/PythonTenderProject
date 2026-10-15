@@ -13,7 +13,8 @@ from .types import PageInput, RequirementCandidate
 FUZZY_THRESHOLD = 0.9
 MIN_FUZZY_CHARS = 20
 GRAM = 5
-MAX_GRAM_HITS = 8
+MAX_GRAM_HITS = 1000
+MAX_VOTES = 6000
 MIN_VOTE_SHARE = 0.3
 
 
@@ -38,24 +39,32 @@ def _ratio(chunk: str, needle: str) -> float:
 def _anchor(haystack: str, needle: str) -> int | None:
     """Estimate where the quote starts: n-gram hits vote for a diagonal (haystack - needle pos)."""
     size = len(needle)
-    n_grams = size - GRAM + 1
     bucket = max(4, size // 8)
+    # Rarest n-grams first, each with all its occurrences (no positional bias), until the work
+    # budget is spent: the cost is bounded and the true location is never dropped for being late.
+    grams = sorted(
+        ((haystack.count(needle[i : i + GRAM]), i) for i in range(size - GRAM + 1)),
+    )
     votes: dict[int, list[int]] = {}
-    stride = 2 if n_grams > 40 else 1
-    for i in range(0, n_grams, stride):
+    budget, voted = MAX_VOTES, 0
+    for count, i in grams:
+        if count == 0:
+            continue
+        if count > min(MAX_GRAM_HITS, budget):
+            break
         gram = needle[i : i + GRAM]
         at = haystack.find(gram)
-        seen = 0
-        while at >= 0 and seen < MAX_GRAM_HITS:
+        while at >= 0:
             votes.setdefault((at - i) // bucket, []).append(at - i)
-            seen += 1
             at = haystack.find(gram, at + 1)
+        budget -= count
+        voted += 1
     best_key, best_count = None, 0
     for key in votes:
         count = len(votes[key]) + len(votes.get(key + 1, ()))
         if count > best_count:
             best_key, best_count = key, count
-    if best_key is None or best_count < n_grams / stride * MIN_VOTE_SHARE:
+    if best_key is None or best_count < voted * MIN_VOTE_SHARE:
         return None
     pooled = sorted(votes[best_key] + votes.get(best_key + 1, []))
     return pooled[len(pooled) // 2]

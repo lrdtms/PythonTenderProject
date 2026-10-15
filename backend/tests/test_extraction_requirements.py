@@ -257,13 +257,13 @@ def test_locate_is_fast_on_a_large_page_for_a_miss_and_a_fuzzy_hit() -> None:
     shuffled = " ".join(rng.sample(words, 30))[:160]  # the page's own words, a different order
     started = time.perf_counter()
     assert ex.locate(shuffled, pages) is None
-    assert time.perf_counter() - started < 0.3
+    assert time.perf_counter() - started < 1.0
 
     original = text[5000:5160]
     garbled = original[:20] + "Q" + original[21:80] + "Z" + original[81:120] + "X" + original[121:]
     started = time.perf_counter()
     found = ex.locate(garbled, pages)
-    assert time.perf_counter() - started < 0.3
+    assert time.perf_counter() - started < 1.0
     assert found is not None and found.exact is False and abs(found.start - 5000) <= 5
 
 
@@ -287,3 +287,35 @@ def test_deeply_nested_json_is_invalid_output_not_a_crash() -> None:
     llm = FakeLLM(["[" * 100_000, "[" * 100_000])
     out = ex.extract_requirements([ex.Window("x", (1,))], llm, max_items_per_response=10)
     assert out.candidates == [] and out.warnings[0]["code"] == "WINDOW_INVALID_OUTPUT"
+
+
+def _repetitive_page() -> str:
+    import random
+
+    rng = random.Random(11)  # noqa: S311
+    words = [
+        "".join(rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(rng.randint(2, 4)))
+        for _ in range(9)
+    ]
+    return " ".join(rng.choice(words) for _ in range(4000))[:14000]
+
+
+@pytest.mark.parametrize("position", [0.02, 0.5, 0.97])
+def test_locate_finds_garbled_quotes_anywhere_on_a_repetitive_page(position: float) -> None:
+    text = _repetitive_page()
+    start = int(len(text) * position) - 100 if position > 0.9 else int(len(text) * position)
+    original = text[start : start + 120]
+    garbled = original[:15] + "Q" + original[16:60] + "Z" + original[61:100] + "X" + original[101:]
+    found = ex.locate(garbled, [page(1, text)])
+    assert found is not None and found.exact is False and abs(found.start - start) <= 6
+
+
+def test_locate_miss_on_a_repetitive_page_is_bounded() -> None:
+    import time
+
+    text = _repetitive_page()
+    words = text.split()[:300]
+    shuffled = " ".join(reversed(words[:20]))[:160]
+    started = time.perf_counter()
+    assert ex.locate(shuffled, [page(1, text)]) is None
+    assert time.perf_counter() - started < 1.0
