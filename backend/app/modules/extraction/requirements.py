@@ -107,26 +107,35 @@ def extract_requirements(
     return outcome
 
 
-def _norm(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip().lower()
+_EDGE_PUNCTUATION = "\"'.,;:!?()[]{}<>"
+
+
+def _words(text: str) -> tuple[str, ...]:
+    """Normalised words of a quote: whitespace-split, case-folded, edge punctuation stripped."""
+    words = tuple(w for w in (t.strip(_EDGE_PUNCTUATION) for t in text.lower().split()) if w)
+    return words or (re.sub(r"\s+", " ", text).strip().lower(),)
+
+
+def _contains(big: tuple[str, ...], small: tuple[str, ...]) -> bool:
+    """Whole-word containment: `small` occurs in `big` as a contiguous run of words."""
+    n = len(small)
+    return n <= len(big) and any(big[i : i + n] == small for i in range(len(big) - n + 1))
 
 
 def merge_requirements(cands: Sequence[RequirementCandidate]) -> list[RequirementCandidate]:
-    """Drop duplicates from overlapping windows: a quote equal to, or contained in, an earlier
-    kept quote (or containing one) is the same requirement; keep the longer wording."""
-    kept: list[RequirementCandidate] = []
+    """Drop duplicates from overlapping windows: a quote equal to, or contained in (whole words),
+    an earlier kept quote is the same requirement; a quote containing kept quotes replaces the
+    first of them and drops the rest, so the longer wording is kept."""
+    kept: list[tuple[tuple[str, ...], RequirementCandidate]] = []
     for cand in cands:
-        q = _norm(cand.evidence_quote)
-        replaced = False
-        for i, other in enumerate(kept):
-            o = _norm(other.evidence_quote)
-            if q == o or q in o:
-                replaced = True
-                break
-            if o in q:
-                kept[i] = cand
-                replaced = True
-                break
-        if not replaced:
-            kept.append(cand)
-    return kept
+        q = _words(cand.evidence_quote)
+        if any(_contains(o, q) for o, _ in kept):
+            continue
+        inside = [i for i, (o, _) in enumerate(kept) if _contains(q, o)]
+        if inside:
+            kept[inside[0]] = (q, cand)
+            for i in reversed(inside[1:]):
+                del kept[i]
+        else:
+            kept.append((q, cand))
+    return [cand for _, cand in kept]

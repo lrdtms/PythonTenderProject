@@ -218,6 +218,25 @@ def test_merge_removes_duplicates_from_overlapping_windows() -> None:
     ]
 
 
+def test_merge_containment_respects_word_boundaries() -> None:
+    for quotes in (["Must do 10", "Must do 1"], ["Must do 1", "Must do 10"]):
+        merged = ex.merge_requirements([_cand(q) for q in quotes])
+        assert [c.evidence_quote for c in merged] == quotes
+    merged = ex.merge_requirements([_cand("Bidders must attend."), _cand("must attend")])
+    assert [c.evidence_quote for c in merged] == ["Bidders must attend."]  # edge punctuation
+
+
+def test_merge_a_quote_containing_several_kept_quotes_replaces_them_all() -> None:
+    merged = ex.merge_requirements(
+        [_cand("must sign form A"), _cand("Closing is at 11:00"), _cand("must pay fee B"),
+         _cand("Tenderers must sign form A and must pay fee B")]
+    )  # fmt: skip
+    assert [c.evidence_quote for c in merged] == [
+        "Tenderers must sign form A and must pay fee B",
+        "Closing is at 11:00",
+    ]
+
+
 # --- provenance -------------------------------------------------------------------------------------------
 
 
