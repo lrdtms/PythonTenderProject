@@ -101,6 +101,36 @@ def test_header_carries_across_pdf_pages() -> None:
     assert result.boq_pages == {3, 4}
 
 
+def test_total_rows_with_only_an_amount_are_skipped() -> None:
+    rows = [
+        HEADER,
+        ["1.1", "Cable", "m", "5", "", ""],
+        ["", "Total for Section 2", "", "", "", "1 500,00"],
+        ["", "Total carried to summary", "", "", "", "9 000,00"],
+        ["1.2", "Total station survey", "item", "1", "", ""],
+    ]
+    result = extraction.parse_boq([_page(rows)])
+    assert [i.item_no for i in result.items] == ["1.1", "1.2"]
+
+
+def test_header_does_not_leak_to_unrelated_or_distant_tables() -> None:
+    boq = _page([HEADER, ["1.1", "Cable", "m", "5", "", ""]], kind="table", number=3, label=None)
+    wide = [["a", "b", "c", "d", "e", "f"], ["x", "Some text", "y", "9", "z", "w"]]
+    # (a) unrelated wide table two pages after the BoQ page
+    two_later = _page(wide, kind="table", number=5, label=None)
+    result = extraction.parse_boq([boq, two_later])
+    assert [i.item_no for i in result.items] == ["1.1"]
+    # (c) a gap page without tables breaks the carry
+    gap = extraction.PageInput(4, None, "text", "embedded", "ok", [])
+    result = extraction.parse_boq([boq, gap, two_later])
+    assert [i.item_no for i in result.items] == ["1.1"] and result.boq_pages == {3}
+
+
+def test_unparsed_rate_is_flagged() -> None:
+    result = extraction.parse_boq([_page([HEADER, ["1.1", "Cable", "m", "5", "1e-05", ""]])])
+    assert "rate_unparsed" in result.items[0].flags
+
+
 def test_more_than_four_decimals_is_flagged_not_rounded() -> None:
     result = extraction.parse_boq([_page([HEADER, ["1.1", "Cable", "m", "1e-05", "", ""]])])
     item = result.items[0]

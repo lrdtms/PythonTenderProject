@@ -27,6 +27,7 @@ SUBTOTAL = re.compile(
     r"carried forward|brought forward|c/f\b|b/f\b|collection\s*$|summary\s*$)",
     re.I,
 )
+TOTAL_WORD = re.compile(r"^\s*total\b", re.I)
 RATE_ONLY = re.compile(r"\brate\s*only\b|^r/o$", re.I)
 PROVISIONAL = re.compile(r"\b(provisional\s+sum|prov\.?\s+sum|pc\s+sum)\b", re.I)
 SCAN_FIELDS = ("item", "description", "unit", "quantity", "rate", "amount")
@@ -100,7 +101,10 @@ def _candidate(
     ):
         flags.append("missing_quantity")
 
-    rate, _ = parse_decimal(_get(row, columns, "rate"))
+    raw_rate = _get(row, columns, "rate")
+    rate, _ = parse_decimal(raw_rate)
+    if raw_rate and rate is None:
+        flags.append("rate_unparsed")
     sheet = cell_range = page_number = None
     if table.get("kind") == "sheet":
         sheet = page.label
@@ -127,8 +131,13 @@ def _candidate(
 def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
     result = BoqResult()
     carried: tuple[dict[str, int], int] | None = None  # header columns and width, across pages
+    last_boq_page: int | None = None  # page where the carried header was last seen or continued
     scanned: list[int] = []
     for page in pages:
+        if carried is not None and (
+            last_boq_page is None or page.page_number not in (last_boq_page, last_boq_page + 1)
+        ):
+            carried = None  # a page gap (or a page without tables) ends the continuation
         if page.text_source == "ocr" and not page.tables:
             words = {w for w in re.findall(r"[a-z]+", page.text.lower())}
             hits = sum(
@@ -149,11 +158,14 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 width = max(columns.values()) + 1
                 width = max(width, max((len(rows[start]),), default=width))
                 carried = (columns, width)
+                last_boq_page = page.page_number
                 body_from = start + 1
             elif carried is not None and table.get("kind") != "sheet":
                 columns, width = carried
                 if max(len(r) for r in rows) < width:
+                    carried = None  # not a continuation of the BoQ
                     continue
+                last_boq_page = page.page_number
                 body_from = 0
             else:
                 continue
@@ -167,6 +179,10 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 )
                 if not description or SUBTOTAL.match(description):
                     continue
+                if TOTAL_WORD.match(description) and not (
+                    _get(row, columns, "unit") or _get(row, columns, "quantity")
+                ):
+                    continue  # an amount-only total row, not an item
                 if not has_figures:
                     section = description
                     continue
