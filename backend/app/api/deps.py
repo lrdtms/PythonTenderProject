@@ -9,7 +9,8 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from app.db.session import get_sessionmaker, set_org
-from app.kernel import OrgContext
+from app.infrastructure.storage import get_storage
+from app.kernel import OrgContext, StoragePort
 from app.modules.identity import public as identity
 
 SESSION_COOKIE = "intel_session"
@@ -38,3 +39,6 @@ def get_ctx(request: Request, session: DbSession) -> OrgContext:
 
 
 Ctx = Annotated[OrgContext, Depends(get_ctx)]
+
+
+Storage = Annotated[StoragePort, Depends(get_storage)]

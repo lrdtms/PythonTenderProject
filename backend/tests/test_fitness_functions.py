@@ -13,6 +13,9 @@ from sqlalchemy import ForeignKeyConstraint, create_engine
 
 # Import every module's models so Base.metadata is complete.
 import app.modules.audit.models  # noqa: F401, E402, I001
+import app.modules.documents.models  # noqa: F401, E402
+import app.modules.jobs.models  # noqa: F401, E402
+import app.modules.knowledge.models  # noqa: F401, E402
 import app.modules.identity.models  # noqa: F401, E402
 import app.modules.tenders.models  # noqa: F401, E402
 from app.api.main import app as fastapi_app

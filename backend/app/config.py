@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     llm_model: str = "qwen3:4b"
     llm_allow_hosted: bool = False
 
+    max_upload_mb: int = 25
+    ocr_enabled: bool = True
+    tesseract_cmd: str = "tesseract"
+    ocr_page_timeout_s: int = 60
+    ocr_dpi: int = 300
+    job_lease_seconds: int = 300
+
     secret_key: str = "change-me"  # noqa: S105 - dev default, rejected outside development
     environment: str = "development"
 

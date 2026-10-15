@@ -8,6 +8,7 @@ at it with TEST_DATABASE_URL, or with DB_HOST_PORT when it is not on 5432. The d
 from __future__ import annotations
 
 import os
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,6 +26,7 @@ TEST_DATABASE_URL = os.environ.get(
 # Must be set before the application reads its settings.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ENVIRONMENT"] = "development"
+os.environ["STORAGE_PATH"] = tempfile.mkdtemp(prefix="inteltps-test-files-")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 CSRF = {"X-Requested-With": "IntelTPS"}
@@ -127,3 +129,67 @@ def add_member(admin: Actor, email: str, role: str, name: str = "Member") -> Act
 @pytest.fixture
 def admin() -> Actor:
     return register()
+
+
+# --- file builders (self-contained: PyMuPDF, openpyxl and python-docx are runtime dependencies) -----
+
+
+def make_pdf(pages: list[str]) -> bytes:
+    import pymupdf
+
+    doc = pymupdf.open()
+    for text in pages:
+        page = doc.new_page()
+        page.insert_textbox(pymupdf.Rect(50, 50, 545, 790), text, fontsize=10)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def make_scanned_pdf(texts: list[str]) -> bytes:
+    """A PDF whose pages are images only (no text layer), like a scan."""
+    import pymupdf
+
+    source = pymupdf.open(stream=make_pdf(texts), filetype="pdf")
+    out = pymupdf.open()
+    for page in source:
+        png = page.get_pixmap(dpi=100).tobytes("png")
+        new = out.new_page(width=page.rect.width, height=page.rect.height)
+        new.insert_image(new.rect, stream=png)
+    data = out.tobytes()
+    out.close()
+    source.close()
+    return data
+
+
+def make_xlsx(rows: list[list[object]], sheet: str = "BoQ") -> bytes:
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def upload(
+    actor: Actor,
+    tender_id: str,
+    data: bytes,
+    name: str = "tender.pdf",
+    kind: str = "tender_document",
+):
+    return actor.client.post(
+        f"/api/v1/tenders/{tender_id}/documents",
+        files={"file": (name, data, "application/octet-stream")},
+        data={"kind": kind},
+    )
+
+
+def make_tender(actor: Actor, title: str = "Hall wiring") -> str:
+    return actor.client.post("/api/v1/tenders", json={"title": title}).json()["id"]

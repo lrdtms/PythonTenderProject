@@ -1,1 +1,1 @@
-"""knowledge module. Public surface: public.py only (see docs/architecture/architecture.md)."""
+"""knowledge module: parsing, OCR, chunking and search. Public surface: public.py only."""

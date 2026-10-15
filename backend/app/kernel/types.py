@@ -62,6 +62,12 @@ class OrgContext:
     role: Role
     membership_id: UUID | None = None
 
+    @classmethod
+    def system(cls, organisation_id: UUID, user_id: UUID) -> OrgContext:
+        """The context a worker uses for a job. Built from the job row, never from document
+        content. Acts with full rights inside that one organisation only."""
+        return cls(user_id, organisation_id, Role.ADMIN, None)
+
     def can(self, permission: Permission) -> bool:
         return permission in ROLE_PERMISSIONS[self.role]
 
