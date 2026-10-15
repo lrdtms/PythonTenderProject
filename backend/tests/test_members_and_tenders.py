@@ -155,3 +155,30 @@ def test_audit_events_are_written_with_safe_metadata(admin) -> None:
     assert [e.action for e in events] == ["created", "updated"]
     assert all("Top secret title" not in str(e.event_metadata) for e in events)
     assert events[1].event_metadata["new_status"] == "ready"
+
+
+def test_patch_with_null_title_or_status_is_a_validation_error(admin) -> None:
+    c = admin.client
+    tid = c.post("/api/v1/tenders", json={"title": "T", "location": "Here"}).json()["id"]
+    for field in ("title", "status"):
+        r = c.patch(f"/api/v1/tenders/{tid}", json={field: None})
+        assert r.status_code == 422, (field, r.status_code)
+        assert r.json()["error"]["code"] == "validation_error"
+    # Optional fields can still be cleared.
+    cleared = c.patch(f"/api/v1/tenders/{tid}", json={"location": None})
+    assert cleared.status_code == 200 and cleared.json()["location"] is None
+
+
+def test_an_archived_tender_can_only_be_reopened(admin) -> None:
+    c = admin.client
+    tid = c.post("/api/v1/tenders", json={"title": "Old bid"}).json()["id"]
+    assert c.post(f"/api/v1/tenders/{tid}/archive").status_code == 200
+    for body in ({"title": "Edited"}, {"location": "X"}, {"status": "ready", "title": "Edited"}):
+        r = c.patch(f"/api/v1/tenders/{tid}", json=body)
+        assert r.status_code == 409, (body, r.status_code)
+    assert c.post(f"/api/v1/tenders/{tid}/archive").status_code == 409  # already archived
+    assert c.get(f"/api/v1/tenders/{tid}").json()["title"] == "Old bid"
+    reopened = c.patch(f"/api/v1/tenders/{tid}", json={"status": "preparing"})
+    assert reopened.status_code == 200
+    assert reopened.json()["status"] == "preparing" and reopened.json()["archived_at"] is None
+    assert c.patch(f"/api/v1/tenders/{tid}", json={"title": "Edited"}).status_code == 200
