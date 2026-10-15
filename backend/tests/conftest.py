@@ -138,9 +138,9 @@ def make_pdf(pages: list[str]) -> bytes:
     import pymupdf
 
     doc = pymupdf.open()
-    for text in pages:
+    for page_text in pages:
         page = doc.new_page()
-        page.insert_textbox(pymupdf.Rect(50, 50, 545, 790), text, fontsize=10)
+        page.insert_textbox(pymupdf.Rect(50, 50, 545, 790), page_text, fontsize=10)
     data = doc.tobytes()
     doc.close()
     return data
