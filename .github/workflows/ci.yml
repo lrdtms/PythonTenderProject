@@ -19,6 +19,10 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run lint-imports
       - run: uv run pytest -q
+      - name: Dependency audit (runtime)
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/requirements.txt
+          uvx pip-audit -r /tmp/requirements.txt --no-deps --disable-pip
 
   frontend:
     runs-on: ubuntu-latest
@@ -35,3 +39,5 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Dependency audit (runtime)
+        run: npm audit --omit=dev --audit-level=high
