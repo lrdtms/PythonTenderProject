@@ -1,0 +1,32 @@
+[project]
+name = "inteltps-eval"
+version = "0.1.0"
+description = "Synthetic tender packs with ground truth, and the evaluation harness for IntelTPS"
+requires-python = ">=3.12"
+dependencies = [
+    "reportlab>=4.2",
+    "openpyxl>=3.1",
+    "pymupdf>=1.24",
+    "pillow>=10.4",
+    "jsonschema>=4.23",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.6"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"synthgen/catalogue.py" = ["E501"]  # data tables and fictional prose
