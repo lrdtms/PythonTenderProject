@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func
 
 from app.db.scoped import ScopedRepository
 
@@ -36,10 +36,9 @@ class VersionRepo(ScopedRepository[DocumentVersion]):
 
     def next_number(self, document_id: UUID) -> int:
         top = self.session.scalar(
-            select(func.max(DocumentVersion.version_number)).where(
-                DocumentVersion.organisation_id == self.ctx.organisation_id,
-                DocumentVersion.document_id == document_id,
-            )
+            self._select()
+            .with_only_columns(func.max(DocumentVersion.version_number))
+            .where(DocumentVersion.document_id == document_id)
         )
         return (top or 0) + 1
 

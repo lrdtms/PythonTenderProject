@@ -182,3 +182,70 @@ def test_an_archived_tender_can_only_be_reopened(admin) -> None:
     assert reopened.status_code == 200
     assert reopened.json()["status"] == "preparing" and reopened.json()["archived_at"] is None
     assert c.patch(f"/api/v1/tenders/{tid}", json={"title": "Edited"}).status_code == 200
+
+
+# --- one user, one organisation; password reset (review I-7) -----------------------------------
+
+
+def test_create_member_rejects_an_email_that_exists_in_another_organisation(admin) -> None:
+    other = register("other@example.com", org="Other Co")
+    r = admin.client.post(
+        "/api/v1/members",
+        json={"name": "X", "email": "OTHER@example.com", "role": "reviewer",
+              "password": STRONG_PASSWORD},
+    )  # fmt: skip
+    assert r.status_code == 409 and r.json()["error"]["code"] == "conflict"
+    assert [m["email"] for m in other.client.get("/api/v1/members").json()] == ["other@example.com"]
+
+
+def test_password_reset_revokes_every_session_of_the_user(admin) -> None:
+    from datetime import UTC, datetime, timedelta
+    from uuid import UUID
+
+    from app.modules.identity.models import Membership, UserSession
+
+    est = add_member(admin, "est@example.com", "estimator")
+    make_client().post(  # a second session in the same organisation
+        "/api/v1/auth/login", json={"email": "est@example.com", "password": STRONG_PASSWORD}
+    )
+    other = register("other@example.com", org="Other Co")
+    user_id = UUID(est.me["user_id"])
+    # Guard the invariant even if a user ever gets a second membership: seed one directly.
+    with session_scope() as s:
+        s.add(Membership(organisation_id=UUID(other.org_id), user_id=user_id, role="reviewer"))
+        s.flush()
+        s.add(
+            UserSession(
+                token_hash="f" * 64,
+                user_id=user_id,
+                active_organisation_id=UUID(other.org_id),
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
+    mid = member_id(admin, "est@example.com")
+    r = admin.client.post(
+        f"/api/v1/members/{mid}/reset-password", json={"password": "another-strong-pass"}
+    )
+    assert r.status_code == 204
+    with session_scope() as s:
+        sessions = s.scalars(select(UserSession).where(UserSession.user_id == user_id)).all()
+    assert len(sessions) == 3 and all(x.revoked_at is not None for x in sessions)
+
+
+# --- last-admin rule (review minor) -------------------------------------------------------------
+
+
+def test_a_deactivated_admin_can_be_demoted_or_deactivated_again(admin) -> None:
+    add_member(admin, "admin2@example.com", "admin")
+    mid = member_id(admin, "admin2@example.com")
+    assert admin.client.post(f"/api/v1/members/{mid}/deactivate").status_code == 200
+    # One active admin remains; the target is not active, so the rule does not apply.
+    assert admin.client.post(f"/api/v1/members/{mid}/deactivate").status_code == 200
+    r = admin.client.patch(f"/api/v1/members/{mid}/role", json={"role": "reviewer"})
+    assert r.status_code == 200 and r.json()["role"] == "reviewer"
+    # The last active admin is still protected.
+    own = member_id(admin, "owner@example.com")
+    assert (
+        admin.client.patch(f"/api/v1/members/{own}/role", json={"role": "reviewer"}).status_code
+        == 422
+    )

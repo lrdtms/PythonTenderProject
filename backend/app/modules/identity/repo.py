@@ -82,6 +82,14 @@ class SessionRepo:
             .values(revoked_at=datetime.now(UTC))
         )
 
+    def revoke_for_user(self, user_id: UUID) -> None:
+        """Every live session of the user, in every organisation (password reset)."""
+        self.session.execute(
+            update(UserSession)
+            .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+            .values(revoked_at=datetime.now(UTC))
+        )
+
     def revoke_for_membership(self, organisation_id: UUID, user_id: UUID) -> None:
         self.session.execute(
             update(UserSession)
@@ -118,9 +126,9 @@ class MembershipRepo(ScopedRepository[Membership]):
 
     def list_with_users(self) -> list[tuple[Membership, User]]:
         rows = self.session.execute(
-            select(Membership, User)
+            self._select()
+            .add_columns(User)
             .join(User, User.id == Membership.user_id)
-            .where(Membership.organisation_id == self.ctx.organisation_id)
             .order_by(User.name)
         ).all()
         return [(m, u) for m, u in rows]
@@ -132,15 +140,11 @@ class MembershipRepo(ScopedRepository[Membership]):
         return user
 
     def count_active_admins(self) -> int:
-        return (
-            self.session.scalar(
-                select(func.count())
-                .select_from(Membership)
-                .where(
-                    Membership.organisation_id == self.ctx.organisation_id,
-                    Membership.role == "admin",
-                    Membership.status == "active",
-                )
-            )
-            or 0
+        """Count this organisation's active admins, locking their rows (FOR UPDATE) so two
+        concurrent demotions cannot both see two admins and remove the last one."""
+        stmt = (
+            self._select()
+            .where(Membership.role == "admin", Membership.status == "active")
+            .with_for_update()
         )
+        return len(self.session.scalars(stmt).all())

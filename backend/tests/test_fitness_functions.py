@@ -133,7 +133,12 @@ def test_f1_lists_never_mix_organisations() -> None:
 
 # --- F2: raw SQL only in repositories; layering helpers ----------------------------------------
 
-RAW_SQL = re.compile(r"\.(execute|scalar|scalars|query)\(")
+RAW_SQL = re.compile(
+    r"\.(execute|scalar|scalars|query)\("  # executing anything
+    r"|\bsession\.(get|delete|merge)\("  # identity-map lookups and deletes skip the org filter
+    r"|\.get\(\s*[A-Z][a-z]\w*\s*,"  # <anything>.get(Model, id)
+    r"|(?<![\w.])(?<!def )(select|insert|update|delete|pg_insert)\("  # builders, not methods
+)
 ALLOWED_RAW_SQL = {"repo.py"}  # plus everything under app/db
 
 
@@ -147,6 +152,46 @@ def test_f2_no_raw_database_calls_outside_repositories() -> None:
             if RAW_SQL.search(line) and not line.lstrip().startswith("#"):
                 offenders.append(f"{rel}:{lineno}: {line.strip()}")
     assert not offenders, "raw database calls outside repo.py / app/db:\n" + "\n".join(offenders)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "rows = session.execute(stmt)",
+        "x = self.session.scalar(q)",
+        "session.scalars(select(Tender)).all()",
+        "db.query(Tender)",
+        "stmt = select(Tender).where(Tender.id == tid)",
+        "tender = session.get(Tender, tender_id)",
+        "row = self.session.get(Document, doc_id)",
+        "x = s.get(Tender, tid)",
+        "session.delete(tender)",
+        "session.merge(tender)",
+        "stmt = delete(DocumentPage).where(x)",
+        "stmt = update(Tender).values(title='x')",
+        "stmt = insert(DocumentChunk)",
+        "stmt = pg_insert(Job).values(x=1)",
+    ],
+)
+def test_f2_rule_flags_database_access(line: str) -> None:
+    assert RAW_SQL.search(line), line
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "    def delete(self, key: str) -> None:",
+        "storage.delete(key)",
+        "value = settings.get('x', 1)",
+        "kind = STATUS.get(code, 400)",
+        'status = changes.get("status")',
+        "session.add(entity)",
+        "session.flush()",
+        "selected = selection(items)",
+    ],
+)
+def test_f2_rule_ignores_ordinary_code(line: str) -> None:
+    assert not RAW_SQL.search(line), line
 
 
 def test_f2_api_layer_does_not_import_sqlalchemy_models() -> None:

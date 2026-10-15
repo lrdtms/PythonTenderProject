@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, insert, text
+from sqlalchemy import insert, text
 
 from app.db.scoped import ScopedRepository
 
@@ -30,12 +30,7 @@ class PageRepo(ScopedRepository[DocumentPage]):
         return rows[0] if rows else None
 
     def replace_for_version(self, version_id: UUID, rows: list[dict[str, Any]]) -> None:
-        self.session.execute(
-            delete(DocumentPage).where(
-                DocumentPage.organisation_id == self.ctx.organisation_id,
-                DocumentPage.document_version_id == version_id,
-            )
-        )
+        self.session.execute(self._delete().where(DocumentPage.document_version_id == version_id))
         if rows:
             owner = {
                 "organisation_id": self.ctx.organisation_id,
@@ -49,12 +44,7 @@ class ChunkRepo(ScopedRepository[DocumentChunk]):
 
     def replace_for_version(self, version_id: UUID, rows: list[dict[str, Any]]) -> None:
         """Replace a version's chunks as a set (FR-59): re-running never duplicates."""
-        self.session.execute(
-            delete(DocumentChunk).where(
-                DocumentChunk.organisation_id == self.ctx.organisation_id,
-                DocumentChunk.document_version_id == version_id,
-            )
-        )
+        self.session.execute(self._delete().where(DocumentChunk.document_version_id == version_id))
         if rows:
             owner = {
                 "organisation_id": self.ctx.organisation_id,
