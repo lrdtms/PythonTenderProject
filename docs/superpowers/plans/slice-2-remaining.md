@@ -1,0 +1,77 @@
+# Slice 2 (documents, jobs, ingestion): remaining work
+
+**Spec (binding authority):** `docs/plan.md` section 3 (Slice 2), `docs/prd.md` FR-11 to FR-17, FR-59, FR-60, FR-64 to FR-66, `docs/architecture/architecture.md` sections 2-6, ADR-0005 (tenancy), ADR-0006 (queue), ADR-0007 (storage), ADR-0010 (solo scope).
+
+**State:** the application code for Slice 2 is written and committed on branch `feat/slice-2-documents-jobs` (documents, jobs, knowledge, worker, migration 0002, API routes). Tests exist for documents (`tests/test_documents.py`) and the job queue (`tests/test_jobs.py`) and pass. This plan covers the remaining tests, one test-driven fix pass, the Docker/OCR smoke test and the docs.
+
+**Scope decisions already made (do not reopen):** no embeddings or vector search in this slice (full-text search only; embeddings come back only if Q&A returns); file download is an authenticated same-origin endpoint (no signed links); OCR runs through the Tesseract command line; BoQ extraction and requirement extraction are Slice 3.
+
+## Global Constraints
+
+- Work in `C:\Users\Admin\Projects\python_apps\PythonGroupPorject\PythonTenderProject`, branch `feat/slice-2-documents-jobs`. Windows 11; use `127.0.0.1`, never `localhost` (it hangs on this machine).
+- Backend commands run from `backend/`. Tests need Postgres: it is running in Docker on `127.0.0.1:5433`. Always run tests with `TEST_DATABASE_URL=postgresql+psycopg://intel:intel@127.0.0.1:5433/inteltps_test_s2` (PowerShell: `$env:TEST_DATABASE_URL="..."`; bash: `export ...`). Do NOT use the database name `inteltps_test`: another process may be using it. The suite drops and recreates its database each run.
+- Tenant isolation (ADR-0005): every repository for organisation data extends `ScopedRepository`; another organisation's rows are `NotFound` (HTTP 404), never 403; no raw `execute/scalar/scalars/query` outside `repo.py` files and `app/db` (test F2 enforces it); modules import other modules only through `public.py`; `app.kernel` and `app.modules.extraction` import neither fastapi nor sqlalchemy (import-linter enforces it).
+- Logs, audit metadata and error messages never contain document text. Failure codes are short stable strings (`FILE_CORRUPT`, `PDF_ENCRYPTED`, `OCR_FAILED`, ...).
+- Money, quantities and extraction are out of scope here.
+- Quality gates before every commit: `uv run ruff format .`, `uv run ruff check .`, `uv run lint-imports`, and the tests you wrote plus any you touched. Test output must be pristine (no new warnings).
+- Files written through shell heredocs have lost backslashes before (`r"[\\/]"` became `r"[\/]"`). Prefer the editor tools for files that contain regexes or Windows paths, and re-read what you wrote.
+- If a test you write exposes a bug in the existing Slice 2 application code, fix the bug minimally in the application code, keep the test that caught it, and describe the bug in your report. Do not refactor.
+- Do not dispatch subagents. Do not push or merge.
+
+## Task 1: Knowledge unit tests (parsers, OCR, chunking)
+
+Create `backend/tests/test_knowledge_units.py`. These are pure unit tests of `app/modules/knowledge/parsers.py`, `ocr.py` and `chunking.py` (no database, no API). Use the file builders `make_pdf`, `make_scanned_pdf`, `make_xlsx` in `backend/tests/conftest.py`; add small builders there for CSV (plain bytes), DOCX (python-docx) and an encrypted PDF (PyMuPDF `doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256, owner_pw=..., user_pw=...)`) if needed.
+
+Required cases (each its own test, with real assertions):
+1. Text PDF: a 2-page PDF yields 2 `ParsedPage`s with the expected text, `page_number` 1 and 2, `text_source="embedded"`, `status="ok"`; the progress callback is called with `(1, 2)` then `(2, 2)`.
+2. A PDF page with a ruled table (draw it with PyMuPDF `page.draw_rect`/`draw_line` and `insert_text` so pdfplumber can find it; if pdfplumber cannot detect your table, state that in the report and assert only that parsing still succeeds with text) records a `tables` entry `{"kind": "table", "rows": [...]}`.
+3. Scanned PDF (`make_scanned_pdf`) with a fake `OcrRunner` returning `("Scanned text", 90.0)`: page `text_source="ocr"`, `status="ok"`, `ocr_confidence=90.0`, text from the fake. With confidence 40.0: `status="low_confidence"`. Fake raising `OcrFailed`: `status="ocr_failed"`, empty text. No OCR runner (`None`) and a fake whose `available()` returns False: `status="ocr_unavailable"`.
+4. A blank PDF page (new page, no text, no images) has `status="empty"` and `text_source="none"`.
+5. Encrypted PDF raises `ProcessingFailed` with `error_code == "PDF_ENCRYPTED"` and `transient is False`. Garbage bytes starting with `%PDF-` raise `ProcessingFailed("FILE_CORRUPT")`.
+6. XLSX: two sheets give two pages, `label` = sheet name, `page_number` 1 and 2, the first page's `tables[0]["rows"]` and `first_row == 1`, text lines joined by ` | `; an empty sheet is `status="empty"`. CSV with `;` delimiter and a cp1252 byte (for example `b"caf\xe9;qty\n..."`) parses into rows. DOCX: paragraphs and a table are captured, single page, label mentions no page numbers.
+7. `parse_document("exe", b"")` raises `ProcessingFailed("UNSUPPORTED_FORMAT")`.
+8. `ocr.parse_tsv`: given a small Tesseract TSV string (header + word rows at level 5 across two lines, one row with confidence `-1`), returns the text split by line and the mean confidence ignoring `-1`; empty input returns `("", 0.0)`.
+9. `TesseractOcr.run` with `command` pointing at a non-existent executable raises `OcrFailed`; `available()` is False for it.
+10. Chunking: (a) chunks never cross pages (each `ChunkDraft.page_number` matches its source page); (b) no chunk text is longer than `MAX_CHARS * 2` and a long page is split into several chunks; (c) consecutive chunks on a page overlap by one sentence; (d) a heading line such as `3.2 Eligibility` becomes the `section` of following chunks and carries onto the next page; (e) empty pages produce no chunks; (f) the same input chunked twice gives identical output (deterministic).
+
+Acceptance: all new tests pass; `ruff format`, `ruff check`, `lint-imports` clean; no changes to application code unless a test exposes a bug (then follow the Global Constraints rule).
+
+## Task 2: Ingest end-to-end tests (upload, worker, pages, search)
+
+Create `backend/tests/test_ingest_flow.py`. These tests use the API (`TestClient` actors from `tests/conftest.py`) and run the worker synchronously by calling `app.worker.runner.process_one(app.worker.handlers.HANDLERS)` (returns True if it processed a job). Where OCR is involved, monkeypatch `app.worker.handlers._ocr` to return a fake runner (`available()` True, `run()` returns text and confidence) because Tesseract is not installed on this machine.
+
+Required cases:
+1. Happy path: upload a text PDF (`make_pdf`), `process_one` returns True, the job is `succeeded`, the version `processing_status == "ready"`, `GET /document-versions/{id}/pages` lists the pages with `char_count > 0`, `GET .../pages/1` returns the text, and `GET /tenders/{tid}/search?q=<word>` returns a hit with the right `page_number`, `document_title`, a non-empty `snippet` and `version_number`.
+2. Progress: after ingest the job's `progress_done == progress_total == page count`.
+3. Idempotent re-ingestion (F6): call `knowledge.ingest_version` twice for the same version (use `app.db.session.session_scope` and `OrgContext.system`) and assert page and chunk row counts are identical after both runs (no duplicates, ordinals contiguous from 0).
+4. New version supersedes: upload v1 containing the word `alpha`, ingest; upload v2 (via `POST /documents/{id}/versions`) containing `beta`, ingest; search `alpha` returns nothing and `beta` returns v2 hits (only current versions are searchable); the v1 pages remain readable by version id.
+5. Corrupt PDF (bytes `b"%PDF-1.4 not really a pdf"` pass upload validation because only the signature is sniffed): after `process_one` the job is `failed` with `error_code == "FILE_CORRUPT"`, the version `processing_status == "failed"`, the original file is still downloadable, and the job is not requeued. `POST /jobs/{id}/retry` creates a fresh queued job; calling it again returns the same job.
+6. Encrypted PDF: job `failed`, `error_code == "PDF_ENCRYPTED"`, no retries.
+7. Scanned PDF with fake OCR: version `ready`, page `text_source == "ocr"`, search finds the OCR text. With a fake OCR that raises `OcrFailed` for every page: job `succeeded_with_warnings`, `warnings` contains `{"code": "OCR_FAILED", "pages": [...]}`, version `ready_with_warnings`, and the page status is `ocr_failed`. With low-confidence OCR: warning code `OCR_LOW_CONFIDENCE`.
+8. XLSX upload (`make_xlsx`): ingest succeeds; `GET .../pages/1` returns `tables` with `kind == "sheet"`; a search for a cell value finds it. CSV and DOCX uploads ingest to `ready`.
+9. Unexpected handler error: monkeypatch `app.modules.knowledge.public.ingest_version` (or the function the handler calls) to raise `RuntimeError("boom with secret text")`; the job ends `failed` with `error_code == "UNEXPECTED"`, the exception text does not appear in the job JSON, the loop does not crash (`process_one` returns True), and the version is marked `failed`.
+10. Transient failure: monkeypatch the handler to raise `ProcessingFailed("TEMP", transient=True)`: the job returns to `queued` with a future `run_after` (an immediate `process_one` returns False), and `attempt_count == 1`.
+11. Audit/logging hygiene: after an ingest, no `audit_events.metadata` row contains the document text; capture log output with `caplog` during a failing ingest and assert the secret text from case 9 and the document text are not in the log messages (the traceback goes through `log.exception`; assert on `record.getMessage()` for every record).
+
+Acceptance: all new tests pass; gates clean; fixes to application code (if tests expose bugs) are minimal and reported.
+
+## Task 3: Fitness-function updates and isolation tests
+
+Edit `backend/tests/test_fitness_functions.py` and create `backend/tests/test_search_isolation.py` and `backend/tests/test_storage.py`.
+
+1. **F1 sweep:** extend it to cover every route that takes an id, including the new document, version, page and job routes. The sweep reads routes from the OpenAPI schema. Extend the id registry (`tender_id`, `document_id`, `version_id`, `job_id`, `membership_id`; and `page_number` = 1 as a plain value). The upload routes need valid multipart bodies to get past validation: change the per-route request spec (currently `BODIES`) to hold full `requests` keyword arguments (`json=...` or `files=...` plus `data=...`). Org B owns a tender, a document with one version and a job; org A's admin calls every route with B's ids and every response must be 404 with no data from B in the body. Keep the assertion that every route with a path parameter is covered (fail loudly if a new route has an unmapped parameter). Fix the two `ruff` import-order/E402 errors in that file.
+2. **F4 retrieval canary (`test_search_isolation.py`):** org A and org B each upload a PDF to their own tender; B's PDF contains a unique canary string (for example `ZXQ-CANARY-7731`), and both contain a shared word. Ingest both with the worker. Then: A searching the canary in A's tender gets zero hits; A searching the shared word gets only A's hits (check `document_title`/`version_id` belong to A); A calling `GET /tenders/{B's tender id}/search?q=...` gets 404; B finds its canary. Add a variant where the same organisation has two tenders: a search in tender 1 never returns tender 2's chunks. Also assert that a search query with SQL/tsquery metacharacters (`' OR 1=1 --`, `a & b | !c`, an unbalanced quote, 200 characters) returns 200 with a list (no 500), and a 201-character query returns 422.
+3. **Storage (`test_storage.py`):** `LocalVolumeStorage` rejects keys containing `..`, absolute paths (`/etc/passwd`, `C:\\x`), backslash starts and drive colons with `ValueError`; a put/open/exists/delete round trip works; a failed write leaves no partial file (monkeypatch `os.replace` to raise and assert no `.upload-*` temp file remains in the directory).
+
+Acceptance: all tests pass; the F1 sweep covers the document/version/job/page routes (print or assert the number swept: at least 20 method/path combinations); gates clean.
+
+## Task 4: Docker image with Tesseract, real-stack smoke test, docs
+
+1. `backend/Dockerfile`: install `tesseract-ocr` and `tesseract-ocr-eng` with apt (no recommends, clean apt lists). Add a `.env.example` entry only if a new setting is needed. Make sure the worker service in `docker-compose.yml` shares the `files` volume with the API (it already does) and has the same environment.
+2. Rebuild and run the stack: `docker compose up --build -d` from the repo root (a `.env` already exists; Postgres is published on 5433 for local use only). Wait for the API to be healthy.
+3. Smoke test through Caddy on `http://localhost:8080` using curl (cookie jar; header `X-Requested-With: IntelTPS` on state-changing calls): register an organisation, create a tender, upload `eval/generated/pack01/tender.pdf` (native text PDF; generate packs first if the folder is missing: `cd eval && uv run python -m synthgen generate --out generated`), poll `GET /api/v1/jobs/{id}` until `succeeded` (timeout 3 minutes), list pages, run a search for a word that is in the document (use `tender` or a requirement term; read the PDF text to choose), then upload the **scanned** pack `eval/generated/pack05/tender.pdf`, wait for its job, and confirm pages report `text_source == "ocr"` with plausible text and that searching an OCR'd word finds it. Record the job durations, page counts, OCR confidence range and the warnings. Also upload `eval/generated/pack02/boq.xlsx` and confirm its pages contain `kind == "sheet"` tables.
+4. Check the worker log (`docker compose logs worker`) contains no document text and shows the job lines.
+5. Update docs: in `docs/plan.md` mark the Slice 2 gate status with what was verified; add a short "Slice 2 notes" section to `docs/architecture/architecture.md` (full-text search now, embeddings deferred; authenticated download instead of signed links; the OCR route; processing_status values and job warning codes); mention Tesseract and the upload limit in `README.md`.
+6. Leave the stack stopped when finished (`docker compose down`, keep volumes).
+
+Acceptance: the smoke test results are recorded in the report with real numbers (job durations, page counts, OCR confidence); if OCR or any step fails, report the exact error and fix the cause (Dockerfile, settings) rather than skipping it; docs updated; gates clean.
