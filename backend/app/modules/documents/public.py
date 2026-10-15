@@ -3,6 +3,7 @@
 from .schemas import DocumentDTO, ProcessingInfo, UploadResultDTO, VersionDTO
 from .service import (
     INGEST_JOB,
+    ensure_job_retry_allowed,
     get_document,
     get_version,
     list_documents,
@@ -20,6 +21,7 @@ __all__ = [
     "ProcessingInfo",
     "UploadResultDTO",
     "VersionDTO",
+    "ensure_job_retry_allowed",
     "get_document",
     "get_version",
     "list_documents",

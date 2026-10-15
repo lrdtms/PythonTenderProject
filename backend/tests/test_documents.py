@@ -109,6 +109,36 @@ def test_archived_tenders_do_not_accept_uploads(admin) -> None:
     assert upload(admin, tid, SAMPLE_PDF).status_code == 409
 
 
+def test_archived_tenders_do_not_accept_new_versions(admin) -> None:
+    tid = make_tender(admin)
+    doc_id = upload(admin, tid, SAMPLE_PDF).json()["document"]["id"]
+    admin.client.post(f"/api/v1/tenders/{tid}/archive")
+    r = admin.client.post(
+        f"/api/v1/documents/{doc_id}/versions",
+        files={"file": ("tender_v2.pdf", make_pdf(["Updated tender text."]), "application/pdf")},
+    )
+    assert r.status_code == 409 and r.json()["error"]["code"] == "conflict"
+    versions = admin.client.get(f"/api/v1/documents/{doc_id}/versions").json()
+    assert [v["version_number"] for v in versions] == [1]
+
+
+def test_ingest_jobs_of_archived_tenders_cannot_be_retried(admin) -> None:
+    from app.worker import handlers
+    from app.worker.runner import process_one
+
+    tid = make_tender(admin)
+    body = upload(admin, tid, b"%PDF-1.4 not really a pdf").json()
+    assert process_one(handlers.HANDLERS) is True
+    assert admin.client.get(f"/api/v1/jobs/{body['job_id']}").json()["status"] == "failed"
+    admin.client.post(f"/api/v1/tenders/{tid}/archive")
+    r = admin.client.post(f"/api/v1/jobs/{body['job_id']}/retry")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "conflict"
+    reviewer = add_member(admin, "rev@example.com", "reviewer")
+    assert reviewer.client.post(f"/api/v1/jobs/{body['job_id']}/retry").status_code == 403
+    admin.client.patch(f"/api/v1/tenders/{tid}", json={"status": "preparing"})  # re-open
+    assert admin.client.post(f"/api/v1/jobs/{body['job_id']}/retry").status_code == 200
+
+
 def test_other_organisations_cannot_touch_documents(admin) -> None:
     tid = make_tender(admin)
     body = upload(admin, tid, SAMPLE_PDF).json()

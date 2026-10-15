@@ -94,6 +94,12 @@ def _store_version(
     return version, job.id
 
 
+def _ensure_tender_open(session: Session, ctx: OrgContext, tender_id: UUID) -> None:
+    """An archived tender is read-only: no uploads, new versions or re-processing."""
+    if tenders.get_tender(session, ctx, tender_id).status == "archived":
+        raise Conflict("This tender is archived. Re-open it before uploading documents.")
+
+
 def upload_document(
     session: Session,
     ctx: OrgContext,
@@ -109,9 +115,7 @@ def upload_document(
         raise ValidationFailed(
             f"Kind must be one of: {', '.join(DOCUMENT_KINDS)}.", {"field": "kind"}
         )
-    tender = tenders.get_tender(session, ctx, tender_id)  # NotFound for another organisation
-    if tender.status == "archived":
-        raise Conflict("This tender is archived. Re-open it before uploading documents.")
+    _ensure_tender_open(session, ctx, tender_id)  # NotFound for another organisation
     name, file_format = _validate_file(filename, data)
     document = DocumentRepo(session, ctx).add(
         Document(
@@ -138,6 +142,7 @@ def upload_new_version(
 ) -> UploadResultDTO:
     ctx.require(Permission.UPLOAD_DOCUMENTS)
     document = DocumentRepo(session, ctx).get(document_id)
+    _ensure_tender_open(session, ctx, document.tender_id)
     name, file_format = _validate_file(filename, data)
     version, job_id = _store_version(session, ctx, storage, document, name, file_format, data)
     audit.record(session, ctx, "document", document.id, "new_version",
@@ -196,6 +201,20 @@ def open_version_file(
     if not storage.exists(v.storage_key):
         raise NotFound("The stored file is missing.")
     return _version_dto(v), storage.open(v.storage_key)
+
+
+def ensure_job_retry_allowed(
+    session: Session, ctx: OrgContext, job_type: str, subject_id: UUID
+) -> None:
+    """Re-processing a document re-writes its pages: not allowed on an archived tender."""
+    ctx.require(Permission.UPLOAD_DOCUMENTS)
+    if job_type != INGEST_JOB:
+        return
+    found = VersionRepo(session, ctx).find(DocumentVersion.id == subject_id, limit=1)
+    if not found:  # nothing left to protect; the worker reports a missing version itself
+        return
+    document = DocumentRepo(session, ctx).get(found[0].document_id)
+    _ensure_tender_open(session, ctx, document.tender_id)
 
 
 # --- used by the ingest worker -----------------------------------------------------------------
