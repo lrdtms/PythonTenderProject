@@ -1,0 +1,63 @@
+[project]
+name = "intel-tps-backend"
+version = "0.1.0"
+description = "IntelTPS backend: FastAPI modular monolith and background worker"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic-settings>=2.4",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "httpx>=0.27",
+    "ruff>=0.6",
+    "import-linter>=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+# Architecture fitness function F2 (docs/architecture/architecture.md).
+[tool.importlinter]
+root_packages = ["app", "fastapi", "sqlalchemy"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: api/worker -> infrastructure -> modules -> kernel"
+type = "layers"
+layers = [
+    "app.api | app.worker",
+    "app.infrastructure",
+    "app.modules",
+    "app.kernel",
+]
+# config.py sits beside the layers and may be imported by anything.
+exhaustive = false
+
+[[tool.importlinter.contracts]]
+name = "Kernel and extraction are pure (no web framework, no ORM)"
+type = "forbidden"
+source_modules = ["app.kernel", "app.modules.extraction"]
+forbidden_modules = ["fastapi", "sqlalchemy"]

@@ -1,0 +1,17 @@
+# Override for a VM: docker compose -f docker-compose.yml -f docker-compose.vm.yml up -d
+services:
+  db:
+    ports: !reset []
+    restart: unless-stopped
+  api:
+    restart: unless-stopped
+  worker:
+    restart: unless-stopped
+  web:
+    restart: unless-stopped
+  caddy:
+    restart: unless-stopped
+    # Add a real hostname in infra/caddy/Caddyfile for automatic HTTPS, and publish 80/443.
+    ports: !override
+      - "80:80"
+      - "443:443"

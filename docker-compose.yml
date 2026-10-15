@@ -1,0 +1,63 @@
+# Local development stack. Ollama is NOT here: run it on the host (see README).
+name: inteltps
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-intel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-intel}
+      POSTGRES_DB: ${POSTGRES_DB:-inteltps}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    env_file: [.env]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://intel:intel@db:5432/inteltps}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - files:/data/files
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker.main"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://intel:intel@db:5432/inteltps}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - files:/data/files
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pgdata:
+  files:
