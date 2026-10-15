@@ -233,11 +233,32 @@ def parse_document(
     progress: Progress | None = None,
 ) -> list[ParsedPage]:
     if file_format == "pdf":
-        return parse_pdf(data, ocr, ocr_dpi, progress)
-    if file_format == "xlsx":
-        return parse_xlsx(data, progress)
-    if file_format == "csv":
-        return parse_csv(data, progress)
-    if file_format == "docx":
-        return parse_docx(data, progress)
-    raise ProcessingFailed("UNSUPPORTED_FORMAT", f"Cannot process {file_format} files.")
+        pages = parse_pdf(data, ocr, ocr_dpi, progress)
+    elif file_format == "xlsx":
+        pages = parse_xlsx(data, progress)
+    elif file_format == "csv":
+        pages = parse_csv(data, progress)
+    elif file_format == "docx":
+        pages = parse_docx(data, progress)
+    else:
+        raise ProcessingFailed("UNSUPPORTED_FORMAT", f"Cannot process {file_format} files.")
+    for page in pages:
+        _strip_nul(page)
+    return pages
+
+
+def _without_nul(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_without_nul(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _without_nul(v) for k, v in value.items()}
+    return value
+
+
+def _strip_nul(page: ParsedPage) -> None:
+    """Postgres rejects NUL characters in text and JSONB; one stray byte must not fail a file."""
+    page.text = _without_nul(page.text)
+    page.label = _without_nul(page.label)
+    page.tables = _without_nul(page.tables)

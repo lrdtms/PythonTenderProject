@@ -251,6 +251,17 @@ SECRET = "boom with secret text"
 DOC_TEXT = "Confidential rewiring scope for the north wing"
 
 
+def assert_logs_clean(caplog, *secrets: str) -> None:
+    """Check everything a log handler could write: messages, and formatted tracebacks."""
+    assert caplog.records
+    for secret in secrets:
+        assert secret not in caplog.text
+    for record in caplog.records:
+        assert record.exc_info is None and record.exc_text is None, record.getMessage()
+        for secret in secrets:
+            assert secret not in record.getMessage()
+
+
 def patch_ingest(monkeypatch, exc: Exception) -> None:
     def raiser(*args, **kwargs):
         raise exc
@@ -269,11 +280,8 @@ def test_unexpected_error_is_contained(admin, monkeypatch, caplog) -> None:
     assert SECRET not in str(job)
     v = get_version(admin, body["document"]["id"], body["version"]["id"])
     assert v["processing_status"] == "failed"
-    # Logging hygiene: the traceback is logged, but no message carries the secret or document text.
-    assert caplog.records
-    for record in caplog.records:
-        assert SECRET not in record.getMessage()
-        assert DOC_TEXT not in record.getMessage()
+    # Logging hygiene: nothing logged (messages, formatted tracebacks) carries the secret or text.
+    assert_logs_clean(caplog, SECRET, DOC_TEXT)
 
 
 def test_transient_failure_requeues_with_backoff(admin, monkeypatch) -> None:
@@ -303,5 +311,52 @@ def test_logs_hold_no_document_text_on_failed_parse(admin, caplog) -> None:
     upload(admin, tid, b"%PDF-1.4 " + DOC_TEXT.encode())
     with caplog.at_level(logging.DEBUG):
         assert run_worker() is True
-    assert caplog.records
-    assert all(DOC_TEXT not in r.getMessage() for r in caplog.records)
+    assert_logs_clean(caplog, DOC_TEXT)
+
+
+def test_database_rejection_does_not_leak_document_text_to_logs(admin, monkeypatch, caplog) -> None:
+    """A database error on a statement holding document text must not put that text in the log."""
+    from app.modules.knowledge import parsers
+    from app.modules.knowledge import service as knowledge_service
+
+    tid = make_tender(admin)
+    body = upload(admin, tid, make_pdf(["anything"])).json()
+    # label is varchar(200): the insert of this page (text included) is rejected by Postgres.
+    page = parsers.ParsedPage(1, DOC_TEXT, label="L" * 300)
+    monkeypatch.setattr(knowledge_service, "parse_document", lambda *a, **k: [page])
+    with caplog.at_level(logging.DEBUG):
+        assert run_worker() is True
+    job = get_job(admin, str(body["job_id"]))
+    assert job["status"] == "failed" and job["error_code"] == "UNEXPECTED"
+    assert_logs_clean(caplog, DOC_TEXT)
+
+
+def test_database_errors_do_not_embed_parameter_values() -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    # "value too long" does not echo the value itself, so only SQLAlchemy's [parameters: ...]
+    # section could carry it.
+    try:
+        with session_scope() as s:
+            s.execute(text("CREATE TEMP TABLE probe (v varchar(5))"))
+            s.execute(text("INSERT INTO probe VALUES (:v)"), {"v": DOC_TEXT})
+    except DBAPIError as exc:
+        assert DOC_TEXT not in str(exc)
+    else:
+        raise AssertionError("the cast should have failed")
+
+
+def test_csv_with_nul_bytes_ingests_with_them_removed(admin) -> None:
+    tid = make_tender(admin)
+    rows = [["Item", "Qty"]] + [[f"Socket outlet {i}", str(i)] for i in range(600)]
+    head = make_csv(rows, delimiter=",", encoding="utf-8")
+    assert len(head) > 8192  # the NUL sits after the part the upload sniff looks at
+    data = head + b"\nNul\x00ified cable,7\n"
+    body = upload_and_ingest(admin, tid, data, "boq.csv")
+    assert get_job(admin, str(body["job_id"]))["status"] == "succeeded"
+    vid, did = body["version"]["id"], body["document"]["id"]
+    assert get_version(admin, did, vid)["processing_status"] == "ready"
+    page = admin.client.get(f"{API}/document-versions/{vid}/pages/1").json()
+    assert "\x00" not in page["text"] and "Nulified cable | 7" in page["text"]
+    assert ["Nulified cable", "7"] in page["tables"][0]["rows"]

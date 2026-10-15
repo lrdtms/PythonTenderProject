@@ -67,8 +67,10 @@ def process_one(handlers: dict[str, JobHandler]) -> bool:
         log.info("job %s finished warnings=%d", job.id, len(warnings))
     except ProcessingFailed as exc:
         _record_failure(handler, ctx, job, exc.error_code, exc.transient)
-    except Exception:  # noqa: BLE001 - an unexpected bug must not kill the worker loop
-        log.exception("job %s crashed", job.id)  # traceback only; no document content in messages
+    except Exception as exc:  # noqa: BLE001 - an unexpected bug must not kill the worker loop
+        # No traceback and no exception message: either can carry document text (cell values in
+        # a failed statement, parser messages). The type name and job id are enough to triage.
+        log.error("job %s crashed error_type=%s code=UNEXPECTED", job.id, type(exc).__name__)
         _record_failure(handler, ctx, job, "UNEXPECTED", transient=False)
     return True
 
