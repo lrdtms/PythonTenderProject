@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"  # noqa: S105 - dev default, rejected outside development
     environment: str = "development"
 
+    # Session cookie `Secure` flag. Only plain-http local development and the tests turn it off.
+    cookie_secure: bool = True
+    # Header holding the real client address, set by a trusted proxy (CF-Connecting-IP behind the
+    # Cloudflare tunnel). Unset: rate limits use the socket peer address; forwarded headers are
+    # never trusted.
+    client_ip_header: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

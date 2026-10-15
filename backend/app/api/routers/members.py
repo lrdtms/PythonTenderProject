@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Response
 
 from app.api.deps import Ctx, DbSession
+from app.api.ratelimit import limiter
 from app.modules.identity import public as identity
 
 router = APIRouter(prefix="/api/v1/members", tags=["members"])
@@ -19,6 +20,8 @@ def list_members(ctx: Ctx, session: DbSession):
 
 @router.post("", response_model=identity.MemberDTO, status_code=201)
 def create_member(body: identity.CreateMemberRequest, ctx: Ctx, session: DbSession):
+    # Per organisation, so the endpoint cannot be used to probe which emails have accounts.
+    limiter.check(f"members:{ctx.organisation_id}", limit=20, window_seconds=3600)
     return identity.create_member(session, ctx, body.name, body.email, body.role, body.password)
 
 

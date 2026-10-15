@@ -26,6 +26,7 @@ TEST_DATABASE_URL = os.environ.get(
 # Must be set before the application reads its settings.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ENVIRONMENT"] = "development"
+os.environ["COOKIE_SECURE"] = "false"  # the test client talks plain http
 os.environ["STORAGE_PATH"] = tempfile.mkdtemp(prefix="inteltps-test-files-")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]

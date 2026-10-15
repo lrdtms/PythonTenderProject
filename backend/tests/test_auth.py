@@ -119,3 +119,90 @@ def test_state_changing_requests_need_the_csrf_header(admin) -> None:
     assert (
         admin.client.post("/api/v1/tenders", json={"title": "x"}, headers=CSRF).status_code == 201
     )
+
+
+# --- rate limiting (review I-2) ------------------------------------------------------------------
+
+
+def _wrong_login(c, email: str = "owner@example.com", headers: dict | None = None) -> int:
+    return c.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "wrong-password-1"},
+        headers=headers or {},
+    ).status_code
+
+
+def test_rotating_x_forwarded_for_does_not_escape_the_login_limit(admin) -> None:
+    c = make_client()
+    codes = [_wrong_login(c, headers={"X-Forwarded-For": f"10.0.0.{i}"}) for i in range(12)]
+    assert codes[:10] == [401] * 10 and codes[10:] == [429, 429]
+
+
+def test_spraying_one_password_across_many_emails_is_limited_per_ip(admin) -> None:
+    c = make_client()
+    codes = [_wrong_login(c, email=f"user{i}@example.com") for i in range(40)]
+    assert codes[:30] == [401] * 30 and set(codes[30:]) == {429}
+
+
+def test_the_configured_client_ip_header_is_honoured(admin, monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "client_ip_header", "CF-Connecting-IP")
+    c = make_client()
+    first = [_wrong_login(c, headers={"CF-Connecting-IP": "203.0.113.1"}) for _ in range(11)]
+    assert first[:10] == [401] * 10 and first[10] == 429
+    # Another visitor behind the same proxy has their own bucket.
+    assert _wrong_login(c, headers={"CF-Connecting-IP": "203.0.113.2"}) == 401
+
+
+def test_register_is_rate_limited(client) -> None:
+    codes = [
+        client.post(
+            "/api/v1/auth/register",
+            json={"organisation_name": f"Org {i}", "name": "N", "email": f"r{i}@example.com",
+                  "password": STRONG_PASSWORD},
+        ).status_code
+        for i in range(6)
+    ]  # fmt: skip
+    assert codes == [201] * 5 + [429]
+
+
+def test_member_creation_is_rate_limited_per_organisation(admin) -> None:
+    # Probing addresses with an existing email (409) still counts toward the limit.
+    body = {"name": "X", "email": "owner@example.com", "role": "reviewer",
+            "password": STRONG_PASSWORD}  # fmt: skip
+    codes = [admin.client.post("/api/v1/members", json=body).status_code for _ in range(21)]
+    assert codes == [409] * 20 + [429]
+
+
+# --- secure cookie (review I-3) ------------------------------------------------------------------
+
+
+def _register_cookie(client) -> str:
+    r = client.post(
+        "/api/v1/auth/register",
+        json={"organisation_name": "Acme", "name": "Ann", "email": "ann@example.com",
+              "password": STRONG_PASSWORD},
+    )  # fmt: skip
+    assert r.status_code == 201
+    return r.headers["set-cookie"].lower()
+
+
+def test_cookie_secure_defaults_to_on() -> None:
+    from app.config import Settings
+
+    assert Settings.model_fields["cookie_secure"].default is True
+
+
+def test_session_cookie_is_secure_when_the_setting_is_on(client, monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "cookie_secure", True)
+    assert "secure" in _register_cookie(client)
+
+
+def test_session_cookie_is_not_secure_when_the_setting_is_off(client, monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "cookie_secure", False)
+    assert "secure" not in _register_cookie(client)
