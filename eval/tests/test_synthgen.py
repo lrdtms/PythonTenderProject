@@ -80,7 +80,8 @@ def test_scanned_pack_has_no_text_layer(generated: Path) -> None:
 
 def test_injection_is_not_a_requirement(generated: Path) -> None:
     gt = _load(generated, "pack08")
-    assert [n["kind"] for n in gt["non_requirements"]] == ["prompt_injection"]
+    kinds = [n["kind"] for n in gt["non_requirements"]]
+    assert kinds.count("prompt_injection") == 1
     assert all(
         "disregard all previous instructions" not in r["evidence_quote"] for r in gt["requirements"]
     )
@@ -93,3 +94,12 @@ def test_quotations_include_confusable_items(generated: Path) -> None:
         i["confusable_with"] and i["expected_match"] is None and i["ambiguous"] for i in items
     )
     assert any(i["expected_match"] for i in items)
+
+
+def test_distractors_are_labelled_and_not_requirements(generated: Path) -> None:
+    for pack in ("pack03", "pack07"):
+        gt = _load(generated, pack)
+        boiler = [n for n in gt["non_requirements"] if n["kind"] == "boilerplate"]
+        assert boiler, f"{pack} should contain obligation-worded boilerplate"
+        quotes = {r["evidence_quote"] for r in gt["requirements"]}
+        assert all(n["text"] not in quotes for n in boiler)

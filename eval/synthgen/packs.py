@@ -47,6 +47,7 @@ UNIT_ALIASES = {
 SPECS = [
     dict(
         id="pack01",
+        distractors=3,
         style="clean",
         boq="pdf",
         messy=False,
@@ -58,6 +59,7 @@ SPECS = [
     ),
     dict(
         id="pack02",
+        distractors=3,
         style="clean",
         boq="xlsx",
         messy=False,
@@ -69,6 +71,7 @@ SPECS = [
     ),
     dict(
         id="pack03",
+        distractors=5,
         style="dense",
         boq="pdf",
         messy=True,
@@ -80,6 +83,7 @@ SPECS = [
     ),
     dict(
         id="pack04",
+        distractors=5,
         style="dense",
         boq="xlsx",
         messy=True,
@@ -91,6 +95,7 @@ SPECS = [
     ),
     dict(
         id="pack05",
+        distractors=3,
         style="clean",
         boq="pdf",
         messy=False,
@@ -102,6 +107,7 @@ SPECS = [
     ),
     dict(
         id="pack06",
+        distractors=5,
         style="dense",
         boq="xlsx",
         messy=True,
@@ -113,6 +119,7 @@ SPECS = [
     ),
     dict(
         id="pack07",
+        distractors=12,
         style="dense",
         boq="pdf",
         messy=True,
@@ -124,6 +131,7 @@ SPECS = [
     ),
     dict(
         id="pack08",
+        distractors=3,
         style="clean",
         boq="xlsx",
         messy=False,
@@ -141,6 +149,7 @@ SPECS = [
 STRESS_SPECS = [
     dict(
         id="pack09_xl",
+        distractors=40,
         style="dense",
         boq="pdf",
         messy=True,
@@ -324,6 +333,10 @@ def build_pack(spec: dict, index: int, seed: int, out_root: Path) -> Pack:
             )
         )
     non_reqs = [dict(id=f"{pack_id}-N01", text=cat.INJECTION_TEXT)] if spec.get("injection") else []
+    distractors = [
+        dict(id=f"{pack_id}-D{n:02d}", text=rng.choice(cat.DISTRACTORS))
+        for n in range(1, spec.get("distractors", 0) + 1)
+    ]
 
     # BoQ
     boq = _build_boq(rng, spec)
@@ -337,6 +350,7 @@ def build_pack(spec: dict, index: int, seed: int, out_root: Path) -> Pack:
         facts,
         reqs,
         non_reqs,
+        distractors,
         boq if spec["boq"] == "pdf" else None,
         rng,
         spec["style"],
@@ -376,6 +390,11 @@ def build_pack(spec: dict, index: int, seed: int, out_root: Path) -> Pack:
         page = result.page_of[n["id"]]
         pack.non_requirements.append(
             NonRequirement("prompt_injection", n["text"], Source(tender_name, page=page))
+        )
+    for d in distractors:
+        page = result.page_of[d["id"]]
+        pack.non_requirements.append(
+            NonRequirement("boilerplate", d["text"], Source(tender_name, page=page))
         )
 
     # BoQ document + items

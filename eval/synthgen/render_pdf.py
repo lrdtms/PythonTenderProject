@@ -108,6 +108,7 @@ def render_tender(
     facts: dict,
     requirements: list[dict],
     non_requirements: list[dict],
+    distractors: list[dict],
     boq_rows: list[dict] | None,
     rng: random.Random,
     style: str,
@@ -143,6 +144,9 @@ def render_tender(
     for r, b in zip(reqs, sorted(rng.sample(range(blocks), k=len(reqs))), strict=True):
         slots.setdefault(b, []).append(r)
     injections = list(non_requirements)
+    spots: dict[int, list[dict]] = {}
+    for d, b in zip(distractors, rng.choices(range(blocks), k=len(distractors)), strict=True):
+        spots.setdefault(b, []).append(d)
 
     for b in range(blocks):
         if b == 0 or b == blocks // 2:
@@ -157,6 +161,9 @@ def render_tender(
                 flow.append(Tagged(f"{escape(before)} {sentence} {escape(after)}", BODY, [r["id"]]))
             else:
                 flow.append(Tagged(f"<b>{r['clause']}</b> {sentence}", BODY, [r["id"]]))
+        for d in spots.get(b, []):
+            extra = _paragraphs_for_filler(rng, facts, 2)
+            flow.append(Tagged(f"{escape(d['text'])} {escape(extra)}", BODY, [d["id"]]))
         if injections and b == blocks // 2:
             inj = injections.pop(0)
             flow.append(Tagged(escape(inj["text"]), BODY, [inj["id"]]))
