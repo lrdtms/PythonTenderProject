@@ -12,6 +12,12 @@ services:
   caddy:
     restart: unless-stopped
     # Add a real hostname in infra/caddy/Caddyfile for automatic HTTPS, and publish 80/443.
+    # This publishes Caddy on every interface. Caddy takes CF-Connecting-IP as the client
+    # address and passes it to the API as X-Client-IP (CLIENT_IP_HEADER), so on a VM either put
+    # Caddy behind a trusted proxy that always sets CF-Connecting-IP (Cloudflare, with the VM
+    # firewalled to Cloudflare's ranges), or remove the CF-Connecting-IP map in the Caddyfile so
+    # X-Client-IP is always the TCP peer. Otherwise a client can choose its own rate-limit bucket.
+    # Also set ENVIRONMENT=production and COOKIE_SECURE=true.
     ports: !override
       - "80:80"
       - "443:443"

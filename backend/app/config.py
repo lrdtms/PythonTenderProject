@@ -38,4 +38,6 @@ def get_settings() -> Settings:
     settings = Settings()
     if settings.environment != "development" and settings.secret_key == "change-me":  # noqa: S105
         raise RuntimeError("SECRET_KEY must be set outside development")
+    if settings.environment != "development" and not settings.cookie_secure:
+        raise RuntimeError("COOKIE_SECURE must be true outside development")
     return settings

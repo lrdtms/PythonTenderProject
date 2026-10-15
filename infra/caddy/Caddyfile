@@ -1,13 +1,24 @@
 # Single origin (ADR-0009): /api/* -> FastAPI, everything else -> Next.js.
-# The Cloudflare Tunnel points at this container (http://caddy:80).
+# Compose publishes this only on 127.0.0.1:8080; the Cloudflare tunnel (cloudflared on the same
+# host) connects to it there.
 :80 {
 	encode zstd gzip
+
+	# The real client address for the API's rate limits (CLIENT_IP_HEADER=X-Client-IP).
+	# Through the tunnel, Cloudflare sets CF-Connecting-IP; otherwise use the TCP peer.
+	# Caddy is reachable only on loopback, so only the tunnel or local processes can send
+	# CF-Connecting-IP. X-Client-IP is always overwritten below, so a client cannot set it.
+	map {http.request.header.CF-Connecting-IP} {real_client_ip} {
+		"" {http.request.remote.host}
+		default {http.request.header.CF-Connecting-IP}
+	}
 
 	handle /api/* {
 		request_body {
 			max_size 30MB
 		}
 		reverse_proxy api:8000 {
+			header_up X-Client-IP {real_client_ip}
 			flush_interval -1
 		}
 	}

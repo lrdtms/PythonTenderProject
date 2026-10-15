@@ -26,8 +26,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-- App (through Caddy): http://localhost:8080
-- API health: http://localhost:8080/api/v1/health (and `/api/v1/health/db`)
+- App (through Caddy): http://127.0.0.1:8080 (Caddy is published on loopback only; the api and web ports are not published)
+- API health: http://127.0.0.1:8080/api/v1/health (and `/api/v1/health/db`)
+- Public link: run the Cloudflare tunnel (`cloudflared`) on the same machine pointing at `http://127.0.0.1:8080`. Cloudflare sets `CF-Connecting-IP`; Caddy turns it (or the TCP peer when absent) into `X-Client-IP`, overwriting anything the client sent, and the API rate-limits on it (`CLIENT_IP_HEADER=X-Client-IP`). For the tunnel (HTTPS) set `ENVIRONMENT=production`, a real `SECRET_KEY` and `COOKIE_SECURE=true` in `.env`; `COOKIE_SECURE=false` is only for local plain http.
 - Postgres: 127.0.0.1:${DB_HOST_PORT:-5432} (local only; set `DB_HOST_PORT` in `.env` if 5432 is taken)
 
 Ollama runs on the host and containers reach it at `host.docker.internal:11434` (`LLM_BASE_URL`). If containers cannot connect, start Ollama with `OLLAMA_HOST=0.0.0.0` and firewall port 11434.
@@ -56,7 +57,7 @@ npm run lint && npm run build
 
 ## Moving to a VM
 
-`docker compose -f docker-compose.yml -f docker-compose.vm.yml up -d` (no exposed DB port, restart policies, 80/443). See docs/prd.md section 21.
+`docker compose -f docker-compose.yml -f docker-compose.vm.yml up -d` (no exposed DB port, restart policies, 80/443). Publishing Caddy on 80/443 makes `CF-Connecting-IP` client-controlled unless only Cloudflare can reach the VM; read the comment in `docker-compose.vm.yml` first. See docs/prd.md section 21.
 
 ## Rules for real documents
 

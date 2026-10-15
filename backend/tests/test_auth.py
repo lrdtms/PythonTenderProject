@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import select, update
 
 from app.db.session import session_scope
@@ -147,12 +148,47 @@ def test_spraying_one_password_across_many_emails_is_limited_per_ip(admin) -> No
 def test_the_configured_client_ip_header_is_honoured(admin, monkeypatch) -> None:
     from app.config import get_settings
 
-    monkeypatch.setattr(get_settings(), "client_ip_header", "CF-Connecting-IP")
+    monkeypatch.setattr(get_settings(), "client_ip_header", "X-Client-IP")
     c = make_client()
-    first = [_wrong_login(c, headers={"CF-Connecting-IP": "203.0.113.1"}) for _ in range(11)]
+    first = [_wrong_login(c, headers={"X-Client-IP": "203.0.113.1"}) for _ in range(11)]
     assert first[:10] == [401] * 10 and first[10] == 429
     # Another visitor behind the same proxy has their own bucket.
-    assert _wrong_login(c, headers={"CF-Connecting-IP": "203.0.113.2"}) == 401
+    assert _wrong_login(c, headers={"X-Client-IP": "203.0.113.2"}) == 401
+
+
+def _request(headers: dict[str, str]):
+    from starlette.requests import Request
+
+    raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+    return Request({"type": "http", "headers": raw, "client": ("198.51.100.7", 5000)})
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        ({"X-Client-IP": "203.0.113.9"}, "203.0.113.9"),
+        ({"X-Client-IP": " 2001:db8::1 "}, "2001:db8::1"),
+        ({"X-Client-IP": "not-an-ip"}, "198.51.100.7"),
+        ({"X-Client-IP": "203.0.113.9, 10.0.0.1"}, "198.51.100.7"),
+        ({"X-Client-IP": ""}, "198.51.100.7"),
+        ({}, "198.51.100.7"),
+    ],
+)
+def test_client_ip_uses_a_valid_header_value_else_the_peer(monkeypatch, headers, expected) -> None:
+    from app.api.ratelimit import client_ip
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "client_ip_header", "X-Client-IP")
+    assert client_ip(_request(headers)) == expected
+
+
+def test_client_ip_ignores_headers_when_none_is_configured(monkeypatch) -> None:
+    from app.api.ratelimit import client_ip
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "client_ip_header", None)
+    spoofed = {"X-Client-IP": "203.0.113.9", "X-Forwarded-For": "203.0.113.10"}
+    assert client_ip(_request(spoofed)) == "198.51.100.7"
 
 
 def test_register_is_rate_limited(client) -> None:
@@ -287,3 +323,18 @@ def test_get_ctx_sets_the_transaction_local_org_id(admin) -> None:
         assert s.scalar(setting) == str(ctx.organisation_id) == admin.org_id
         s.commit()
         assert not s.scalar(setting)  # transaction-local: gone after the commit
+
+
+def test_cookie_secure_off_is_refused_outside_development(monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SECRET_KEY", "a-real-secret-for-this-test")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    with pytest.raises(RuntimeError, match="COOKIE_SECURE"):
+        get_settings.__wrapped__()
+    monkeypatch.setenv("COOKIE_SECURE", "true")
+    assert get_settings.__wrapped__().cookie_secure is True
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    assert get_settings.__wrapped__().cookie_secure is False

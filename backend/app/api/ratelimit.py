@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import threading
 import time
 from collections import defaultdict, deque
@@ -41,6 +42,8 @@ def client_ip(request: Request) -> str:
     header = get_settings().client_ip_header
     if header:
         value = request.headers.get(header, "").strip()
-        if value:
-            return value
+        try:
+            return str(ipaddress.ip_address(value))
+        except ValueError:
+            pass  # missing or not a single valid address: use the peer
     return request.client.host if request.client else "unknown"

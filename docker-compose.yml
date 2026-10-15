@@ -52,8 +52,11 @@ services:
 
   caddy:
     image: caddy:2
+    # Loopback only: the browser on this machine and cloudflared (on the same host) connect to
+    # 127.0.0.1:8080. Nothing else can reach Caddy, so nobody can send it a forged
+    # CF-Connecting-IP. The api (8000) and web (3000) ports are not published at all.
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
