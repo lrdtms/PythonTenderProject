@@ -46,3 +46,10 @@ Chosen option: **Option 1**.
 
 ## Links / References
 - PRD FR-55, FR-56, FR-61, §10; base spec BR-01..BR-04; Evans, *DDD* (keeping domain rules in the domain)
+
+## Addendum 2026-10-15 (Slice 3)
+
+- **Unverifiable evidence is kept, not dropped.** The locator tries an exact match, a whitespace-normalised match, then a fuzzy match (ratio >= 0.9) per page. If all fail the requirement is stored with `page_number` NULL and `evidence_status = 'evidence_unverified'`, and the run carries an `EVIDENCE_UNVERIFIED` warning with the count. Quotes that cross a page break are located by searching the concatenated page text; the page is where the quote starts.
+- **Offsets** (`quote_start`, `quote_end`) are into the page's whitespace-collapsed, case-folded text.
+- **Columns for Slice 4.** `boq_items` and `requirements` carry `ai_suggested`, `suggested_value`, `original_value`, `corrected_value`, `reviewed_by`, `reviewed_at` now, so the review UI needs no migration.
+- **Table ownership.** `boq_items` belong to `estimating`, `requirements` to `checklist`, `extraction_runs` to a new `pipeline` module; `extraction` stays a pure core.

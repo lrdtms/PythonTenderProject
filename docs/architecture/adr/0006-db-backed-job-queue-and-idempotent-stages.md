@@ -51,3 +51,10 @@ Chosen option: **Option 1**.
 
 ## Links / References
 - Base spec §4.1, §4.2, FR-15, FR-16; PRD FR-59, FR-60, FR-61; Kleppmann, *DDIA* ch. 11; PostgreSQL `SKIP LOCKED`
+
+## Addendum 2026-10-15 (Slice 3)
+
+- **Stage = job type.** Extraction runs as two job types, `extract_boq` and `extract_requirements`, enqueued by the ingest handler in the ingest transaction. The deterministic BoQ output is therefore committed even when the LLM is down.
+- **Run records.** `extraction_runs` (module `pipeline`) holds one row per (job, kind): status, warnings, counts, `prompt_version`, `filter_version`, `schema_version`, model. The current run per (version, kind) is the latest by `created_at`.
+- **Idempotency.** Re-running locks the version's run rows, deletes all `unreviewed` rows of that version and kind (from every earlier run), then inserts. Reviewed rows are never touched. A candidate that duplicates a reviewed row (BoQ: section/sheet + item number; requirements: normalised quote; corrected rows compare on `original_value`) is skipped with `DUPLICATE_OF_REVIEWED`. A rejected row suppresses re-extraction of the same item, deliberately.
+- **Not built.** `extraction_unit_results` (per-window resumability) is dropped for this slice: a window is a few seconds to a minute of work and the whole stage restarts on retry. F6 (kill mid-stage, resume without duplicates) is met by replace-unreviewed.
