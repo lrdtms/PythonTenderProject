@@ -9,6 +9,9 @@ dependencies = [
     "pydantic-settings>=2.4",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
+    "argon2-cffi>=25.1.0",
+    "alembic>=1.20.0",
+    "email-validator>=2.3.0",
 ]
 
 [dependency-groups]
@@ -32,12 +35,14 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "S105", "S106", "E501"]
+"migrations/env.py" = ["E402", "I001"]
 
 # Architecture fitness function F2 (docs/architecture/architecture.md).
 [tool.importlinter]
@@ -45,12 +50,13 @@ root_packages = ["app", "fastapi", "sqlalchemy"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: api/worker -> infrastructure -> modules -> kernel"
+name = "Layers: api/worker -> infrastructure -> modules -> db -> kernel"
 type = "layers"
 layers = [
     "app.api | app.worker",
     "app.infrastructure",
     "app.modules",
+    "app.db",
     "app.kernel",
 ]
 # config.py sits beside the layers and may be imported by anything.
