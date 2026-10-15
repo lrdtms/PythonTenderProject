@@ -28,7 +28,7 @@ docker compose up --build
 
 - App (through Caddy): http://localhost:8080
 - API health: http://localhost:8080/api/v1/health (and `/api/v1/health/db`)
-- Postgres: 127.0.0.1:5432 (local only)
+- Postgres: 127.0.0.1:${DB_HOST_PORT:-5432} (local only; set `DB_HOST_PORT` in `.env` if 5432 is taken)
 
 Ollama runs on the host and containers reach it at `host.docker.internal:11434` (`LLM_BASE_URL`). If containers cannot connect, start Ollama with `OLLAMA_HOST=0.0.0.0` and firewall port 11434.
 
