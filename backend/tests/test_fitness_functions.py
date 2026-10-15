@@ -22,6 +22,8 @@ from app.modules.identity import models as _identity_models  # noqa: F401
 from app.modules.jobs import models as _jobs_models  # noqa: F401
 from app.modules.knowledge import models as _knowledge_models  # noqa: F401
 from app.modules.tenders import models as _tenders_models  # noqa: F401
+from app.worker import handlers
+from app.worker.runner import process_one
 from tests.conftest import add_member, make_pdf, make_tender, register, upload
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
@@ -67,6 +69,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     org_b = register("b@example.com", org="Org B")
     tender_b = make_tender(org_b, "B-only secret")
     uploaded = upload(org_b, tender_b, make_pdf(["B-only secret clause"]), "b-secret.pdf").json()
+    assert process_one(handlers.HANDLERS) is True  # B now has page 1 and searchable chunks
     member_b = add_member(org_b, "b2@example.com", "estimator")
     membership_b = next(
         m["membership_id"]
@@ -85,24 +88,36 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
 
     routes = _routes_with_params()
     swept = 0
+    failures: list[str] = []
     for method, path, params in routes:
         missing = params - known.keys()
         assert not missing, f"{method} {path}: add {missing} to the F1 id registry"
         url = path.format(**{k: known[k] for k in params})
         kwargs = {**SEARCH_PARAMS, **REQUESTS}.get((method, path), dict)()
         r = org_a.client.request(method, url, **kwargs)
-        assert r.status_code == 404, f"{method} {path} returned {r.status_code}: {r.text[:200]}"
-        assert not any(f in r.text for f in forbidden), f"{method} {path} leaked data"
+        if r.status_code != 404:
+            failures.append(f"{method} {path} returned {r.status_code}: {r.text[:120]!r}")
+        elif any(f in r.text for f in forbidden):
+            failures.append(f"{method} {path} leaked data")
         swept += 1
-    assert swept == len(routes) and swept >= 18, f"swept only {swept} method/path combinations"
+    assert not failures, f"cross-tenant access not refused: {failures}"
+    schema_count = sum(
+        len(ops) for path, ops in fastapi_app.openapi()["paths"].items() if "{" in path
+    )
+    assert swept == schema_count >= 18, f"swept {swept} of {schema_count} routes with an id"
     paths = {p for _, p, _ in routes}
     for needle in ("documents", "document-versions", "pages/{page_number}", "jobs"):
         assert any(needle in p for p in paths), f"no {needle} route was swept"
 
     # Org B's data is intact after Org A's attempts.
+    assert (
+        org_b.client.get(f"/api/v1/document-versions/{known['version_id']}/pages/1").status_code
+        == 200
+    )
+    assert org_b.client.get(f"/api/v1/tenders/{tender_b}/search", params={"q": "secret"}).json()
     assert org_b.client.get(f"/api/v1/tenders/{tender_b}").json()["title"] == "B-only secret"
     assert len(org_b.client.get(f"/api/v1/documents/{known['document_id']}/versions").json()) == 1
-    assert org_b.client.get(f"/api/v1/jobs/{known['job_id']}").json()["status"] == "queued"
+    assert org_b.client.get(f"/api/v1/jobs/{known['job_id']}").json()["status"] == "succeeded"
     assert member_b.client.get("/api/v1/me").status_code == 200
 
 
