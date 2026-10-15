@@ -83,6 +83,10 @@ def _seed(email: str, org: str, secret: str) -> Actor:
     r = upload(actor, tender, make_pdf([f"{secret} clause on page one"]), f"{secret}.pdf")
     assert r.status_code == 201, r.text
     assert process_one(handlers.HANDLERS) is True
+    # Drain the extraction jobs ingest queued, or the next seed's process_one would run them and
+    # their re-run would replace the rows seeded below.
+    while process_one(handlers.HANDLERS):
+        pass
     body = r.json()
     ctx = _ctx(actor)
     with session_scope() as s:

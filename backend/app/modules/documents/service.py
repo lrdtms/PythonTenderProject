@@ -266,6 +266,8 @@ def processing_info(session: Session, ctx: OrgContext, version_id: UUID) -> Proc
         storage_key=v.storage_key,
         file_format=v.file_format,
         filename=v.filename,
+        kind=document.kind,
+        tender_archived=tenders.get_tender(session, ctx, document.tender_id).status == "archived",
     )
 
 
