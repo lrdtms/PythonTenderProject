@@ -128,6 +128,21 @@ def prefilter_batches(sents: list[tuple[int, str]]) -> tuple[list[str], set[int]
     return batch_text(windows), selected
 
 
+# v3 adds definitions of requirement_type and mandatory_status (v2 left them to the model).
+SYSTEM_V3 = SYSTEM_V2 + (
+    "\nrequirement_type: deadline = a date or time by which a submission or action is due; "
+    "meeting = a compulsory meeting or site inspection; eligibility = who may tender "
+    "(registration, grading, joint-venture rules); document = a certificate, form or proof that "
+    "must be included in the submission; pricing = how prices are stated or how long rates stay "
+    "valid; technical = standards, workmanship, programme or defects obligations for the works; "
+    "evaluation = how tenders are scored or ranked; other = anything else. Choose by what the "
+    "requirement is about, not by a date or number that happens to appear in it.\n"
+    "mandatory_status: mandatory = must, shall, only, or non-compliance disqualifies; "
+    "conditional = applies only if a stated condition is met (for example 'if' or 'where'); "
+    "informational = 'should' or advice that does not disqualify a tender."
+)
+
+
 def kept_sentences(sents: list[tuple[int, str]], selected: set[int]) -> list[dict]:
     """The sentences the pre-filter hands to the LLM (triggers plus one sentence of context)."""
     keep = set()
@@ -222,7 +237,7 @@ def main() -> None:
     ap.add_argument("--skip-baseline", action="store_true")
     ap.add_argument("--baseline-sample", type=int, default=0,
                     help="run only the first N baseline calls and extrapolate time (no recall)")
-    ap.add_argument("--prompt", choices=["v1", "v2"], default="v2")
+    ap.add_argument("--prompt", choices=["v1", "v2", "v3"], default="v2")
     ap.add_argument("--predictions-dir", default=None,
                     help="write harness-format predictions to <dir>/prefilter and <dir>/baseline")
     ap.add_argument("--out", default=None)
@@ -256,7 +271,7 @@ def main() -> None:
 
         # Load the model once before timing.
         spike.chat(args.base, args.model, "Reply with one word.", "Say ready.", None, 8, args.num_ctx)
-        system = spike.SYSTEM if args.prompt == "v1" else SYSTEM_V2
+        system = {"v1": spike.SYSTEM, "v2": SYSTEM_V2, "v3": SYSTEM_V3}[args.prompt]
         pre = run_llm(args.base, args.model, pre_batches, args.num_ctx, system)
         pre_items = pre["items"]
         pre.update(score(gt, pages, pre_items))
