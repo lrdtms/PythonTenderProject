@@ -48,3 +48,31 @@ class BoqResult:
     items: list[BoqCandidate] = field(default_factory=list)
     warnings: list[dict[str, Any]] = field(default_factory=list)
     boq_pages: set[int] = field(default_factory=set)
+
+
+@dataclass(frozen=True)
+class Window:
+    text: str
+    pages: tuple[int, ...]
+
+
+@dataclass
+class RequirementCandidate:
+    description: str
+    requirement_type: str
+    mandatory_status: str
+    evidence_quote: str
+    page_number: int | None = None
+    quote_start: int | None = None
+    quote_end: int | None = None
+    evidence_status: str = "verified"
+    needs_review: bool = False
+
+    def as_row(self) -> dict[str, Any]:
+        return {
+            "description": self.description, "requirement_type": self.requirement_type,
+            "mandatory_status": self.mandatory_status, "evidence_quote": self.evidence_quote,
+            "page_number": self.page_number, "quote_start": self.quote_start,
+            "quote_end": self.quote_end, "evidence_status": self.evidence_status,
+            "needs_review": self.needs_review,
+        }  # fmt: skip
