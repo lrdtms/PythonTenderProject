@@ -14,6 +14,16 @@ class Settings(BaseSettings):
     llm_base_url: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen3:4b"
     llm_allow_hosted: bool = False
+    llm_provider: str = "ollama"  # "ollama" or "fake" (tests)
+    llm_timeout_s: int = 120  # must stay below job_lease_seconds
+    llm_num_ctx: int = 4096
+    llm_num_predict: int = 2048
+    llm_max_response_bytes: int = 2_000_000
+    # Extraction caps: a huge document or response degrades to a warning, never exhausts the worker.
+    extract_max_windows: int = 200
+    extract_window_chars: int = 5400  # about 1,350 tokens
+    extract_max_items_per_response: int = 100
+    extract_max_rows_per_run: int = 2000
 
     max_upload_mb: int = 25
     ocr_enabled: bool = True
