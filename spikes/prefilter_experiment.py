@@ -128,6 +128,32 @@ def prefilter_batches(sents: list[tuple[int, str]]) -> tuple[list[str], set[int]
     return batch_text(windows), selected
 
 
+def kept_sentences(sents: list[tuple[int, str]], selected: set[int]) -> list[dict]:
+    """The sentences the pre-filter hands to the LLM (triggers plus one sentence of context)."""
+    keep = set()
+    for i in selected:
+        keep.update({max(0, i - 1), i, min(len(sents) - 1, i + 1)})
+    return [{"page": sents[i][0], "text": sents[i][1]} for i in sorted(keep)]
+
+
+def to_prediction(pack_id: str, pages: list[str], items: list[dict], meta: dict,
+                  candidates: list[dict] | None) -> dict:
+    """Harness prediction format (eval/harness/score.py). Page is located by code, not by the LLM."""
+    page_text = [norm(t) for t in pages]
+    reqs = []
+    for it in items:
+        quote = norm(str(it.get("evidence_quote", "")))
+        page = next((n for n, t in enumerate(page_text, start=1) if quote and quote in t), None)
+        reqs.append({
+            "description": it.get("description", ""), "requirement_type": it.get("requirement_type"),
+            "mandatory_status": it.get("mandatory_status"), "evidence_quote": it.get("evidence_quote", ""),
+            "document": "tender.pdf", "page": page})
+    pred = {"pack_id": pack_id, "metadata": meta, "requirements": reqs}
+    if candidates is not None:
+        pred["filter_candidates"] = candidates
+    return pred
+
+
 def run_llm(base: str, model: str, batches: list[str], num_ctx: int, system: str = SYSTEM_V2) -> dict:
     items, calls, t_in, t_out, invalid, truncated = [], [], 0, 0, 0, 0
     start = time.perf_counter()
@@ -197,6 +223,8 @@ def main() -> None:
     ap.add_argument("--baseline-sample", type=int, default=0,
                     help="run only the first N baseline calls and extrapolate time (no recall)")
     ap.add_argument("--prompt", choices=["v1", "v2"], default="v2")
+    ap.add_argument("--predictions-dir", default=None,
+                    help="write harness-format predictions to <dir>/prefilter and <dir>/baseline")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -230,7 +258,15 @@ def main() -> None:
         spike.chat(args.base, args.model, "Reply with one word.", "Say ready.", None, 8, args.num_ctx)
         system = spike.SYSTEM if args.prompt == "v1" else SYSTEM_V2
         pre = run_llm(args.base, args.model, pre_batches, args.num_ctx, system)
-        pre.update(score(gt, pages, pre["items"]))
+        pre_items = pre["items"]
+        pre.update(score(gt, pages, pre_items))
+        meta = {"model": args.model, "prompt_version": args.prompt, "filter_version": "triggers-v1"}
+        if args.predictions_dir:
+            out_dir = Path(args.predictions_dir) / "prefilter"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            pred = to_prediction(pack_id, pages, pre_items, {**meta, "method": "prefilter"},
+                                 kept_sentences(sents, selected))
+            (out_dir / f"{pack_id}.json").write_text(json.dumps(pred, indent=2), encoding="utf-8")
         res["prefilter"] = {k: v for k, v in pre.items() if k != "items"}
         print(f"  prefilter: {pre['calls']} calls, {pre['wall_s']}s, recall {pre['recall']:.0%} "
               f"({pre['found']}/{pre['total_gt']}), items {pre['items']}, FP {pre['fp_items']}, "
@@ -249,7 +285,13 @@ def main() -> None:
                   f"(prefilter total: {pre['wall_s']}s, {pre['items']} items)", flush=True)
         elif not args.skip_baseline:
             base = run_llm(args.base, args.model, all_base, args.num_ctx, system)
-            base.update(score(gt, pages, base["items"]))
+            base_items = base["items"]
+            base.update(score(gt, pages, base_items))
+            if args.predictions_dir:
+                out_dir = Path(args.predictions_dir) / "baseline"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                pred = to_prediction(pack_id, pages, base_items, {**meta, "method": "baseline"}, None)
+                (out_dir / f"{pack_id}.json").write_text(json.dumps(pred, indent=2), encoding="utf-8")
             res["baseline"] = {k: v for k, v in base.items() if k != "items"}
             print(f"  baseline : {base['calls']} calls, {base['wall_s']}s, recall {base['recall']:.0%} "
                   f"({base['found']}/{base['total_gt']}), items {base['items']}, FP {base['fp_items']}, "

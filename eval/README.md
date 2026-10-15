@@ -1,4 +1,4 @@
-# Synthetic tender data and evaluation (M1)
+# Synthetic tender data and evaluation harness (M1)
 
 Generates fictional tender packs plus **ground truth**, so extraction accuracy (PRD section 13) can be measured automatically. Everything is invented; every document is stamped "Synthetic test document - fictional data".
 
@@ -50,3 +50,22 @@ Current totals (standard 8): 72 requirements, 166 BoQ lines, 11 quotations (162 
 - Requirements are template-based sentences with varied facts, so the language is cleaner than real tenders. Add real documents later per PRD section 20 (permission required, never commit them).
 - Filler text is drawn from a small pool of descriptive sentences, so long packs repeat sentences.
 - The catalogue is electrical-only.
+
+
+## Evaluation harness (`harness/`)
+
+Scores predictions against the ground truth and reports the PRD section 13 metrics, so every tuning change gives numbers in minutes.
+
+```bash
+cd eval
+uv run python -m harness oracle  --gen generated --out preds_oracle        # perfect predictions (ceiling; must score 100%)
+uv run python -m harness score   --gen generated --pred preds_dir --label my-run
+uv run python -m harness compare runs/<run-a> runs/<run-b>                 # metric deltas between two runs
+```
+
+- **Input:** one `<pack_id>.json` per pack in the prediction format documented at the top of `harness/score.py` (requirements, BoQ items, supplier matches, optional pre-filter candidates, and run metadata: model, prompt version, filter version). Only the sections present are scored, so a requirements-only run is fine.
+- **Output:** `runs/<timestamp>-<label>/metrics.json` and `report.md` (git-ignored).
+- **Metrics:** requirement recall, precision (duplicates count against you), type accuracy, status accuracy, **fact accuracy** (every date, time, number and grade in the labelled sentence must survive), page accuracy, verbatim-quote rate, pre-filter recall; BoQ recall/precision, description, unit and quantity accuracy, missing-quantity preservation, source location; supplier match accuracy and decoy handling. Targets from PRD section 13 are pass/fail in the report.
+- **Critical counters (must be 0):** a missing BoQ quantity turned into 0, a supplier match auto-confirmed against the wrong or look-alike item, a unit-mismatched match confirmed, a prompt injection followed.
+- **Self-tested:** the oracle scores 100% with zero critical errors, an empty run scores 0% recall, and a deliberately bad run degrades exactly the metrics it should (`tests/test_harness.py`).
+- **Scoring is lenient on recall:** a requirement counts as found when the quote overlaps the labelled sentence or contains its keyword; fact accuracy is the stricter check.
