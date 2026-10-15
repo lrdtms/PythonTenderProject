@@ -167,6 +167,32 @@ def test_ollama_down_keeps_boq_and_ingest_but_fails_the_requirements_run(fake_ll
     assert version["processing_status"] == "ready"
 
 
+def test_the_lease_is_renewed_after_provenance(fake_llm, monkeypatch) -> None:
+    from app.modules.extraction import public as extraction_public
+    from app.modules.jobs import public as jobs_public
+
+    events: list[str] = []
+    real_attach, real_heartbeat = extraction_public.attach_provenance, jobs_public.heartbeat
+
+    def attach(*args: Any, **kwargs: Any):
+        out = real_attach(*args, **kwargs)
+        events.append("provenance")
+        return out
+
+    def heartbeat(*args: Any, **kwargs: Any):
+        events.append("heartbeat")
+        return real_heartbeat(*args, **kwargs)
+
+    monkeypatch.setattr(extraction_public, "attach_provenance", attach)
+    monkeypatch.setattr(jobs_public, "heartbeat", heartbeat)
+    fake_llm([req_json("must submit a valid tax clearance certificate")])
+    _, _, body = setup_version(tender_pdf())
+    drain()
+    assert db_runs(body["version"]["id"])["requirements"]["status"] == "succeeded"
+    assert "provenance" in events
+    assert "heartbeat" in events[events.index("provenance") :]
+
+
 def test_timeouts_skip_the_window_and_finish_with_a_warning(fake_llm) -> None:
     fake_llm([LLMTimeout(), LLMTimeout()])
     admin, _, body = setup_version(tender_pdf())

@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import difflib
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from .types import PageInput, RequirementCandidate
 
 FUZZY_THRESHOLD = 0.9
 MIN_FUZZY_CHARS = 20
+# Fuzzy matching costs grow with the square of the quote length (~2 s per page at 600 chars,
+# minutes at 2,400). A longer quote is only matched exactly; otherwise it is unverified.
+FUZZY_MAX_QUOTE_CHARS = 600
 GRAM = 5
 MAX_GRAM_HITS = 1000
 MAX_VOTES = 6000
@@ -113,7 +116,7 @@ def locate(quote: str, pages: Sequence[PageInput]) -> Location | None:
                 start = index - offset
                 return Location(number, start, start + len(needle), True)
             offset += len(text) + 1
-    if len(needle) >= MIN_FUZZY_CHARS:
+    if MIN_FUZZY_CHARS <= len(needle) <= FUZZY_MAX_QUOTE_CHARS:
         best: tuple[float, Location] | None = None
         for number, text in squashed:
             found = _fuzzy_in(text, needle) if text else None
@@ -125,11 +128,17 @@ def locate(quote: str, pages: Sequence[PageInput]) -> Location | None:
 
 
 def attach_provenance(
-    cands: Sequence[RequirementCandidate], pages: Sequence[PageInput]
+    cands: Sequence[RequirementCandidate],
+    pages: Sequence[PageInput],
+    progress: Callable[[int, int], None] | None = None,
 ) -> list[RequirementCandidate]:
+    """Locate every quote. `progress(done, total)` is called after each candidate."""
     low_confidence = {p.page_number for p in pages if p.status == "low_confidence"}
-    for cand in cands:
+    total = len(cands)
+    for done, cand in enumerate(cands, start=1):
         found = locate(cand.evidence_quote, pages)
+        if progress:
+            progress(done, total)
         if found is None:
             cand.evidence_status = "evidence_unverified"
             cand.page_number = cand.quote_start = cand.quote_end = None

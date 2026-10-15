@@ -292,6 +292,34 @@ def test_locate_is_fast_on_a_large_page_for_a_miss_and_a_fuzzy_hit() -> None:
     assert found is not None and found.exact is False and abs(found.start - 5000) <= 5
 
 
+def test_a_very_long_near_miss_quote_skips_fuzzy_matching_and_is_fast() -> None:
+    import time
+
+    text = _big_page()[:5000]
+    chars = list(text[1000:3400])
+    for i in range(0, len(chars), 25):
+        chars[i] = "#"  # near miss: about 96% similar, but never exact
+    started = time.perf_counter()
+    assert ex.locate("".join(chars), [page(1, text)]) is None
+    assert time.perf_counter() - started < 1.0
+    assert ex.FUZZY_MAX_QUOTE_CHARS == 600
+
+
+def test_a_very_long_exact_quote_still_resolves() -> None:
+    text = _big_page()[:5000]
+    found = ex.locate(text[1000:3400], [page(3, text)])
+    assert found is not None and found.exact and (found.page_number, found.start) == (3, 1000)
+
+
+def test_attach_provenance_reports_progress_per_candidate() -> None:
+    calls: list[tuple[int, int]] = []
+    pages = [page(1, "Tenderers must sign the form of offer.")]
+    ex.attach_provenance(
+        [_cand("must sign"), _cand("invented")], pages, progress=lambda d, t: calls.append((d, t))
+    )
+    assert calls == [(1, 2), (2, 2)]
+
+
 def test_locate_prefers_the_best_scoring_page_over_the_first_acceptable_one() -> None:
     quote = "The tenderer shall submit an original valid tax clearance certificate"
     worse = (

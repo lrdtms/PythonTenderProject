@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +23,8 @@ from app.modules.pipeline import public as pipeline
 from app.worker.runner import JobHandler, ProgressFn
 
 import_all_models()  # the worker never loads the API, so register every table here
+
+PROVENANCE_HEARTBEAT_S = 15.0  # well inside the job lease
 
 
 def _ocr() -> knowledge.OcrRunner | None:
@@ -122,7 +125,17 @@ def extract_requirements(
         raise ProcessingFailed("LLM_UNAVAILABLE", transient=True) from None
     warnings += outcome.warnings
     merged = extraction.merge_requirements(outcome.candidates)
-    located = extraction.attach_provenance(merged, pages)
+    total = len(pf.windows)
+    last = time.monotonic()
+
+    def still_alive(_done: int, _total: int) -> None:  # renew the lease during provenance
+        nonlocal last
+        if time.monotonic() - last >= PROVENANCE_HEARTBEAT_S:
+            progress(total, total)
+            last = time.monotonic()
+
+    located = extraction.attach_provenance(merged, pages, still_alive)
+    progress(total, total)
     unverified = sum(1 for c in located if c.evidence_status == "evidence_unverified")
     if unverified:
         warnings.append({"code": "EVIDENCE_UNVERIFIED", "count": unverified})
