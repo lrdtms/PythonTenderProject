@@ -6,6 +6,9 @@ from fastapi.responses import JSONResponse
 from app.api.errors import error_body, register_error_handlers
 from app.api.routers import auth, documents, jobs, members, tenders
 from app.db.session import ping
+from app.infrastructure.model_registry import import_all_models
+
+import_all_models()
 
 app = FastAPI(title="IntelTPS API", version="0.1.0")
 register_error_handlers(app)

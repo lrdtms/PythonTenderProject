@@ -28,7 +28,7 @@ Each backend module is a package `modules/<name>/` containing `public.py` (the o
 | `billing` | M1 | Plans and limits (mocked) | `check_and_increment(ctx, metric)` raises `LimitExceeded`; `usage(ctx)` | plans, organisation_usage |
 | `audit` | M1 | Append-only events, with no document text | `record(ctx, entity_type, entity_id, action, safe_metadata)` | audit_events |
 | `tenders` | M1 | Tender workspace and archive | `get(ctx, tender_id) -> TenderDTO` (404 if other org) | tenders |
-| `documents` | M1 | Upload validation, versions, file access | `upload(ctx, tender_id, kind, file) -> (DocumentVersionDTO, job_id)`, `get_version(ctx, id)`, `open_original(ctx, version_id)`, `current_versions(ctx, tender_id)`, `signed_link(ctx, version_id)` | documents, document_versions |
+| `documents` | M1 | Upload validation, versions, file access | `upload(ctx, tender_id, kind, file) -> (DocumentVersionDTO, job_id)`, `get_version(ctx, id)`, `open_original(ctx, version_id)`, `current_versions(ctx, tender_id)` (downloads are an authenticated same-origin endpoint, not signed links) | documents, document_versions |
 | `knowledge` | M2 | Parse, OCR, page text and tables, chunking, embeddings, **the only retrieval path** | `ingest(ctx, version_id, progress) -> IngestResult`, `get_tables(ctx, version_id)`, `iter_sections(ctx, version_id)`, `search(ctx, tender_id, query, k) -> [ChunkHit]` | document_pages, document_chunks |
 | `extraction` | M2 | **Pure core.** BoQ table parser, LLM prompts and schemas, validators, evidence check, merge/de-dupe | `parse_boq(tables) -> [BoqCandidate]`, `refine_boq(cands, llm)`, `extract_requirements(section, llm) -> [RequirementCandidate]`, `merge_requirements(...)`, `parse_quotation(...)` | none. The worker persists `extraction_unit_results` via `knowledge`'s repo (or a small `pipeline` repo) |
 | `estimating` | M4 | BoQ items, review, Decimal calculations, estimate versions | `replace_unreviewed(ctx, version_id, cands)`, `correct_item(ctx, id, patch)`, `compute(ctx, tender_id) -> EstimateDTO`, `set_status(ctx, estimate_id, status)` | boq_items, estimates |
@@ -196,7 +196,7 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 - FastEmbed inside the API image (for query embeddings) vs embedding queries via Ollama: measure RAM.
 - `tsvector` as a generated column with `simple` config, and whether to add an `english` column.
 - PDF report library: ReportLab (pure Python) vs WeasyPrint (needs Pango system libraries in the image).
-- Tesseract settings: DPI for rasterising (300), `eng` pack, per-page timeout.
+- ~~Tesseract settings~~ Resolved: `eng` pack, 300 DPI, 60 s per-page timeout.
 - Ollama and NVIDIA driver versions that work with Pascal (GTX 1050); the `num_ctx`/`num_gpu` split for 2 GB VRAM.
 - PDF.js integration (`pdfjs-dist` directly vs `react-pdf`) with App Router.
 - Exact import-linter contract set and the CI check for raw `session.execute`.
@@ -208,7 +208,7 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 - **OCR route.** A PDF page with no embedded text is rendered at `OCR_DPI` and sent to Tesseract (`tesseract-ocr`, English model, installed in the backend image) one page at a time with a per-page timeout. Text and mean word confidence are stored on the page (`text_source = "ocr"`).
 - **`processing_status`** of a document version: `pending`, `processing`, `ready`, `ready_with_warnings`, `failed`.
 - **Job warning codes** (job ends `succeeded_with_warnings`): `OCR_FAILED`, `OCR_LOW_CONFIDENCE`, `OCR_UNAVAILABLE`, `SHEET_TOO_LARGE`, each with the affected page numbers. **Failure codes** (job `failed`, never contain document text): `FILE_CORRUPT`, `PDF_ENCRYPTED`, `UNSUPPORTED_FORMAT`, `NO_HANDLER`, `UNEXPECTED`.
-- **The worker must import every module's models** so SQLAlchemy can resolve foreign keys (the worker entry point does not load the API routers); `app/worker/handlers.py` imports the identity, audit and tenders public modules for that reason.
+- **Every entry point registers all models.** `app.infrastructure.model_registry.import_all_models()` imports each `app.modules.*.models`; the API, worker and Alembic env call it, so SQLAlchemy can resolve foreign keys in any process. `tests/test_worker_isolation.py` guards the worker.
 
 ## 10. Next steps
 

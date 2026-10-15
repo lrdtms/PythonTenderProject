@@ -3,15 +3,11 @@
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-# Import every module's models so their tables are registered on Base.metadata.
-import app.modules.audit.models  # noqa: F401
-import app.modules.documents.models  # noqa: F401
-import app.modules.identity.models  # noqa: F401
-import app.modules.jobs.models  # noqa: F401
-import app.modules.knowledge.models  # noqa: F401
-import app.modules.tenders.models  # noqa: F401
 from app.config import get_settings
 from app.db.base import Base
+from app.infrastructure.model_registry import import_all_models
+
+import_all_models()  # register every module's tables on Base.metadata
 
 target_metadata = Base.metadata
 

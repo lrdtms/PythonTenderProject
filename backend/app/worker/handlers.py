@@ -7,15 +7,15 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.infrastructure.model_registry import import_all_models
 from app.infrastructure.storage import get_storage
 from app.kernel import OrgContext
-from app.modules.audit import public as _audit  # noqa: F401 - registers the audit models
 from app.modules.documents import public as documents
-from app.modules.identity import public as _identity  # noqa: F401 - registers the organisation models
 from app.modules.jobs import public as jobs
 from app.modules.knowledge import public as knowledge
-from app.modules.tenders import public as _tenders  # noqa: F401 - registers the tender models
 from app.worker.runner import JobHandler, ProgressFn
+
+import_all_models()  # the worker never loads the API, so register every table here
 
 
 def _ocr() -> knowledge.OcrRunner | None:
