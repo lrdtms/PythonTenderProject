@@ -31,6 +31,8 @@ docker compose up --build
 - Public link: run the Cloudflare tunnel (`cloudflared`) on the same machine pointing at `http://127.0.0.1:8080`. Cloudflare sets `CF-Connecting-IP`; Caddy turns it (or the TCP peer when absent) into `X-Client-IP`, overwriting anything the client sent, and the API rate-limits on it (`CLIENT_IP_HEADER=X-Client-IP`). For the tunnel (HTTPS) set `ENVIRONMENT=production`, a real `SECRET_KEY` and `COOKIE_SECURE=true` in `.env`; `COOKIE_SECURE=false` is only for local plain http.
 - Postgres: 127.0.0.1:${DB_HOST_PORT:-5432} (local only; set `DB_HOST_PORT` in `.env` if 5432 is taken)
 
+Documents are limited to 25 MB per upload (`MAX_UPLOAD_MB`). Scanned PDFs are read with Tesseract OCR, which is installed in the backend image (English model); no host setup is needed for it.
+
 Ollama runs on the host and containers reach it at `host.docker.internal:11434` (`LLM_BASE_URL`). If containers cannot connect, start Ollama with `OLLAMA_HOST=0.0.0.0` and firewall port 11434.
 
 ## Develop without Docker

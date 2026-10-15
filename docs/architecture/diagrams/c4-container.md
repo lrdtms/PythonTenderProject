@@ -8,7 +8,7 @@ C4Container
     System_Ext(cf, "Cloudflare edge", "Public HTTPS")
 
     System_Boundary(host, "Developer laptop (later: one VM)") {
-        Container(tunnel, "cloudflared", "Container", "Outbound tunnel; only target is Caddy")
+        Container(tunnel, "cloudflared", "Host process, outside Compose", "Outbound tunnel run on the host; only target is Caddy on 127.0.0.1:8080")
         Container(edge, "Reverse proxy", "Caddy", "Single origin: / -> web, /api -> api. No response buffering for streams")
         Container(web, "Web app", "Next.js (production build), TS, Tailwind, PDF.js", "UI, review beside source, BoQ editor, comparison")
         Container(api, "API", "FastAPI, Pydantic, SQLAlchemy", "Auth, RBAC, tenant scoping, business rules, enqueue jobs, signed file links, (stretch) Q&A stream")
@@ -34,6 +34,7 @@ C4Container
 ```
 
 Rules
+- `cloudflared` is not part of the Compose stack: it runs on the host and connects to Caddy, which is published on `127.0.0.1:8080` only. Caddy is the only thing the tunnel can reach.
 - Only Caddy is reachable from the tunnel. Postgres, Ollama, worker and Mailpit publish no ports to the public interface.
 - API and worker are one codebase, one image, two entrypoints (`api`, `worker`). They share modules, not a network API.
 - Embeddings (bge-small, CPU, ONNX) run in-process in the worker (indexing) and the API (query embedding for Q&A).

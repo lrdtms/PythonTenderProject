@@ -145,7 +145,7 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 ## 9. Implementation Brief — for stack-specialist agent
 
 ### Components to Build
-- **Edge (Caddy + cloudflared):** single origin. `/api/*` goes to FastAPI and `/*` to Next.js, with no buffering on the ask route.
+- **Edge (Caddy, plus cloudflared on the host):** Caddy is the only edge container, published on `127.0.0.1:8080`; `cloudflared` runs as a host process outside the Compose stack and connects to it. Single origin. `/api/*` goes to FastAPI and `/*` to Next.js, with no buffering on the ask route.
 - **API (FastAPI):** HTTP surface `/api/v1`, auth dependency producing `OrgContext`, consistent error format, rate limits.
 - **Worker:** Postgres job loop (SKIP LOCKED, leases, reaper, backoff), concurrency 1, stage handlers.
 - **kernel:** shared types and ports (`OrgContext`, `SourceRef`, `Money`, `LLMPort`, `EmbeddingPort`, `StoragePort`, `JobQueuePort`).
@@ -200,6 +200,15 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 - Ollama and NVIDIA driver versions that work with Pascal (GTX 1050); the `num_ctx`/`num_gpu` split for 2 GB VRAM.
 - PDF.js integration (`pdfjs-dist` directly vs `react-pdf`) with App Router.
 - Exact import-linter contract set and the CI check for raw `session.execute`.
+
+## Slice 2 notes
+
+- **Search is full-text for now.** Chunks are searched with Postgres `tsvector` (current document versions only, tenant-scoped). Embeddings are deferred to a later slice; the chunk table is unchanged by that.
+- **Downloads are authenticated, not signed links.** `GET /api/v1/document-versions/{id}/file` checks the session and tenant on every request and streams the file (PDFs inline, others as attachment). No signed URLs exist.
+- **OCR route.** A PDF page with no embedded text is rendered at `OCR_DPI` and sent to Tesseract (`tesseract-ocr`, English model, installed in the backend image) one page at a time with a per-page timeout. Text and mean word confidence are stored on the page (`text_source = "ocr"`).
+- **`processing_status`** of a document version: `pending`, `processing`, `ready`, `ready_with_warnings`, `failed`.
+- **Job warning codes** (job ends `succeeded_with_warnings`): `OCR_FAILED`, `OCR_LOW_CONFIDENCE`, `OCR_UNAVAILABLE`, `SHEET_TOO_LARGE`, each with the affected page numbers. **Failure codes** (job `failed`, never contain document text): `FILE_CORRUPT`, `PDF_ENCRYPTED`, `UNSUPPORTED_FORMAT`, `NO_HANDLER`, `UNEXPECTED`.
+- **The worker must import every module's models** so SQLAlchemy can resolve foreign keys (the worker entry point does not load the API routers); `app/worker/handlers.py` imports the identity, audit and tenders public modules for that reason.
 
 ## 10. Next steps
 
