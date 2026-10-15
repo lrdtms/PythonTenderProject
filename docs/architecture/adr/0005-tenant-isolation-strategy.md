@@ -1,6 +1,6 @@
 # ADR-0005: Tenant isolation: one scoped data-access path, organisation_id everywhere, composite FKs; RLS deferred
 
-- **Status:** Accepted
+- **Status:** Accepted; superseded in part (item 7, file links) in Slice 2: see the note under item 7
 - **Date:** 2026-10-15
 - **Deciders:** IntelTPS team
 
@@ -27,6 +27,7 @@ Chosen option: **Option 1, built so that Option 2 is a migration later.**
 5. **Retrieval** exists only as `knowledge.search(ctx, tender_id, query)`. The SQL filters by `organisation_id` **and** `tender_id` **and** current document version in both CTEs, before fusion. There is no "search all" function. Q&A citations are produced by code from the retrieved set; any citation index outside it is dropped.
 6. **Worker.** Jobs carry `organisation_id`; the worker builds a system `OrgContext` from the job row (never from document content) and uses the same repositories.
 7. **Files.** Storage keys start with `org/{organisation_id}/`; signed links are HMAC tokens binding `(organisation_id, document_version_id, user_id, expiry <= 5 min)` and are re-checked against membership.
+   > **Superseded in part (Slice 2).** No signed links were built. With server-side sessions (ADR-0010) and a single origin (ADR-0009), downloads are an authenticated same-origin endpoint, `GET /api/v1/document-versions/{id}/file`, which checks the session cookie and the organisation on every request (a version of another organisation is a 404) and streams the file. The HMAC design above is kept for history only. See architecture.md, "Slice 2 notes".
 8. **RLS-ready.** The session factory already runs `SET LOCAL app.org_id = :org` inside each transaction. Enabling RLS later is a migration (policies + `FORCE ROW LEVEL SECURITY` + non-owner app role), not a code change.
 9. **Platform Admin** has no endpoint that reads customer documents in the MVP (aggregates and plans only).
 

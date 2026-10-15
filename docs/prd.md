@@ -187,7 +187,7 @@ Base endpoints from spec §6.3 remain. **All paths use the `/api/v1` prefix** (t
 | Suppliers | `POST/GET /suppliers`, `GET/PATCH /suppliers/{id}` |
 | Quotations and matching | `GET /quotations/{id}/items`, `GET /tenders/{id}/match-suggestions`, `POST /match-suggestions/{id}/confirm`, `POST /match-suggestions/{id}/reject` |
 | Tasks | `POST /tenders/{id}/tasks`, `GET /tenders/{id}/tasks`, `PATCH /tasks/{id}` |
-| Documents | `GET /documents/{id}/file` (short-lived signed link for PDF.js), `POST /documents/{id}/reindex`, `GET /documents/{id}/chunks` (admin/debug) |
+| Documents | `GET /documents/{id}/file` (authenticated same-origin download for PDF.js; the signed link was superseded in Slice 2, see ADR-0005/ADR-0007), `POST /documents/{id}/reindex`, `GET /documents/{id}/chunks` (admin/debug) |
 | Exports | `POST /tenders/{id}/exports`, `GET /exports/{id}`, `GET /exports/{id}/download` |
 | Usage | `GET /usage` |
 | Q&A (stretch) | `POST /tenders/{id}/ask` |
@@ -220,7 +220,7 @@ Dashboard · Tender List · Tender Workspace · **Document Review (source PDF be
 
 ## 12. Security and Compliance
 
-As base spec §4.3, §4.4 and §8.3: backend RBAC, tenant isolation (applied to chunk retrieval as well as relational data), signed download links, validated uploads, rate limits, secrets in environment variables, audit logging, tested backups. POPIA: privacy notice, retention/deletion, incident response, and a documented assessment before any data leaves our infrastructure.
+As base spec §4.3, §4.4 and §8.3: backend RBAC, tenant isolation (applied to chunk retrieval as well as relational data), authenticated same-origin downloads (signed links superseded in Slice 2, see ADR-0007), validated uploads, rate limits, secrets in environment variables, audit logging, tested backups. POPIA: privacy notice, retention/deletion, incident response, and a documented assessment before any data leaves our infrastructure.
 
 **Tunnel and POPIA:** Cloudflare terminates TLS at its edge, which may be outside South Africa, so it sees plaintext and acts as a processor in a cross-border transfer. Use synthetic data only while the tunnel is the access path, and record this in the POPIA assessment.
 
