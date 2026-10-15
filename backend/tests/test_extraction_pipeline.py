@@ -7,14 +7,12 @@ import logging
 from typing import Any
 from uuid import UUID
 
-import pytest
 from sqlalchemy import select, text, update
 
 from app.config import get_settings
 from app.db.session import session_scope
 from app.kernel import LLMTimeout, LLMUnavailable
 from app.modules.checklist.models import Requirement
-from app.modules.estimating.models import BoqItem  # noqa: F401 - used once the Task 7 tests run
 from app.modules.jobs.models import Job
 from app.modules.pipeline.models import ExtractionRun
 from app.worker import handlers
@@ -85,7 +83,6 @@ def db_runs(version_id: str | UUID) -> dict[str, dict[str, Any]]:
         }
 
 
-@pytest.mark.skip(reason="needs Task 7 endpoints")
 def test_ingest_enqueues_extraction_and_results_are_stored(fake_llm) -> None:
     fake_llm([req_json("must submit a valid tax clearance certificate")])
     admin, _, body = setup_version(tender_pdf())
@@ -105,7 +102,6 @@ def test_ingest_enqueues_extraction_and_results_are_stored(fake_llm) -> None:
     assert version["processing_status"] == "ready" and version["job_id"] == str(body["job_id"])
 
 
-@pytest.mark.skip(reason="needs Task 7 endpoints")
 def test_boq_document_extracts_items_and_never_zeroes_missing_quantities(fake_llm) -> None:
     llm = fake_llm()
     admin, _, body = setup_version(boq_pdf(), "boq.pdf", "boq")
@@ -150,7 +146,6 @@ def test_timeouts_skip_the_window_and_finish_with_a_warning(fake_llm) -> None:
     assert run["requirements"]["warnings"][0]["code"] == "WINDOW_TIMEOUT"
 
 
-@pytest.mark.skip(reason="needs Task 7 endpoints")
 def test_unlocatable_quotes_are_kept_and_flagged(fake_llm) -> None:
     fake_llm([req_json("a sentence the document never contains")])
     admin, _, body = setup_version(tender_pdf())
@@ -162,7 +157,6 @@ def test_unlocatable_quotes_are_kept_and_flagged(fake_llm) -> None:
     assert run["requirements"]["warnings"] == [{"code": "EVIDENCE_UNVERIFIED", "count": 1}]
 
 
-@pytest.mark.skip(reason="needs Task 7 endpoints")
 def test_rerun_keeps_reviewed_rows_and_does_not_duplicate(fake_llm) -> None:
     quote = "must submit a valid tax clearance certificate"
     fake_llm([req_json(quote), req_json(quote)])
@@ -184,7 +178,6 @@ def test_rerun_keeps_reviewed_rows_and_does_not_duplicate(fake_llm) -> None:
         assert s.scalar(select(text("count(*)")).select_from(ExtractionRun)) == 4
 
 
-@pytest.mark.skip(reason="needs Task 7 endpoints")
 def test_archived_tender_blocks_extraction(fake_llm) -> None:
     admin, tid, body = setup_version(tender_pdf())
     vid = body["version"]["id"]

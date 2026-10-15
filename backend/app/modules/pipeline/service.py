@@ -8,12 +8,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.kernel import NotFound, OrgContext, Permission
+from app.kernel import Conflict, NotFound, OrgContext, Permission
+from app.modules.documents import public as documents
 from app.modules.jobs import public as jobs
 
 from .models import ExtractionRun
 from .repo import RunRepo
-from .schemas import RunDTO
+from .routing import KIND_OF_JOB, job_types_for_kind
+from .schemas import ExtractionStatusDTO, KindStatusDTO, RunDTO
 
 
 def _dto(run: ExtractionRun) -> RunDTO:
@@ -88,3 +90,44 @@ def fail_run(session: Session, ctx: OrgContext, job_id: UUID, kind: str, error_c
 def current_runs(session: Session, ctx: OrgContext, version_id: UUID) -> dict[str, RunDTO]:
     ctx.require(Permission.READ)
     return {k: _dto(r) for k, r in RunRepo(session, ctx).current_for_version(version_id).items()}
+
+
+READY = ("ready", "ready_with_warnings")
+
+
+def request_extraction(
+    session: Session, ctx: OrgContext, version_id: UUID, deep_scan: bool
+) -> list[jobs.JobDTO]:
+    """Queue the extraction jobs for this version's document kind. Idempotent while a job of
+    the same type is active; asking for different options while one runs is a conflict."""
+    ctx.require(Permission.REVIEW_DATA)
+    info = documents.processing_info(session, ctx, version_id)  # NotFound for another org
+    if info.tender_archived:
+        raise Conflict("This tender is archived. Re-open it before extracting.")
+    if documents.get_version(session, ctx, version_id).processing_status not in READY:
+        raise Conflict("The document has not finished processing.")
+    out: list[jobs.JobDTO] = []
+    for job_type in job_types_for_kind(info.kind):
+        active = jobs.find_active_job(session, ctx, job_type, version_id)
+        if active is not None:
+            if bool(active.payload.get("deep_scan")) != deep_scan:
+                raise Conflict("An extraction with different options is already running.")
+            out.append(active)
+            continue
+        out.append(
+            jobs.enqueue(
+                session, ctx, job_type, "document_version", version_id, {"deep_scan": deep_scan}
+            )
+        )
+    return out
+
+
+def extraction_status(session: Session, ctx: OrgContext, version_id: UUID) -> ExtractionStatusDTO:
+    ctx.require(Permission.READ)
+    documents.get_version(session, ctx, version_id)  # NotFound for another organisation
+    runs = current_runs(session, ctx, version_id)
+    kinds = []
+    for job_type, kind in KIND_OF_JOB.items():
+        job = jobs.latest_job_for_subject(session, ctx, version_id, job_type)
+        kinds.append(KindStatusDTO(kind=kind, job=job, run=runs.get(kind)))
+    return ExtractionStatusDTO(kinds=kinds)

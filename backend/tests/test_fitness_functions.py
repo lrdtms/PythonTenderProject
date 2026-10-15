@@ -49,6 +49,9 @@ REQUESTS = {
     },
     ("POST", "/api/v1/tenders/{tender_id}/documents"): _pdf_upload,
     ("POST", "/api/v1/documents/{document_id}/versions"): _pdf_upload,
+    ("POST", "/api/v1/document-versions/{version_id}/extract"): lambda: {
+        "json": {"deep_scan": False}
+    },
 }
 SEARCH_PARAMS = {("GET", "/api/v1/tenders/{tender_id}/search"): lambda: {"params": {"q": "secret"}}}
 
@@ -106,7 +109,16 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     )
     assert swept == schema_count >= 18, f"swept {swept} of {schema_count} routes with an id"
     paths = {p for _, p, _ in routes}
-    for needle in ("documents", "document-versions", "pages/{page_number}", "jobs"):
+    for needle in (
+        "documents",
+        "document-versions",
+        "pages/{page_number}",
+        "jobs",
+        "extract",
+        "extraction",
+        "boq-items",
+        "requirements",
+    ):
         assert any(needle in p for p in paths), f"no {needle} route was swept"
 
     # Org B's data is intact after Org A's attempts.
@@ -118,6 +130,10 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     assert org_b.client.get(f"/api/v1/tenders/{tender_b}").json()["title"] == "B-only secret"
     assert len(org_b.client.get(f"/api/v1/documents/{known['document_id']}/versions").json()) == 1
     assert org_b.client.get(f"/api/v1/jobs/{known['job_id']}").json()["status"] == "succeeded"
+    status_b = org_b.client.get(f"/api/v1/document-versions/{known['version_id']}/extraction")
+    assert status_b.status_code == 200
+    # Org A's extract attempt queued nothing: B's jobs are only the ones its own ingest queued.
+    assert all(k["job"]["status"] == "queued" for k in status_b.json()["kinds"])
     assert member_b.client.get("/api/v1/me").status_code == 200
 
 

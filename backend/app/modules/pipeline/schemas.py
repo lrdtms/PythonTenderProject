@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.modules.jobs import public as jobs
+
 
 class RunDTO(BaseModel):
     id: UUID
@@ -24,3 +26,13 @@ class RunDTO(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class KindStatusDTO(BaseModel):
+    kind: str
+    job: jobs.JobDTO | None
+    run: RunDTO | None
+
+
+class ExtractionStatusDTO(BaseModel):
+    kinds: list[KindStatusDTO]
