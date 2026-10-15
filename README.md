@@ -45,6 +45,9 @@ cd frontend && npm install && npm run dev
 cd backend
 uv run ruff check . && uv run ruff format --check .
 uv run lint-imports      # architecture boundaries (fitness function F2)
+# Tests need Postgres with pgvector (docker compose up -d db). They create and migrate a
+# throwaway `inteltps_test` database. If Postgres is not on port 5432, set DB_HOST_PORT or
+# TEST_DATABASE_URL, e.g. postgresql+psycopg://intel:intel@127.0.0.1:5433/inteltps_test
 uv run pytest -q
 
 cd ../frontend

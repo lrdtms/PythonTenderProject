@@ -7,6 +7,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
 ENV PATH="/srv/.venv/bin:$PATH" PYTHONUNBUFFERED=1
 
 # Default command runs the API; the worker service overrides it in docker-compose.yml.

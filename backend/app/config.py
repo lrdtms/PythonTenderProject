@@ -8,10 +8,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+psycopg://intel:intel@localhost:5432/inteltps"
+    database_url: str = "postgresql+psycopg://intel:intel@127.0.0.1:5432/inteltps"
     storage_path: str = "./data/files"
 
-    llm_base_url: str = "http://localhost:11434"
+    llm_base_url: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen3:4b"
     llm_allow_hosted: bool = False
 

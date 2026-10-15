@@ -20,6 +20,8 @@ services:
 
   api:
     build: ./backend
+    # Apply database migrations, then serve.
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.api.main:app --host 0.0.0.0 --port 8000"]
     env_file: [.env]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://intel:intel@db:5432/inteltps}
