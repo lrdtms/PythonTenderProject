@@ -11,29 +11,44 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import ForeignKeyConstraint, create_engine
 
-# Import every module's models so Base.metadata is complete.
-import app.modules.audit.models  # noqa: F401, E402, I001
-import app.modules.documents.models  # noqa: F401, E402
-import app.modules.jobs.models  # noqa: F401, E402
-import app.modules.knowledge.models  # noqa: F401, E402
-import app.modules.identity.models  # noqa: F401, E402
-import app.modules.tenders.models  # noqa: F401, E402
 from app.api.main import app as fastapi_app
 from app.db.base import Base
 from app.db.session import get_engine
-from tests.conftest import add_member, register
+
+# Import every module's models so Base.metadata is complete (side effects only).
+from app.modules.audit import models as _audit_models  # noqa: F401
+from app.modules.documents import models as _documents_models  # noqa: F401
+from app.modules.identity import models as _identity_models  # noqa: F401
+from app.modules.jobs import models as _jobs_models  # noqa: F401
+from app.modules.knowledge import models as _knowledge_models  # noqa: F401
+from app.modules.tenders import models as _tenders_models  # noqa: F401
+from tests.conftest import add_member, make_pdf, make_tender, register, upload
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 
 
 # --- F1: cross-tenant route sweep --------------------------------------------------------------
 
-# Minimal valid bodies so a request gets past validation and reaches the ownership check.
-BODIES = {
-    ("PATCH", "/api/v1/tenders/{tender_id}"): {"title": "hijacked"},
-    ("PATCH", "/api/v1/members/{membership_id}/role"): {"role": "reviewer"},
-    ("POST", "/api/v1/members/{membership_id}/reset-password"): {"password": "a-long-enough-pass"},
+
+# Per-route request keyword arguments, so a request gets past validation and reaches the
+# ownership check. Upload routes need full multipart bodies.
+def _pdf_upload() -> dict:
+    return {
+        "files": {"file": ("x.pdf", make_pdf(["probe"]), "application/pdf")},
+        "data": {"kind": "tender_document"},
+    }
+
+
+REQUESTS = {
+    ("PATCH", "/api/v1/tenders/{tender_id}"): lambda: {"json": {"title": "hijacked"}},
+    ("PATCH", "/api/v1/members/{membership_id}/role"): lambda: {"json": {"role": "reviewer"}},
+    ("POST", "/api/v1/members/{membership_id}/reset-password"): lambda: {
+        "json": {"password": "a-long-enough-pass"}
+    },
+    ("POST", "/api/v1/tenders/{tender_id}/documents"): _pdf_upload,
+    ("POST", "/api/v1/documents/{document_id}/versions"): _pdf_upload,
 }
+SEARCH_PARAMS = {("GET", "/api/v1/tenders/{tender_id}/search"): lambda: {"params": {"q": "secret"}}}
 
 
 def _routes_with_params() -> list[tuple[str, str, set[str]]]:
@@ -50,28 +65,44 @@ def _routes_with_params() -> list[tuple[str, str, set[str]]]:
 def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     org_a = register("a@example.com", org="Org A")
     org_b = register("b@example.com", org="Org B")
-    tender_b = org_b.client.post("/api/v1/tenders", json={"title": "B-only secret"}).json()["id"]
+    tender_b = make_tender(org_b, "B-only secret")
+    uploaded = upload(org_b, tender_b, make_pdf(["B-only secret clause"]), "b-secret.pdf").json()
     member_b = add_member(org_b, "b2@example.com", "estimator")
     membership_b = next(
         m["membership_id"]
         for m in org_b.client.get("/api/v1/members").json()
         if m["email"] == "b2@example.com"
     )
-    known = {"tender_id": tender_b, "membership_id": membership_b}
+    known = {
+        "tender_id": tender_b,
+        "document_id": uploaded["document"]["id"],
+        "version_id": uploaded["version"]["id"],
+        "job_id": str(uploaded["job_id"]),
+        "membership_id": membership_b,
+        "page_number": 1,
+    }
+    forbidden = ("B-only secret", "b2@example.com", "b-secret.pdf", known["version_id"])
 
+    routes = _routes_with_params()
     swept = 0
-    for method, path, params in _routes_with_params():
+    for method, path, params in routes:
         missing = params - known.keys()
         assert not missing, f"{method} {path}: add {missing} to the F1 id registry"
         url = path.format(**{k: known[k] for k in params})
-        r = org_a.client.request(method, url, json=BODIES.get((method, path)))
+        kwargs = {**SEARCH_PARAMS, **REQUESTS}.get((method, path), dict)()
+        r = org_a.client.request(method, url, **kwargs)
         assert r.status_code == 404, f"{method} {path} returned {r.status_code}: {r.text[:200]}"
-        assert "B-only secret" not in r.text and "b2@example.com" not in r.text
+        assert not any(f in r.text for f in forbidden), f"{method} {path} leaked data"
         swept += 1
-    assert swept >= 7, "the sweep should cover every tender and member route"
+    assert swept == len(routes) and swept >= 18, f"swept only {swept} method/path combinations"
+    paths = {p for _, p, _ in routes}
+    for needle in ("documents", "document-versions", "pages/{page_number}", "jobs"):
+        assert any(needle in p for p in paths), f"no {needle} route was swept"
 
     # Org B's data is intact after Org A's attempts.
     assert org_b.client.get(f"/api/v1/tenders/{tender_b}").json()["title"] == "B-only secret"
+    assert len(org_b.client.get(f"/api/v1/documents/{known['document_id']}/versions").json()) == 1
+    assert org_b.client.get(f"/api/v1/jobs/{known['job_id']}").json()["status"] == "queued"
     assert member_b.client.get("/api/v1/me").status_code == 200
 
 
