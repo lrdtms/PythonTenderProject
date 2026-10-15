@@ -174,3 +174,24 @@ def test_run_score_and_compare(generated: Path, tmp_path: Path) -> None:
     assert "requirement_recall" in table and "pp" in table
     bad = json.loads((run_b / "metrics.json").read_text(encoding="utf-8"))
     assert bad["overall"]["requirement_recall"] < 1.0
+
+
+def test_aggregate_over_repeated_runs(generated: Path, tmp_path: Path) -> None:
+    from harness.aggregate import aggregate, compare_aggregates, load_runs
+
+    good_dir, bad_dir = tmp_path / "good", tmp_path / "bad"
+    good_dir.mkdir()
+    bad_dir.mkdir()
+    for pack in ("pack03", "pack08"):
+        gt = _gt(generated, pack)
+        good = oracle_prediction(gt)
+        (good_dir / f"{pack}.json").write_text(json.dumps(good), encoding="utf-8")
+        (bad_dir / f"{pack}.json").write_text(
+            json.dumps(perturb(good, random.Random(3))), encoding="utf-8"
+        )
+    good_runs = [run_score(generated, good_dir, f"g{i}", tmp_path / "runs") for i in range(2)]
+    bad_runs = [run_score(generated, bad_dir, f"b{i}", tmp_path / "runs") for i in range(2)]
+    a, b = aggregate(load_runs(good_runs)), aggregate(load_runs(bad_runs))
+    assert a["runs"] == 2 and a["metrics"]["requirement_recall"]["mean"] == 1.0
+    assert b["metrics"]["requirement_recall"]["max"] < 1.0
+    assert "requirement_recall" in compare_aggregates("good", a, "bad", b)

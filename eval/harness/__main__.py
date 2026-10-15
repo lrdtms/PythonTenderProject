@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pymupdf
 
+from .aggregate import aggregate, compare_aggregates, load_runs, render
 from .oracle import oracle_prediction
 from .score import CRITICAL, TARGETS, Counts, derive, score_pack
 from .textutil import norm
@@ -166,7 +167,24 @@ def main() -> int:
     c = sub.add_parser("compare")
     c.add_argument("a", type=Path)
     c.add_argument("b", type=Path)
+    g = sub.add_parser(
+        "aggregate", help="mean/min/max over repeated runs (optionally vs a second set)"
+    )
+    g.add_argument("runs", nargs="+", type=Path, help="run dirs of the first set")
+    g.add_argument("--vs", nargs="+", type=Path, default=None, help="run dirs of a second set")
+    g.add_argument("--labels", nargs=2, default=("A", "B"))
     args = ap.parse_args()
+
+    if args.cmd == "aggregate":
+        first = aggregate(load_runs(args.runs))
+        print(render(args.labels[0], first))
+        if args.vs:
+            second = aggregate(load_runs(args.vs))
+            print()
+            print(render(args.labels[1], second))
+            print()
+            print(compare_aggregates(args.labels[0], first, args.labels[1], second))
+        return 0
 
     if args.cmd == "oracle":
         args.out.mkdir(parents=True, exist_ok=True)

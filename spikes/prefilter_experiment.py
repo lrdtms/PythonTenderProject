@@ -143,6 +143,15 @@ SYSTEM_V3 = SYSTEM_V2 + (
 )
 
 
+# v4 adds an explicit instruction for the requirements v2/v3 kept skipping (should-statements,
+# forms, queries, declarations).
+SYSTEM_V4 = SYSTEM_V3 + (
+    "\nDo not skip minor or administrative requirements. Include every 'should' or 'may' "
+    "instruction addressed to tenderers (as informational), and every form, declaration, "
+    "query deadline, warranty or defects period that the tenderer must deal with."
+)
+
+
 def kept_sentences(sents: list[tuple[int, str]], selected: set[int]) -> list[dict]:
     """The sentences the pre-filter hands to the LLM (triggers plus one sentence of context)."""
     keep = set()
@@ -237,7 +246,7 @@ def main() -> None:
     ap.add_argument("--skip-baseline", action="store_true")
     ap.add_argument("--baseline-sample", type=int, default=0,
                     help="run only the first N baseline calls and extrapolate time (no recall)")
-    ap.add_argument("--prompt", choices=["v1", "v2", "v3"], default="v2")
+    ap.add_argument("--prompt", choices=["v1", "v2", "v3", "v4"], default="v2")
     ap.add_argument("--predictions-dir", default=None,
                     help="write harness-format predictions to <dir>/prefilter and <dir>/baseline")
     ap.add_argument("--out", default=None)
@@ -271,7 +280,7 @@ def main() -> None:
 
         # Load the model once before timing.
         spike.chat(args.base, args.model, "Reply with one word.", "Say ready.", None, 8, args.num_ctx)
-        system = {"v1": spike.SYSTEM, "v2": SYSTEM_V2, "v3": SYSTEM_V3}[args.prompt]
+        system = {"v1": spike.SYSTEM, "v2": SYSTEM_V2, "v3": SYSTEM_V3, "v4": SYSTEM_V4}[args.prompt]
         pre = run_llm(args.base, args.model, pre_batches, args.num_ctx, system)
         pre_items = pre["items"]
         pre.update(score(gt, pages, pre_items))
