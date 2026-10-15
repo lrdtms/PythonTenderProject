@@ -19,6 +19,14 @@ class PageInput:
     tables: list[Any] = field(default_factory=list)
 
 
+# Column widths of boq_items (migration 0003). The parser clips to these and flags `truncated`,
+# so one oversized cell can never fail the insert of a whole BoQ.
+BOQ_TEXT_LIMITS: dict[str, int] = {
+    "section": 300, "item_no": 50, "unit": 30, "raw_unit": 50, "raw_quantity": 50,
+    "sheet": 200, "cell_range": 40,
+}  # fmt: skip
+
+
 @dataclass
 class BoqCandidate:
     section: str | None

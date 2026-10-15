@@ -39,6 +39,12 @@ HEADER = ["Item", "Description", "Unit", "Quantity", "Rate", "Amount"]
         ("", None, False),
         ("-", None, False),
         ("rate only", None, False),
+        ("12345678901234", Decimal("12345678901234"), False),  # 14 integer digits fit
+        ("123456789012345", None, True),  # 15 integer digits overflow NUMERIC(18,4)
+        ("1e999999999", None, True),
+        ("-1e999999999", None, True),
+        ("1e99999999999999999999999999", None, True),  # beyond Decimal's own exponent range
+        ("0e999999999", Decimal(0), False),
     ],
 )
 def test_parse_decimal(raw, expected, lossy) -> None:
@@ -136,6 +142,49 @@ def test_more_than_four_decimals_is_flagged_not_rounded() -> None:
     item = result.items[0]
     assert item.quantity is None and "quantity_unparsed" in item.flags
     assert item.raw_quantity == "1e-05"
+
+
+NOTE = (
+    "Notes: All rates shall include for the supply, delivery, offloading, storage, handling, "
+    "installation, testing and commissioning of the works described, together with all labour, "
+    "plant, tools, transport, supervision, overheads and profit, and for compliance with the "
+    "specifications, drawings and the occupational health and safety act, all to the approval "
+    "of the engineer; no claims for extras will be entertained after award of the contract."
+)
+
+
+def test_long_note_row_section_is_clipped_and_flagged() -> None:
+    assert len(NOTE) > 400
+    rows = [HEADER, ["", NOTE, "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]]
+    item = extraction.parse_boq([_page(rows)]).items[0]
+    assert item.section == NOTE[: extraction.BOQ_TEXT_LIMITS["section"]]
+    assert len(item.section) == 300 and "truncated" in item.flags
+    assert item.description == "Cable"  # description is Text: never clipped
+
+
+def test_long_unit_item_no_and_raw_quantity_are_clipped_and_flagged() -> None:
+    unit = "per metre run incl trenching and backfill to engineer approval"
+    rows = [HEADER, ["1.1." + "9" * 60, "Trench", unit, "5" + " " * 3 + "x" * 60, "", ""]]
+    item = extraction.parse_boq([_page(rows, label="S" * 250)]).items[0]
+    limits = extraction.BOQ_TEXT_LIMITS
+    assert item.unit == unit.lower()[: limits["unit"]] and len(item.unit) == 30
+    assert item.raw_unit == unit[: limits["raw_unit"]]
+    assert len(item.item_no) == limits["item_no"] and len(item.raw_quantity) == 50
+    assert len(item.sheet) == limits["sheet"]
+    assert "truncated" in item.flags and "quantity_unparsed" in item.flags
+
+
+def test_short_fields_are_not_flagged_truncated() -> None:
+    item = extraction.parse_boq([_page([HEADER, ["1.1", "Cable", "m", "5", "", ""]])]).items[0]
+    assert "truncated" not in item.flags
+
+
+def test_overflowing_quantity_and_rate_are_unparsed_not_stored() -> None:
+    rows = [HEADER, ["1.1", "Cable", "m", "1e999999999", "123456789012345", ""]]
+    item = extraction.parse_boq([_page(rows)]).items[0]
+    assert item.quantity is None and "quantity_unparsed" in item.flags
+    assert item.raw_quantity == "1e999999999"
+    assert item.rate is None and "rate_unparsed" in item.flags
 
 
 def test_scanned_boq_needs_manual_entry() -> None:

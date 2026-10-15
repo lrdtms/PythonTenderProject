@@ -112,3 +112,49 @@ def test_items_cannot_point_at_another_versions_run() -> None:
             )
         )
         s.flush()
+
+
+def test_boq_text_limits_match_the_columns() -> None:
+    from app.modules.extraction import public as extraction
+
+    for name, limit in extraction.BOQ_TEXT_LIMITS.items():
+        assert BoqItem.__table__.c[name].type.length == limit, name
+
+
+def test_requirement_enums_fit_their_columns() -> None:
+    from app.modules.extraction.prompts import MANDATORY_STATUSES, REQUIREMENT_TYPES
+
+    cols = Requirement.__table__.c
+    assert max(map(len, REQUIREMENT_TYPES)) <= cols["requirement_type"].type.length
+    assert max(map(len, MANDATORY_STATUSES)) <= cols["mandatory_status"].type.length
+    for status in ("verified", "evidence_unverified"):
+        assert len(status) <= cols["evidence_status"].type.length
+
+
+def test_oversized_parser_output_is_stored() -> None:
+    from app.modules.extraction import public as extraction
+
+    header = ["Item", "Description", "Unit", "Quantity", "Rate", "Amount"]
+    rows = [
+        header,
+        ["", "Notes: All rates shall include for " + "everything required " * 25, "", "", "", ""],
+        ["9" * 80, "Trench", "per metre run incl trenching and backfill", "1e999999999",
+         "123456789012345", ""],
+        ["1.2", "Cable", "m", "0e999999999", "-1e99999999999999999999999999", ""],
+    ]  # fmt: skip
+    page = extraction.PageInput(1, "S" * 250, "", "embedded", "ok", [{"kind": "sheet",
+                                "rows": rows, "first_row": 1}])  # fmt: skip
+    cands = [c.as_row() for c in extraction.parse_boq([page]).items]
+    ctx, version_id, job_id = _seed()
+    with session_scope() as s:
+        run = _run(s, ctx, version_id, job_id, "boq")
+        res = estimating.replace_unreviewed(s, ctx, version_id, run, cands)
+        assert res.inserted == 2
+    with session_scope() as s:
+        items = estimating.list_boq_items(s, ctx, version_id)
+        first = items[0]
+        assert first.quantity is None and first.rate is None
+        assert first.raw_quantity == "1e999999999"
+        assert {"truncated", "quantity_unparsed", "rate_unparsed"} <= set(first.flags)
+        assert len(first.section or "") == 300 and len(first.unit or "") == 30
+        assert items[1].quantity == "0.0000" and "rate_unparsed" in items[1].flags

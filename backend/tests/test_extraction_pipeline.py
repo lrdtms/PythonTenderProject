@@ -17,7 +17,14 @@ from app.modules.jobs.models import Job
 from app.modules.pipeline.models import ExtractionRun
 from app.worker import handlers
 from app.worker.runner import process_one
-from tests.conftest import make_pdf, make_table_pdf, make_tender, register, upload
+from tests.conftest import (
+    make_pdf,
+    make_table_pdf,
+    make_tender,
+    make_xlsx,
+    register,
+    upload,
+)
 
 API = "/api/v1"
 CLAUSE = "Tenderers must submit a valid tax clearance certificate."
@@ -111,6 +118,29 @@ def test_boq_document_extracts_items_and_never_zeroes_missing_quantities(fake_ll
     assert by_no["1.1"]["quantity"] == "10.0000" and by_no["1.1"]["unit"] == "m"
     assert by_no["1.2"]["quantity"] is None and "rate_only" in by_no["1.2"]["flags"]
     assert llm.calls == []  # a BoQ document never reaches the model
+
+
+def test_oversized_boq_cells_never_fail_the_boq_run(fake_llm) -> None:
+    fake_llm()
+    note = "Notes: All rates shall include for " + "all labour plant and materials " * 15
+    rows = [
+        ["Item", "Description", "Unit", "Quantity", "Rate", "Amount"],
+        ["", note, None, None, None, None],
+        ["1.1", "Trench", "per metre run incl trenching and backfill", "1e999999999", "", ""],
+        ["1.2", "Cable 4mm", "m", "10", "", ""],
+    ]
+    admin, _, body = setup_version(make_xlsx(rows), "boq.xlsx", "boq")
+    drain()
+    vid = body["version"]["id"]
+    run = db_runs(vid)["boq"]
+    assert run["status"] == "succeeded", run
+    items = admin.client.get(f"{API}/document-versions/{vid}/boq-items").json()
+    by_no = {i["item_no"]: i for i in items}
+    trench = by_no["1.1"]
+    assert trench["quantity"] is None and trench["raw_quantity"] == "1e999999999"
+    assert {"quantity_unparsed", "truncated"} <= set(trench["flags"])
+    assert len(trench["section"]) == 300 and len(trench["unit"]) == 30
+    assert by_no["1.2"]["quantity"] == "10.0000"
 
 
 def test_quotations_are_not_extracted(fake_llm) -> None:

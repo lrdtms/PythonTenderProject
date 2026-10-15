@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from .numbers import parse_decimal
-from .types import BoqCandidate, BoqResult, PageInput
+from .types import BOQ_TEXT_LIMITS, BoqCandidate, BoqResult, PageInput
 from .units import canon_unit
 
 HEADER_WORDS = {
@@ -112,7 +112,7 @@ def _candidate(
         cell_range = f"A{excel_row}:{_column_letter(width - 1)}{excel_row}"
     else:
         page_number = page.page_number
-    return BoqCandidate(
+    cand = BoqCandidate(
         section=section,
         item_no=_get(row, columns, "item") or None,
         description=description,
@@ -126,6 +126,20 @@ def _candidate(
         sheet=sheet,
         cell_range=cell_range,
     )
+    _clip(cand)
+    return cand
+
+
+def _clip(cand: BoqCandidate) -> None:
+    """Fit every short text field to its column; keep the clipped text and flag it."""
+    clipped = False
+    for name, limit in BOQ_TEXT_LIMITS.items():
+        value = getattr(cand, name)
+        if isinstance(value, str) and len(value) > limit:
+            setattr(cand, name, value[:limit])
+            clipped = True
+    if clipped:
+        cand.flags.append("truncated")
 
 
 def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
