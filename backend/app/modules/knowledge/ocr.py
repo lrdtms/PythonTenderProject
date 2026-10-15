@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from typing import Protocol
@@ -30,9 +31,11 @@ class TesseractOcr:
 
     def run(self, png: bytes) -> tuple[str, float]:
         args = [self.command, "stdin", "stdout", "-l", self.language, "--psm", "3", "tsv"]
+        # One OpenMP thread: a single OCR must not saturate every core of a small VM.
+        env = {**os.environ, "OMP_THREAD_LIMIT": "1"}
         try:
             proc = subprocess.run(  # noqa: S603 - fixed argument list, no shell
-                args, input=png, capture_output=True, timeout=self.timeout_s, check=False
+                args, input=png, capture_output=True, timeout=self.timeout_s, check=False, env=env
             )
         except subprocess.TimeoutExpired as exc:
             raise OcrFailed("timeout") from exc

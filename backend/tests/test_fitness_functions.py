@@ -308,3 +308,12 @@ def test_f2_modules_are_imported_only_through_public() -> None:
             if not via_public:
                 offenders.append(f"{rel}:{lineno}: {line.strip()}")
     assert not offenders, "imports of module internals:\n" + "\n".join(offenders)
+
+
+def test_every_compose_service_restarts_after_a_crash() -> None:
+    """A worker killed by the kernel (or a crash) must come back on its own (I-1)."""
+    import yaml
+
+    compose = yaml.safe_load((APP_DIR.parents[1] / "docker-compose.yml").read_text("utf-8"))
+    policies = {name: svc.get("restart") for name, svc in compose["services"].items()}
+    assert policies and all(p == "unless-stopped" for p in policies.values()), policies

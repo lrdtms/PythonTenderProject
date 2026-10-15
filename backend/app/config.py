@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     tesseract_cmd: str = "tesseract"
     ocr_page_timeout_s: int = 60
     ocr_dpi: int = 300
+    # Above this, a scanned page is rendered at a lower DPI (never below 100) or not OCRed at all.
+    ocr_max_megapixels: int = 40
+    # Spreadsheet caps: a wider sheet, or a workbook with more cells, fails with SHEET_TOO_LARGE.
+    xlsx_max_columns: int = 200
+    xlsx_max_cells: int = 2_000_000
     job_lease_seconds: int = 300
 
     secret_key: str = "change-me"  # noqa: S105 - dev default, rejected outside development

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pymupdf
 import pytest
 
+from app.config import get_settings
 from app.kernel import ProcessingFailed
 from app.modules.knowledge.chunking import MAX_CHARS, ChunkDraft, chunk_document
 from app.modules.knowledge.ocr import OcrFailed, TesseractOcr, parse_tsv
@@ -335,3 +336,148 @@ def test_chunking_is_deterministic() -> None:
     pages = [(1, "1.1 Scope\n\n" + _long_page()), (2, _long_page("Beta"))]
 
     assert chunk_document(pages) == chunk_document(pages)
+
+
+# --- resource caps (I-1) -----------------------------------------------------------------------
+
+
+def _xlsx_with_dimension(rows: list[list[object]], ref: str) -> bytes:
+    """A workbook whose sheet XML declares a forged <dimension ref=...>."""
+    import io
+    import re
+    import zipfile
+
+    source = zipfile.ZipFile(io.BytesIO(make_xlsx(rows)))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            data = source.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                data, count = re.subn(
+                    rb'<dimension ref="[^"]*"', f'<dimension ref="{ref}"'.encode(), data
+                )
+                assert count == 1
+            target.writestr(item, data)
+    return out.getvalue()
+
+
+def test_xlsx_forged_dimension_does_not_pad_rows() -> None:
+    data = _xlsx_with_dimension([["Item", "Qty"], ["Cable", 10], ["Switch", 4]], "A1:XFD3")
+
+    (page,) = parse_document("xlsx", data)
+
+    assert page.tables[0]["rows"] == [["Item", "Qty"], ["Cable", "10"], ["Switch", "4"]]
+    assert page.text == "Item | Qty\nCable | 10\nSwitch | 4"
+
+
+def test_xlsx_trailing_empty_cells_are_trimmed() -> None:
+    (page,) = parse_document("xlsx", make_xlsx([["a", None, "b", None, None], ["c"]]))
+
+    assert page.tables[0]["rows"] == [["a", "", "b"], ["c"]]
+
+
+def test_xlsx_wider_than_the_column_cap_fails_permanently() -> None:
+    assert get_settings().xlsx_max_columns == 200
+    ok = parse_document("xlsx", make_xlsx([[f"c{i}" for i in range(200)]]))
+    assert len(ok[0].tables[0]["rows"][0]) == 200
+
+    with pytest.raises(ProcessingFailed) as caught:
+        parse_document("xlsx", make_xlsx([[f"c{i}" for i in range(201)]]))
+
+    assert caught.value.error_code == "SHEET_TOO_LARGE"
+    assert caught.value.transient is False
+    assert "c200" not in str(caught.value)
+
+
+def test_xlsx_with_more_cells_than_the_cap_fails_permanently(monkeypatch) -> None:
+    assert get_settings().xlsx_max_cells == 2_000_000
+    monkeypatch.setattr(get_settings(), "xlsx_max_cells", 50)
+    rows = [[f"r{i}", i] for i in range(30)]  # 60 cells
+
+    with pytest.raises(ProcessingFailed) as caught:
+        parse_document("xlsx", make_xlsx(rows))
+
+    assert caught.value.error_code == "SHEET_TOO_LARGE"
+    assert parse_document("xlsx", make_xlsx(rows[:25]))[0].status == "ok"  # 50 cells is allowed
+
+
+def _image_page_pdf(width: float, height: float) -> bytes:
+    """One scanned-looking page (a small image, no text) on a page of the given size in points."""
+    tiny = pymupdf.open()
+    tiny.new_page(width=50, height=50).insert_text((5, 25), "x")
+    png = tiny[0].get_pixmap(dpi=20).tobytes("png")
+    tiny.close()
+    doc = pymupdf.open()
+    page = doc.new_page(width=width, height=height)
+    page.insert_image(pymupdf.Rect(0, 0, 200, 200), stream=png)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+class _PixmapSpy:
+    """Records the DPI asked of get_pixmap without allocating a real image."""
+
+    def __init__(self) -> None:
+        self.dpis: list[int] = []
+
+    def __call__(self, *args, **kwargs):  # set on the class: not bound, so no page argument
+        self.dpis.append(kwargs.get("dpi"))
+        return type("Pix", (), {"tobytes": staticmethod(lambda fmt="png": b"\x89PNG fake")})()
+
+
+def test_huge_scanned_page_is_not_rendered(monkeypatch) -> None:
+    data = _image_page_pdf(14400, 14400)  # built before get_pixmap is replaced
+    spy = _PixmapSpy()
+    monkeypatch.setattr(pymupdf.Page, "get_pixmap", spy)
+    ocr = FakeOcr()
+
+    (page,) = parse_pdf(data, ocr, ocr_dpi=300)
+
+    assert spy.dpis == []  # 60,000 px square at 300 DPI; even 100 DPI is far above the cap
+    assert ocr.calls == 0
+    assert page.status == "ocr_failed" and page.text_source == "none"
+
+
+def test_large_scanned_page_is_rendered_at_a_lower_dpi(monkeypatch) -> None:
+    data = _image_page_pdf(3000, 3000)
+    spy = _PixmapSpy()
+    monkeypatch.setattr(pymupdf.Page, "get_pixmap", spy)
+
+    (page,) = parse_pdf(data, FakeOcr(), ocr_dpi=300)
+
+    (dpi,) = spy.dpis
+    assert 100 <= dpi < 300
+    pixels = (3000 / 72 * dpi) ** 2
+    assert pixels <= get_settings().ocr_max_megapixels * 1_000_000
+    assert page.status == "ok" and page.text_source == "ocr"
+
+
+def test_normal_scanned_page_keeps_the_configured_dpi(monkeypatch) -> None:
+    data = _image_page_pdf(595, 842)  # A4
+    spy = _PixmapSpy()
+    monkeypatch.setattr(pymupdf.Page, "get_pixmap", spy)
+
+    parse_pdf(data, FakeOcr(), ocr_dpi=300)
+
+    assert spy.dpis == [300]
+
+
+def test_tesseract_runs_single_threaded(monkeypatch) -> None:
+    import subprocess
+
+    from app.modules.knowledge import ocr as ocr_module
+
+    seen: dict = {}
+
+    def fake_run(args, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(args, 0, stdout=TSV_HEADER.encode(), stderr=b"")
+
+    monkeypatch.setenv("PATH_MARKER_FOR_TEST", "kept")
+    monkeypatch.setattr(ocr_module.subprocess, "run", fake_run)
+
+    TesseractOcr().run(b"\x89PNG")
+
+    assert seen["env"]["OMP_THREAD_LIMIT"] == "1"
+    assert seen["env"]["PATH_MARKER_FOR_TEST"] == "kept"  # built from os.environ
