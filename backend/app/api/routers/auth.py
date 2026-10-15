@@ -8,7 +8,6 @@ from app.api.deps import SESSION_COOKIE, Ctx, DbSession
 from app.api.ratelimit import client_ip, limiter
 from app.config import get_settings
 from app.modules.identity import public as identity
-from app.modules.identity.service import SESSION_LIFETIME
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 
@@ -17,7 +16,7 @@ def _set_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         token,
-        max_age=int(SESSION_LIFETIME.total_seconds()),
+        max_age=int(identity.SESSION_LIFETIME.total_seconds()),
         httponly=True,
         samesite="lax",
         secure=get_settings().cookie_secure,

@@ -287,3 +287,24 @@ def test_role_permission_matrix(role: str, allowed: set[str], denied: set[str]) 
     ctx = OrgContext(uuid4(), uuid4(), Role(role))
     assert all(ctx.can(Permission(p)) for p in allowed)
     assert not any(ctx.can(Permission(p)) for p in denied)
+
+
+MODULE_IMPORT = re.compile(r"^\s*from app\.modules\.(\w+)(?:\.(\w+))? import (.+)$")
+
+
+def test_f2_modules_are_imported_only_through_public() -> None:
+    """Outside a module, `from app.modules.<m> import public` or `app.modules.<m>.public` only."""
+    offenders = []
+    for path in APP_DIR.rglob("*.py"):
+        rel = path.relative_to(APP_DIR)
+        own = rel.parts[1] if rel.parts[0] == "modules" and len(rel.parts) > 2 else None
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            m = MODULE_IMPORT.match(line)
+            if not m or m.group(1) == own:
+                continue
+            via_public = m.group(2) == "public" or (
+                m.group(2) is None and m.group(3).split(" as ")[0].strip() == "public"
+            )
+            if not via_public:
+                offenders.append(f"{rel}:{lineno}: {line.strip()}")
+    assert not offenders, "imports of module internals:\n" + "\n".join(offenders)

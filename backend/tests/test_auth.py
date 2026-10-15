@@ -206,3 +206,84 @@ def test_session_cookie_is_not_secure_when_the_setting_is_off(client, monkeypatc
 
     monkeypatch.setattr(get_settings(), "cookie_secure", False)
     assert "secure" not in _register_cookie(client)
+
+
+# --- small items (review minors) -----------------------------------------------------------------
+
+
+def test_login_upgrades_an_outdated_password_hash(admin, monkeypatch) -> None:
+    from argon2 import PasswordHasher
+
+    from app.modules.identity import passwords
+    from app.modules.identity.models import User
+
+    with session_scope() as s:
+        before = s.scalar(select(User.password_hash))
+    stronger = PasswordHasher(time_cost=passwords._hasher.time_cost + 1)
+    monkeypatch.setattr(passwords, "_hasher", stronger)
+    r = make_client().post(
+        "/api/v1/auth/login", json={"email": "owner@example.com", "password": STRONG_PASSWORD}
+    )
+    assert r.status_code == 200
+    with session_scope() as s:
+        after = s.scalar(select(User.password_hash))
+    assert after != before and not stronger.check_needs_rehash(after)
+    assert stronger.verify(after, STRONG_PASSWORD)
+
+
+def test_patch_and_logout_need_the_csrf_header(admin) -> None:
+    tid = admin.client.post("/api/v1/tenders", json={"title": "T"}).json()["id"]
+    no_header = make_client()
+    no_header.headers.pop("X-Requested-With")
+    no_header.cookies.update(admin.client.cookies)
+    patch = no_header.patch(f"/api/v1/tenders/{tid}", json={"title": "changed"})
+    assert patch.status_code == 403 and patch.json()["error"]["code"] == "csrf_failed"
+    logout = no_header.post("/api/v1/auth/logout")
+    assert logout.status_code == 403 and logout.json()["error"]["code"] == "csrf_failed"
+    # Neither went through: the title is unchanged and the session is still live.
+    assert admin.client.get(f"/api/v1/tenders/{tid}").json()["title"] == "T"
+    assert admin.client.get("/api/v1/me").status_code == 200
+
+
+def test_member_actions_and_login_are_audited(admin) -> None:
+    from tests.conftest import add_member
+
+    add_member(admin, "est@example.com", "estimator")  # logs in as the new member
+    mid = next(
+        m["membership_id"]
+        for m in admin.client.get("/api/v1/members").json()
+        if m["email"] == "est@example.com"
+    )
+    admin.client.patch(f"/api/v1/members/{mid}/role", json={"role": "reviewer"})
+    admin.client.post(f"/api/v1/members/{mid}/reset-password", json={"password": "another-pass-1"})
+    admin.client.post(f"/api/v1/members/{mid}/deactivate")
+    with session_scope() as s:
+        events = s.scalars(select(AuditEvent).order_by(AuditEvent.created_at)).all()
+    by_action = {e.action: e for e in events}
+    for action in ("login", "role_changed", "password_reset", "member_deactivated"):
+        assert action in by_action, action
+        assert by_action[action].organisation_id is not None
+    assert by_action["role_changed"].event_metadata == {
+        "old_role": "estimator",
+        "new_role": "reviewer",
+    }
+    assert "another-pass-1" not in str([e.event_metadata for e in events])
+
+
+def test_get_ctx_sets_the_transaction_local_org_id(admin) -> None:
+    from sqlalchemy import text
+    from starlette.requests import Request
+
+    from app.api.deps import SESSION_COOKIE, get_ctx
+
+    token = admin.client.cookies.get(SESSION_COOKIE)
+    request = Request(
+        {"type": "http", "headers": [(b"cookie", f"{SESSION_COOKIE}={token}".encode())]}
+    )
+    setting = text("SELECT current_setting('app.org_id', true)")
+    with session_scope() as s:
+        assert not s.scalar(setting)
+        ctx = get_ctx(request, s)
+        assert s.scalar(setting) == str(ctx.organisation_id) == admin.org_id
+        s.commit()
+        assert not s.scalar(setting)  # transaction-local: gone after the commit

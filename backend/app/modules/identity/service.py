@@ -83,6 +83,8 @@ def login(session: Session, email: str, password: str) -> tuple[str, OrgContext]
         # Commit the audit row even though the request fails.
         session.commit()
         raise Unauthorized(INVALID_LOGIN)
+    if passwords.needs_rehash(user.password_hash):
+        user.password_hash = passwords.hash_password(password)  # upgrade to current parameters
     ctx = OrgContext(user.id, membership.organisation_id, Role(membership.role), membership.id)
     audit.record(session, ctx, "session", None, "login")
     return _new_session(session, user.id, membership.organisation_id), ctx
