@@ -116,3 +116,19 @@ def test_factory_returns_fake_in_tests_and_honours_override() -> None:
         assert get_llm() is mine
     finally:
         set_llm_override(None)
+
+
+@pytest.mark.parametrize(
+    ("extra", "expected"),
+    [
+        ({"prompt_eval_count": None, "eval_count": None, "done_reason": None}, (None, 0, 0)),
+        ({"prompt_eval_count": "lots", "eval_count": [1], "done_reason": 7}, (None, 0, 0)),
+        ({"prompt_eval_count": "12", "eval_count": 3.0, "done_reason": "stop"}, ("stop", 12, 3)),
+        ({"prompt_eval_count": {"a": 1}, "eval_count": "1e999"}, (None, 0, 0)),
+    ],
+)
+def test_malformed_metadata_fields_are_coerced_not_fatal(server, extra, expected) -> None:
+    reply = {"message": {"content": '{"requirements": []}'}, **extra}
+    result = _ollama(server(lambda body: (200, reply))).generate_structured("s", "u", SCHEMA)
+    assert result.raw_json == '{"requirements": []}'
+    assert (result.done_reason, result.tokens_in, result.tokens_out) == expected

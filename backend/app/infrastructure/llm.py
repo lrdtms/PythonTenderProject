@@ -13,6 +13,16 @@ from app.config import get_settings
 from app.kernel import LLMPort, LLMTimeout, LLMUnavailable, StructuredResult
 
 
+def _count(value: object) -> int:
+    """A token count from the reply; anything missing or malformed counts as 0, never fatal."""
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return 0
+    try:
+        return max(0, int(value))
+    except (ValueError, OverflowError):
+        return 0
+
+
 class OllamaLLM:
     def __init__(
         self, base_url: str, model: str, timeout_s: float, num_ctx: int, num_predict: int
@@ -75,9 +85,9 @@ class OllamaLLM:
             raise LLMUnavailable from None
         return StructuredResult(
             raw_json=content,
-            done_reason=body.get("done_reason"),
-            tokens_in=int(body.get("prompt_eval_count", 0)),
-            tokens_out=int(body.get("eval_count", 0)),
+            done_reason=reason if isinstance(reason := body.get("done_reason"), str) else None,
+            tokens_in=_count(body.get("prompt_eval_count")),
+            tokens_out=_count(body.get("eval_count")),
             latency_ms=latency_ms,
             model=self.model,
         )
