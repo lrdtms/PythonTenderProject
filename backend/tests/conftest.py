@@ -218,8 +218,8 @@ def make_docx(paragraphs: list[str], table: list[list[str]] | None = None) -> by
     from docx import Document
 
     doc = Document()
-    for text in paragraphs:
-        doc.add_paragraph(text)
+    for paragraph in paragraphs:
+        doc.add_paragraph(paragraph)
     if table:
         grid = doc.add_table(rows=len(table), cols=len(table[0]))
         for r, row in enumerate(table):
