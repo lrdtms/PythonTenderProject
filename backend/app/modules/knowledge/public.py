@@ -1,7 +1,14 @@
 """Public surface of the knowledge module."""
 
 from .ocr import OcrFailed, OcrRunner, TesseractOcr
-from .schemas import IngestResult, PageDetailDTO, PageDTO, SearchHitDTO
+from .schemas import (
+    HIGHLIGHT_END,
+    HIGHLIGHT_START,
+    IngestResult,
+    PageDetailDTO,
+    PageDTO,
+    SearchHitDTO,
+)
 from .service import (
     get_page,
     ingest_version,
@@ -12,6 +19,8 @@ from .service import (
 )
 
 __all__ = [
+    "HIGHLIGHT_END",
+    "HIGHLIGHT_START",
     "IngestResult",
     "OcrFailed",
     "OcrRunner",

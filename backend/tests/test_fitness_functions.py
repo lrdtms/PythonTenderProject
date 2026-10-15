@@ -317,3 +317,16 @@ def test_every_compose_service_restarts_after_a_crash() -> None:
     compose = yaml.safe_load((APP_DIR.parents[1] / "docker-compose.yml").read_text("utf-8"))
     policies = {name: svc.get("restart") for name, svc in compose["services"].items()}
     assert policies and all(p == "unless-stopped" for p in policies.values()), policies
+
+
+def test_routers_never_use_the_unscoped_worker_job_lookup() -> None:
+    """jobs.get_for_worker is system level (no organisation filter): worker and tests only."""
+    offenders = [
+        str(path.relative_to(APP_DIR))
+        for path in (APP_DIR / "api").rglob("*.py")
+        if "get_for_worker" in path.read_text(encoding="utf-8")
+    ]
+    assert not offenders, offenders
+    from app.modules.jobs import public as jobs
+
+    assert "never call it from a router" in (jobs.get_for_worker.__doc__ or "")

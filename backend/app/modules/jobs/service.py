@@ -109,5 +109,7 @@ def fail_transiently(session: Session, job: ClaimedJob, error_code: str) -> str:
 
 
 def get_for_worker(session: Session, job_id: UUID) -> JobDTO | None:
+    """System-level, not organisation-scoped: never call it from a router. For the worker and
+    tests only; API code uses get_job, which is scoped to the caller's organisation."""
     job = QueueRepo(session).get(job_id)
     return _dto(job) if job else None

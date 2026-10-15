@@ -97,6 +97,8 @@ def download_file(version_id: UUID, ctx: Ctx, session: DbSession, storage: Stora
             "Content-Disposition": f'{disposition}; filename="{version.filename}"',
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-store",
+            # Shown inline from the app origin: no scripts, forms or same-origin access.
+            "Content-Security-Policy": "sandbox",
             "Content-Length": str(version.file_size),
         },
     )

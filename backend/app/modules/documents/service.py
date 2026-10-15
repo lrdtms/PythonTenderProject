@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from typing import BinaryIO
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -18,6 +20,8 @@ from .models import DOCUMENT_KINDS, Document, DocumentVersion
 from .repo import DocumentRepo, VersionRepo
 from .schemas import DocumentDTO, ProcessingInfo, UploadResultDTO, VersionDTO
 from .sniff import MIME, safe_filename, sniff
+
+log = logging.getLogger("documents")
 
 INGEST_JOB = "ingest_document"
 ALLOWED_EXTENSIONS = {"pdf", "xlsx", "csv", "docx"}
@@ -71,10 +75,13 @@ def _store_version(
     versions = VersionRepo(session, ctx)
     versions.clear_current(document.id)
     number = versions.next_number(document.id)
+    # ADR-0007: a server-generated name; the user's filename is metadata only (filename column).
     key = (
-        f"org/{ctx.organisation_id}/tenders/{document.tender_id}/{document.id}/v{number}/{filename}"
+        f"org/{ctx.organisation_id}/tenders/{document.tender_id}/{document.id}/v{number}/"
+        f"{uuid4().hex}.{file_format}"
     )
     storage.put(key, data)  # file first; the database row is committed with the request
+    _delete_on_rollback(session, storage, key)
     version = versions.add(
         DocumentVersion(
             document_id=document.id,
@@ -98,6 +105,32 @@ def _ensure_tender_open(session: Session, ctx: OrgContext, tender_id: UUID) -> N
     """An archived tender is read-only: no uploads, new versions or re-processing."""
     if tenders.get_tender(session, ctx, tender_id).status == "archived":
         raise Conflict("This tender is archived. Re-open it before uploading documents.")
+
+
+_STORED_FILES = "documents.stored_files"
+
+
+def _delete_on_rollback(session: Session, storage: StoragePort, key: str) -> None:
+    """ADR-0007: the file is written before its row is committed. If the surrounding transaction
+    rolls back (a failed flush, enqueue or commit), delete the file so it is not orphaned.
+    Best effort: a crash between the two still leaves a file for a sweep to find."""
+    if _STORED_FILES not in session.info:
+        session.info[_STORED_FILES] = []
+
+        @event.listens_for(session, "after_commit")
+        def _committed(sess: Session) -> None:
+            sess.info[_STORED_FILES].clear()
+
+        @event.listens_for(session, "after_rollback")
+        def _rolled_back(sess: Session) -> None:
+            keys, sess.info[_STORED_FILES] = sess.info[_STORED_FILES], []
+            for stored in keys:
+                try:
+                    storage.delete(stored)
+                except Exception as exc:  # noqa: BLE001 - cleanup must not mask the real error
+                    log.warning("orphan file not deleted error_type=%s", type(exc).__name__)
+
+    session.info[_STORED_FILES].append(key)
 
 
 def upload_document(

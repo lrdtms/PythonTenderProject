@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import select
 
 from app.config import get_settings
@@ -29,9 +31,12 @@ def test_original_file_is_downloadable_unchanged_and_not_sniffable(admin) -> Non
     assert r.headers["content-type"] == "application/pdf"
     assert r.headers["x-content-type-options"] == "nosniff"
     assert r.headers["content-disposition"].startswith("inline")
+    assert r.headers["content-security-policy"] == "sandbox"  # an inline PDF runs no script
+    assert r.headers["cache-control"] == "private, no-store"
     xlsx = upload(admin, tid, make_xlsx([["a", "b"]]), "boq.xlsx", "boq").json()["version"]
     disposition = admin.client.get(f"/api/v1/document-versions/{xlsx['id']}/file").headers
     assert disposition["content-disposition"].startswith("attachment")
+    assert disposition["content-security-policy"] == "sandbox"
 
 
 def test_content_must_match_the_extension(admin) -> None:
@@ -70,7 +75,12 @@ def test_filenames_are_sanitised_and_cannot_escape_storage(admin) -> None:
     with session_scope() as s:
         v = s.scalar(select(DocumentVersion).where(DocumentVersion.id == vid))
     assert ".." not in v.storage_key and v.filename == "passwd.pdf"
-    assert v.storage_key.startswith(f"org/{admin.org_id}/")
+    # ADR-0007: the key is server-generated; the user's filename is metadata only.
+    doc_id = r.json()["document"]["id"]
+    assert re.fullmatch(
+        rf"org/{admin.org_id}/tenders/{tid}/{doc_id}/v1/[0-9a-f]{{32}}\.pdf", v.storage_key
+    ), v.storage_key
+    assert "passwd" not in v.storage_key
     assert safe_filename('a<b>"c|d.pdf') == "a_b__c_d.pdf"
     assert safe_filename("C:\\temp\\x.pdf") == "x.pdf" and safe_filename("") == "document"
 
@@ -157,3 +167,40 @@ def test_sniffing_does_not_trust_names_or_partial_signatures() -> None:
     assert sniff(b"\x00\x01\x02binary") is None and sniff(b"") is None
     assert sniff(b"PK\x03\x04 not really a zip") is None
     assert sniff(b"just some prose without delimiters") is None
+
+
+def test_stored_file_is_removed_when_the_upload_transaction_fails(admin, monkeypatch) -> None:
+    """ADR-0007: the file is written first; if the request transaction then fails, delete it."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import Session
+
+    from app.api.main import app
+    from app.infrastructure.storage import get_storage
+    from tests.conftest import CSRF, Actor
+
+    tid = make_tender(admin)
+    doc_id = upload(admin, tid, SAMPLE_PDF).json()["document"]["id"]
+    stored: list[str] = []
+    real_put = type(get_storage()).put
+
+    def recording_put(self, key: str, data: bytes) -> None:
+        stored.append(key)
+        real_put(self, key, data)
+
+    def broken_commit(self: Session) -> None:
+        raise RuntimeError("commit failed")
+
+    client = TestClient(app, headers=CSRF, raise_server_exceptions=False)
+    client.cookies.update(admin.client.cookies)
+    monkeypatch.setattr(type(get_storage()), "put", recording_put)
+    monkeypatch.setattr(Session, "commit", broken_commit)
+    first = upload(Actor(client, admin.me), tid, SAMPLE_PDF)
+    second = client.post(
+        f"/api/v1/documents/{doc_id}/versions",
+        files={"file": ("v2.pdf", SAMPLE_PDF, "application/pdf")},
+    )
+    monkeypatch.undo()
+
+    assert first.status_code == 500 and second.status_code == 500
+    assert len(stored) == 2
+    assert not any(get_storage().exists(key) for key in stored)

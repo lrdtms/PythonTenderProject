@@ -99,6 +99,7 @@ def test_happy_path_pages_and_search(admin) -> None:
     assert hit["document_title"] == body["document"]["title"]
     assert hit["version_number"] == 1 and hit["version_id"] == vid
     assert hit["snippet"].strip()
+    assert "⟦earthing⟧" in hit["snippet"] and "<b>" not in hit["snippet"]
 
 
 def test_progress_reaches_page_count(admin) -> None:
@@ -516,3 +517,16 @@ def test_completion_that_keeps_failing_is_left_to_the_lease(admin, monkeypatch) 
     assert get_job(admin, str(body["job_id"]))["error_code"] == "LEASE_EXPIRED"
     v = get_version(admin, body["document"]["id"], body["version"]["id"])
     assert v["processing_status"] == "ready"
+
+
+def test_search_snippets_are_plain_text_with_markers(admin) -> None:
+    """Snippets are raw document text: highlight markers, never HTML the client could render."""
+    tid = make_tender(admin)
+    upload_and_ingest(
+        admin, tid, make_pdf(["Cable <script>alert(1)</script> tray <b>bold</b> install."])
+    )
+    r = admin.client.get(f"{API}/tenders/{tid}/search", params={"q": "cable"})
+    assert r.headers["content-type"].startswith("application/json")
+    (hit,) = r.json()
+    assert "⟦Cable⟧" in hit["snippet"]
+    assert "<b>" not in hit["snippet"] and "<script" not in hit["snippet"]

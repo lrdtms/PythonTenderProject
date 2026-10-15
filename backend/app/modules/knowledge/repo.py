@@ -11,6 +11,7 @@ from sqlalchemy import insert, text
 from app.db.scoped import ScopedRepository
 
 from .models import DocumentChunk, DocumentPage
+from .schemas import HIGHLIGHT_END, HIGHLIGHT_START
 
 
 class PageRepo(ScopedRepository[DocumentPage]):
@@ -60,8 +61,7 @@ class ChunkRepo(ScopedRepository[DocumentChunk]):
                 """
                 SELECT c.id AS chunk_id, d.id AS document_id, d.title AS document_title,
                        v.id AS version_id, v.version_number, c.page_number, c.section,
-                       ts_headline('simple', c.text, q,
-                                   'MaxWords=40, MinWords=15, MaxFragments=1') AS snippet,
+                       ts_headline('simple', c.text, q, :headline) AS snippet,
                        ts_rank_cd(c.tsv, q) AS rank
                 FROM document_chunks c
                 JOIN document_versions v
@@ -82,6 +82,10 @@ class ChunkRepo(ScopedRepository[DocumentChunk]):
                 "tender": tender_id,
                 "query": query,
                 "limit": limit,
+                # Plain-text markers instead of the default <b> tags: snippets are document text,
+                # and nothing about them should suggest they are safe to render as HTML.
+                "headline": f"StartSel={HIGHLIGHT_START}, StopSel={HIGHLIGHT_END}, "
+                "MaxWords=40, MinWords=15, MaxFragments=1",
             },
         ).mappings()
         return [dict(r) for r in rows]
