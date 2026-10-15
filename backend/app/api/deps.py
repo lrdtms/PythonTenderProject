@@ -29,7 +29,9 @@ def get_session() -> Iterator[Session]:
         session.close()
 
 
-DbSession = Annotated[Session, Depends(get_session)]
+# scope="function": the commit runs when the handler returns, before the response is sent, so a
+# failing commit becomes a 500 instead of a 2xx for work that was never saved.
+DbSession = Annotated[Session, Depends(get_session, scope="function")]
 
 
 def get_ctx(request: Request, session: DbSession) -> OrgContext:
