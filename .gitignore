@@ -25,3 +25,7 @@ local-documents/
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated synthetic evaluation data (reproducible from the seed)
+eval/generated/
+eval/.venv/

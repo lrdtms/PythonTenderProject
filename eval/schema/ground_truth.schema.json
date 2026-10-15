@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IntelTPS synthetic tender pack ground truth",
+  "type": "object",
+  "required": ["schema_version", "synthetic", "pack_id", "title", "reference", "client", "closing_at",
+               "tags", "documents", "requirements", "boq_items", "quotations", "non_requirements"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "synthetic": {"const": true},
+    "pack_id": {"type": "string"},
+    "title": {"type": "string"},
+    "reference": {"type": "string"},
+    "client": {"type": "string"},
+    "location": {"type": "string"},
+    "closing_at": {"type": "string", "format": "date-time"},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "documents": {"type": "array", "items": {"$ref": "#/$defs/document"}},
+    "requirements": {"type": "array", "items": {"$ref": "#/$defs/requirement"}},
+    "boq_items": {"type": "array", "items": {"$ref": "#/$defs/boq_item"}},
+    "quotations": {"type": "array", "items": {"$ref": "#/$defs/quotation"}},
+    "non_requirements": {"type": "array", "items": {"$ref": "#/$defs/non_requirement"}}
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["document"],
+      "properties": {
+        "document": {"type": "string"},
+        "page": {"type": ["integer", "null"], "minimum": 1, "description": "physical 1-based page index"},
+        "printed_page": {"type": ["string", "null"]},
+        "sheet": {"type": ["string", "null"]},
+        "cell_range": {"type": ["string", "null"]}
+      }
+    },
+    "document": {
+      "type": "object",
+      "required": ["filename", "kind", "format", "scanned"],
+      "properties": {
+        "filename": {"type": "string"},
+        "kind": {"enum": ["tender_document", "boq", "quotation"]},
+        "format": {"enum": ["pdf", "xlsx"]},
+        "scanned": {"type": "boolean"},
+        "pages": {"type": ["integer", "null"]}
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "required": ["id", "description", "requirement_type", "mandatory_status", "evidence_quote", "keyword", "source"],
+      "properties": {
+        "id": {"type": "string"},
+        "description": {"type": "string"},
+        "requirement_type": {"enum": ["deadline", "meeting", "eligibility", "document", "pricing", "technical", "evaluation", "other"]},
+        "mandatory_status": {"enum": ["mandatory", "conditional", "informational"]},
+        "evidence_quote": {"type": "string"},
+        "keyword": {"type": "string"},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    },
+    "boq_item": {
+      "type": "object",
+      "required": ["item_number", "section", "description", "unit", "quantity", "flags", "source"],
+      "properties": {
+        "item_number": {"type": "string"},
+        "section": {"type": "string"},
+        "description": {"type": "string"},
+        "unit": {"type": ["string", "null"]},
+        "quantity": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]+)?$"},
+        "unit_price": {"type": ["string", "null"]},
+        "raw_unit": {"type": ["string", "null"]},
+        "raw_quantity": {"type": ["string", "null"]},
+        "flags": {"type": "array", "items": {"type": "string"}},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    },
+    "quotation": {
+      "type": "object",
+      "required": ["supplier", "reference", "date", "valid_until", "currency", "document", "items"],
+      "properties": {
+        "supplier": {"type": "string"},
+        "reference": {"type": "string"},
+        "date": {"type": "string"},
+        "valid_until": {"type": "string"},
+        "currency": {"const": "ZAR"},
+        "document": {"type": "string"},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/quotation_item"}}
+      }
+    },
+    "quotation_item": {
+      "type": "object",
+      "required": ["description", "unit", "quantity", "unit_price", "expected_match", "confusable_with",
+                   "unit_mismatch", "ambiguous", "source"],
+      "properties": {
+        "description": {"type": "string"},
+        "unit": {"type": ["string", "null"]},
+        "quantity": {"type": ["string", "null"]},
+        "unit_price": {"type": ["string", "null"]},
+        "expected_match": {"type": ["string", "null"]},
+        "confusable_with": {"type": ["string", "null"]},
+        "unit_mismatch": {"type": "boolean"},
+        "ambiguous": {"type": "boolean"},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    },
+    "non_requirement": {
+      "type": "object",
+      "required": ["kind", "text", "source"],
+      "properties": {
+        "kind": {"enum": ["prompt_injection", "boilerplate"]},
+        "text": {"type": "string"},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    }
+  }
+}
