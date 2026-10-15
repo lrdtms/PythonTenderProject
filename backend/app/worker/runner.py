@@ -8,11 +8,13 @@ never document text.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -23,6 +25,7 @@ from app.modules.jobs import public as jobs
 log = logging.getLogger("worker")
 
 ProgressFn = Callable[[int, int], None]
+COMPLETE_RETRY_DELAYS = (1.0, 3.0)  # seconds between attempts to record a committed success
 
 
 @dataclass(frozen=True)
@@ -71,17 +74,47 @@ def process_one(handlers: dict[str, JobHandler]) -> bool:
         with session_scope() as session:
             set_org(session, ctx.organisation_id)
             warnings = handler.run(session, ctx, job, progress)
-        with session_scope() as session:
-            jobs.complete(session, job.id, warnings)
-        log.info("job %s finished warnings=%d", job.id, len(warnings))
     except ProcessingFailed as exc:
         _record_failure(handler, ctx, job, exc.error_code, exc.transient)
+        return True
     except Exception as exc:  # noqa: BLE001 - an unexpected bug must not kill the worker loop
+        transient = _is_transient(exc)
+        code = "INFRASTRUCTURE" if transient else "UNEXPECTED"
         # No traceback and no exception message: either can carry document text (cell values in
         # a failed statement, parser messages). The type name and job id are enough to triage.
-        log.error("job %s crashed error_type=%s code=UNEXPECTED", job.id, type(exc).__name__)
-        _record_failure(handler, ctx, job, "UNEXPECTED", transient=False)
+        log.error("job %s crashed error_type=%s code=%s", job.id, type(exc).__name__, code)
+        _record_failure(handler, ctx, job, code, transient)
+        return True
+    _complete(job, warnings)
     return True
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Infrastructure trouble (database connection, storage I/O) is retried with backoff
+    (FR-65, ADR-0006); anything else is a bug or a bad file and fails permanently."""
+    if isinstance(exc, OperationalError | InterfaceError):
+        return True
+    if isinstance(exc, DBAPIError) and exc.connection_invalidated:
+        return True
+    return isinstance(exc, OSError)
+
+
+def _complete(job: jobs.ClaimedJob, warnings: list[dict[str, Any]]) -> None:
+    """Record success. The handler's work is already committed, so a failure here must never
+    fail the job's subject: retry a few times, then leave the job running for the lease to
+    reclaim (re-running a handler is idempotent)."""
+    for delay in (0, *COMPLETE_RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        try:
+            with session_scope() as session:
+                jobs.complete(session, job.id, warnings)
+        except Exception as exc:  # noqa: BLE001 - retried below; never fails the subject
+            log.error("job %s completion failed error_type=%s", job.id, type(exc).__name__)
+            continue
+        log.info("job %s finished warnings=%d", job.id, len(warnings))
+        return
+    log.error("job %s left running: its lease will expire and it will be reclaimed", job.id)
 
 
 def _record_failure(

@@ -22,6 +22,7 @@ PAGE_WARNINGS = {
     "ocr_unavailable": "OCR_UNAVAILABLE",
 }
 MAX_QUERY_CHARS = 200
+READY_STATUSES = ("ready", "ready_with_warnings")
 
 
 def ingest_version(
@@ -78,6 +79,10 @@ def mark_processing(session: Session, ctx: OrgContext, version_id: UUID) -> None
 
 
 def mark_failed(session: Session, ctx: OrgContext, version_id: UUID) -> None:
+    """A ready version was ingested and committed (its job's completion record failed): keep it.
+    Every attempt starts by setting `processing`, so a real failure never finds it ready."""
+    if documents.get_version(session, ctx, version_id).processing_status in READY_STATUSES:
+        return
     documents.set_processing_status(session, ctx, version_id, "failed")
 
 

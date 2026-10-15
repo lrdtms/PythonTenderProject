@@ -295,6 +295,8 @@ def test_transient_failure_requeues_with_backoff(admin, monkeypatch) -> None:
         run_after = s.get(Job, UUID(body["job_id"])).run_after
     assert run_after > datetime.now(UTC)
     assert run_worker() is False  # backoff: not runnable yet
+    v = get_version(admin, body["document"]["id"], body["version"]["id"])
+    assert v["processing_status"] != "failed"  # it will be retried
 
 
 def test_audit_events_never_hold_document_text(admin) -> None:
@@ -415,3 +417,102 @@ def test_processing_status_is_visible_while_ingest_runs(admin, monkeypatch) -> N
         worker.join(10)
     assert seen == "processing"
     assert get_version(admin, did, vid)["processing_status"] == "ready"
+
+
+def _transient_errors() -> list[Exception]:
+    from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
+
+    lost = Exception("server closed the connection unexpectedly")
+    return [
+        OperationalError("SELECT 1", {}, lost),
+        InterfaceError("SELECT 1", {}, lost),
+        DBAPIError("SELECT 1", {}, lost, connection_invalidated=True),
+        OSError("storage volume unavailable"),
+    ]
+
+
+def test_infrastructure_errors_are_retried_with_backoff(admin, monkeypatch) -> None:
+    tid = make_tender(admin)
+    for exc in _transient_errors():
+        body = upload(admin, tid, make_pdf(["text"])).json()
+        patch_ingest(monkeypatch, exc)
+        assert run_worker() is True
+        job = get_job(admin, str(body["job_id"]))
+        assert (job["status"], job["attempt_count"]) == ("queued", 1), type(exc).__name__
+        assert job["error_code"] == "INFRASTRUCTURE"
+        with session_scope() as s:
+            run_after = s.get(Job, UUID(body["job_id"])).run_after
+        assert run_after > datetime.now(UTC)
+        v = get_version(admin, body["document"]["id"], body["version"]["id"])
+        assert v["processing_status"] != "failed"
+
+
+def test_other_errors_stay_permanent(admin, monkeypatch) -> None:
+    from sqlalchemy.exc import DBAPIError
+
+    tid = make_tender(admin)
+    for exc in (RuntimeError("bug"), DBAPIError("SELECT 1", {}, Exception("constraint"))):
+        body = upload(admin, tid, make_pdf(["text"])).json()
+        patch_ingest(monkeypatch, exc)
+        assert run_worker() is True
+        job = get_job(admin, str(body["job_id"]))
+        assert (job["status"], job["error_code"]) == ("failed", "UNEXPECTED")
+
+
+def test_failed_completion_after_commit_does_not_fail_the_version(admin, monkeypatch) -> None:
+    from sqlalchemy.exc import OperationalError
+
+    from app.modules.jobs import public as jobs
+    from app.worker import runner
+
+    real_complete = jobs.complete
+    calls = {"n": 0}
+
+    def flaky_complete(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OperationalError("UPDATE jobs", {}, Exception("connection lost"))
+        return real_complete(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, "complete", flaky_complete)
+    monkeypatch.setattr(runner, "COMPLETE_RETRY_DELAYS", (0, 0))
+    tid = make_tender(admin)
+    body = upload_and_ingest(admin, tid, make_pdf(["Pages and chunks are committed."]))
+    v = get_version(admin, body["document"]["id"], body["version"]["id"])
+    assert v["processing_status"] == "ready"
+    assert get_job(admin, str(body["job_id"]))["status"] == "succeeded"
+    assert calls["n"] == 2
+
+
+def test_completion_that_keeps_failing_is_left_to_the_lease(admin, monkeypatch) -> None:
+    from sqlalchemy.exc import OperationalError
+
+    from app.modules.jobs import public as jobs
+    from app.worker import runner
+
+    def broken_complete(*args, **kwargs):
+        raise OperationalError("UPDATE jobs", {}, Exception("connection lost"))
+
+    monkeypatch.setattr(jobs, "complete", broken_complete)
+    monkeypatch.setattr(runner, "COMPLETE_RETRY_DELAYS", (0, 0))
+    tid = make_tender(admin)
+    body = upload_and_ingest(admin, tid, make_pdf(["Pages and chunks are committed."]))
+    v = get_version(admin, body["document"]["id"], body["version"]["id"])
+    assert v["processing_status"] == "ready"
+    assert get_job(admin, str(body["job_id"]))["status"] == "running"  # the lease reclaims it
+
+    # Even if the reaper then fails the job (attempts used up), the committed version stays ready.
+    from datetime import timedelta
+
+    from sqlalchemy import update
+
+    with session_scope() as s:
+        s.execute(
+            update(Job)
+            .where(Job.id == UUID(body["job_id"]))
+            .values(leased_until=datetime.now(UTC) - timedelta(seconds=1), attempt_count=3)
+        )
+    assert run_worker() is False
+    assert get_job(admin, str(body["job_id"]))["error_code"] == "LEASE_EXPIRED"
+    v = get_version(admin, body["document"]["id"], body["version"]["id"])
+    assert v["processing_status"] == "ready"
