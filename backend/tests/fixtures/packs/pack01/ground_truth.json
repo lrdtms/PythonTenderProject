@@ -1,0 +1,762 @@
+{
+  "pack_id": "pack01",
+  "title": "Electrical works at Greenvale Community Hall",
+  "reference": "GRE/ELEC/2026/040",
+  "client": "Greenvale Municipality",
+  "location": "Greenvale",
+  "closing_at": "2026-11-26T11:00:00+02:00",
+  "tags": [
+    "clean",
+    "boq-pdf",
+    "clean"
+  ],
+  "documents": [
+    {
+      "filename": "tender.pdf",
+      "kind": "tender_document",
+      "format": "pdf",
+      "scanned": false,
+      "pages": 8
+    },
+    {
+      "filename": "quotation_1_voltline_electrical_wholesalers.pdf",
+      "kind": "quotation",
+      "format": "pdf",
+      "scanned": false,
+      "pages": null
+    }
+  ],
+  "requirements": [
+    {
+      "id": "pack01-R01",
+      "description": "Submit sealed tender by 11:00 on Friday 26 November 2026",
+      "requirement_type": "deadline",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Sealed tenders must be deposited in the tender box at Greenvale Civic Centre, 12 Example Street no later than 11:00 on Friday 26 November 2026.",
+      "keyword": "friday 26 november 2026",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R02",
+      "description": "CIDB grading of 4EP or higher (electrical)",
+      "requirement_type": "eligibility",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Only tenderers registered with the Construction Industry Development Board with a contractor grading of 4EP or higher in the electrical engineering works category may submit tenders.",
+      "keyword": "4ep",
+      "source": {
+        "document": "tender.pdf",
+        "page": 2,
+        "printed_page": "1",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R03",
+      "description": "Valid tax compliance status pin",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must submit a valid tax compliance status pin issued by the South African Revenue Service.",
+      "keyword": "tax compliance",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R04",
+      "description": "Complete declaration of interest and past SCM practices",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must complete the declaration of interest and the declaration of past supply chain management practices.",
+      "keyword": "declaration of interest",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R05",
+      "description": "Valid letter of good standing (Compensation Fund)",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must provide a valid letter of good standing issued by the Compensation Fund.",
+      "keyword": "good standing",
+      "source": {
+        "document": "tender.pdf",
+        "page": 7,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R06",
+      "description": "Certified copy of company registration certificate",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "A certified copy of the company registration certificate must be included in the tender submission.",
+      "keyword": "registration certificate",
+      "source": {
+        "document": "tender.pdf",
+        "page": 3,
+        "printed_page": "2",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R07",
+      "description": "Programme showing completion within 10 weeks",
+      "requirement_type": "technical",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must submit a programme showing completion within 10 weeks of the commencement date.",
+      "keyword": "10 weeks",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": "5",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R08",
+      "description": "B-BBEE certificate or affidavit if claiming preference points",
+      "requirement_type": "document",
+      "mandatory_status": "conditional",
+      "evidence_quote": "If preference points are claimed, a certified copy of a valid B-BBEE certificate or sworn affidavit must be submitted.",
+      "keyword": "b-bbee",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack01-R09",
+      "description": "Defects liability period of 12 months",
+      "requirement_type": "technical",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "The contractor shall provide a defects liability period of 12 months from the date of practical completion.",
+      "keyword": "12 months",
+      "source": {
+        "document": "tender.pdf",
+        "page": 3,
+        "printed_page": "2",
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "boq_items": [
+    {
+      "item_number": "A1",
+      "section": "Distribution Boards",
+      "description": "Main distribution board, 400 A, 3-phase, wall mounted, with busbars",
+      "unit": "no",
+      "quantity": "2",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "2",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "A2",
+      "section": "Distribution Boards",
+      "description": "Sub distribution board, 63 A, 12-way, surface mounted",
+      "unit": "no",
+      "quantity": "2",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "2",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "A3",
+      "section": "Distribution Boards",
+      "description": "Miniature circuit breaker, 3-pole, 63 A, 10 kA",
+      "unit": "no",
+      "quantity": "4",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "4",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "A4",
+      "section": "Distribution Boards",
+      "description": "Surge protection device, type 2, 3-phase",
+      "unit": "no",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "B1",
+      "section": "Containment",
+      "description": "Galvanised cable tray, 100 mm wide, including supports",
+      "unit": "m",
+      "quantity": "125",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "125",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "B2",
+      "section": "Containment",
+      "description": "Steel conduit, 25 mm, surface mounted",
+      "unit": "m",
+      "quantity": "426",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "426",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C1",
+      "section": "Cables",
+      "description": "2-core 1.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "772",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "772",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C2",
+      "section": "Cables",
+      "description": "2-core 2.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "340",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "340",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C3",
+      "section": "Cables",
+      "description": "2-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "244",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "244",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C4",
+      "section": "Cables",
+      "description": "2-core 6 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "298",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "298",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C5",
+      "section": "Cables",
+      "description": "2-core 16 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "1080",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "1080",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C6",
+      "section": "Cables",
+      "description": "3-core 6 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "1026",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "1026",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C7",
+      "section": "Cables",
+      "description": "4-core 1.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "408",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "408",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C8",
+      "section": "Cables",
+      "description": "4-core 2.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "779",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "779",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C9",
+      "section": "Cables",
+      "description": "4-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "194",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "194",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D1",
+      "section": "Lighting",
+      "description": "Light switch, 1-lever, 1-way",
+      "unit": "no",
+      "quantity": "93",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "93",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "E1",
+      "section": "Small Power",
+      "description": "Double switched socket outlet, 16 A",
+      "unit": "no",
+      "quantity": "126",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "126",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "E2",
+      "section": "Small Power",
+      "description": "Single switched socket outlet, 16 A",
+      "unit": "no",
+      "quantity": "26",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "26",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "quotations": [
+    {
+      "supplier": "Voltline Electrical Wholesalers",
+      "reference": "Q80797",
+      "date": "2026-10-17",
+      "valid_until": "2026-11-21",
+      "currency": "ZAR",
+      "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+      "items": [
+        {
+          "description": "Health and safety plan and file [SKU-1522]",
+          "unit": "sum",
+          "quantity": "1",
+          "unit_price": "8135.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-9748]",
+          "unit": "m",
+          "quantity": "772",
+          "unit_price": "38.00",
+          "expected_match": null,
+          "confusable_with": "C1",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 4 mm2 PVC/PVC copper cable, for conduit installation [SKU-1871]",
+          "unit": "m",
+          "quantity": "244",
+          "unit_price": "31.00",
+          "expected_match": "C3",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 6 mm2 PVC/PVC copper cable, for conduit installation [SKU-3959]",
+          "unit": "m",
+          "quantity": "298",
+          "unit_price": "46.00",
+          "expected_match": "C4",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Sub distribution board, 100 A, 12-way, surface mounted [SKU-2150]",
+          "unit": "no",
+          "quantity": "2",
+          "unit_price": "5018.00",
+          "expected_match": null,
+          "confusable_with": "A2",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Surge protection device, type 2, 3-phase [SKU-7563]",
+          "unit": "no",
+          "quantity": "1",
+          "unit_price": "1986.00",
+          "expected_match": "A4",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-9644]",
+          "unit": "m",
+          "quantity": "340",
+          "unit_price": "29.00",
+          "expected_match": "C2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "MCB, 3-pole, 63 A, 10 kA [SKU-1432]",
+          "unit": "no",
+          "quantity": "4",
+          "unit_price": "712.00",
+          "expected_match": "A3",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Steel conduit, 25 mm, surface mounted [SKU-3360]",
+          "unit": "roll",
+          "quantity": "5",
+          "unit_price": "91.00",
+          "expected_match": "B2",
+          "confusable_with": null,
+          "unit_mismatch": true,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 1.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-1362]",
+          "unit": "m",
+          "quantity": "772",
+          "unit_price": "37.00",
+          "expected_match": "C1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "4C+E 16 mm2 PVC/PVC copper cable, for conduit installation [SKU-9758]",
+          "unit": "m",
+          "quantity": "798",
+          "unit_price": "106.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "4C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-3961]",
+          "unit": "m",
+          "quantity": "779",
+          "unit_price": "30.00",
+          "expected_match": "C8",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "4C+E 1.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-1116]",
+          "unit": "m",
+          "quantity": "408",
+          "unit_price": "34.00",
+          "expected_match": "C7",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        }
+      ]
+    }
+  ],
+  "non_requirements": [
+    {
+      "kind": "boilerplate",
+      "text": "The facility is required to keep a register of all electrical faults reported by the caretaker.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The employer must give the contractor access to the site within seven days of the commencement date.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 3,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The employer shall appoint a project manager who will act as the employer's representative during the contract.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 3,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "schema_version": "1.0",
+  "synthetic": true
+}

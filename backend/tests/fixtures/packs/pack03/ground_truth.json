@@ -1,0 +1,980 @@
+{
+  "pack_id": "pack03",
+  "title": "Electrical works at Stonebridge Clinic",
+  "reference": "STO/ELEC/2026/071",
+  "client": "Stonebridge District Council",
+  "location": "Stonebridge",
+  "closing_at": "2026-11-20T11:00:00+02:00",
+  "tags": [
+    "dense",
+    "boq-pdf",
+    "messy"
+  ],
+  "documents": [
+    {
+      "filename": "tender.pdf",
+      "kind": "tender_document",
+      "format": "pdf",
+      "scanned": false,
+      "pages": 13
+    },
+    {
+      "filename": "quotation_1_greenvale_cable_and_conduit.pdf",
+      "kind": "quotation",
+      "format": "pdf",
+      "scanned": false,
+      "pages": null
+    }
+  ],
+  "requirements": [
+    {
+      "id": "pack03-R01",
+      "description": "Submit sealed tender by 11:00 on Friday 20 November 2026",
+      "requirement_type": "deadline",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Sealed tenders must be deposited in the tender box at Stonebridge Municipal Offices, 9 Demo Avenue no later than 11:00 on Friday 20 November 2026.",
+      "keyword": "friday 20 november 2026",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R02",
+      "description": "CIDB grading of 6EP or higher (electrical)",
+      "requirement_type": "eligibility",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Only tenderers registered with the Construction Industry Development Board with a contractor grading of 6EP or higher in the electrical engineering works category may submit tenders.",
+      "keyword": "6ep",
+      "source": {
+        "document": "tender.pdf",
+        "page": 10,
+        "printed_page": "9",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R03",
+      "description": "Valid tax compliance status pin",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must submit a valid tax compliance status pin issued by the South African Revenue Service.",
+      "keyword": "tax compliance",
+      "source": {
+        "document": "tender.pdf",
+        "page": 10,
+        "printed_page": "9",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R04",
+      "description": "Defects liability period of 12 months",
+      "requirement_type": "technical",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "The contractor shall provide a defects liability period of 12 months from the date of practical completion.",
+      "keyword": "12 months",
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R05",
+      "description": "Attend compulsory site meeting on Monday 9 November 2026",
+      "requirement_type": "meeting",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "A compulsory site inspection and clarification meeting will be held at Stonebridge Clinic on Monday 9 November 2026 at 10:30, and tenderers who do not attend will be disqualified.",
+      "keyword": "monday 9 november 2026",
+      "source": {
+        "document": "tender.pdf",
+        "page": 3,
+        "printed_page": "2",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R06",
+      "description": "Rates valid for 120 days",
+      "requirement_type": "pricing",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tender rates must remain valid for 120 days after the closing date.",
+      "keyword": "120 days",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": "5",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R07",
+      "description": "Programme showing completion within 10 weeks",
+      "requirement_type": "technical",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must submit a programme showing completion within 10 weeks of the commencement date.",
+      "keyword": "10 weeks",
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "7",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R08",
+      "description": "Valid letter of good standing (Compensation Fund)",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must provide a valid letter of good standing issued by the Compensation Fund.",
+      "keyword": "good standing",
+      "source": {
+        "document": "tender.pdf",
+        "page": 9,
+        "printed_page": "8",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack03-R09",
+      "description": "B-BBEE certificate or affidavit if claiming preference points",
+      "requirement_type": "document",
+      "mandatory_status": "conditional",
+      "evidence_quote": "If preference points are claimed, a certified copy of a valid B-BBEE certificate or sworn affidavit must be submitted.",
+      "keyword": "b-bbee",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": "5",
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "boq_items": [
+    {
+      "item_number": "1.1",
+      "section": "Preliminaries and General",
+      "description": "Health and safety plan and file",
+      "unit": "sum",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "Sum",
+      "raw_quantity": "1",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "1.2",
+      "section": "Preliminaries and General",
+      "description": "Insurance and guarantees",
+      "unit": "sum",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "LS",
+      "raw_quantity": "1",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "2.1",
+      "section": "Distribution Boards",
+      "description": "Main distribution board, 400 A, 3-phase, wall mounted, with busbars",
+      "unit": "no",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "2.2",
+      "section": "Distribution Boards",
+      "description": "Sub distribution board, 63 A, 12-way, surface mounted",
+      "unit": "no",
+      "quantity": "8",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "8",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "2.3",
+      "section": "Distribution Boards",
+      "description": "Miniature circuit breaker, 1-pole, 32 A, 6 kA",
+      "unit": "no",
+      "quantity": "38",
+      "unit_price": null,
+      "raw_unit": "No.",
+      "raw_quantity": "38",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "3.1",
+      "section": "Containment",
+      "description": "Galvanised cable tray, 100 mm wide, including supports",
+      "unit": "m",
+      "quantity": "272",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "272.00",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "3.2",
+      "section": "Containment",
+      "description": "PVC trunking, 100 x 50 mm (rate only)",
+      "unit": "m",
+      "quantity": null,
+      "unit_price": null,
+      "raw_unit": "Metre",
+      "raw_quantity": null,
+      "flags": [
+        "rate_only",
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.1",
+      "section": "Cables",
+      "description": "2-core 1.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "121",
+      "unit_price": null,
+      "raw_unit": "Metre",
+      "raw_quantity": "121",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.2",
+      "section": "Cables",
+      "description": "3-core 1.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "1145",
+      "unit_price": null,
+      "raw_unit": "Metre",
+      "raw_quantity": "1145",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.3",
+      "section": "Cables",
+      "description": "3-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "913",
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": "913.00",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.4",
+      "section": "Cables",
+      "description": "3-core 6 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "324",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "324.00",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.5",
+      "section": "Cables",
+      "description": "3-core 10 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "116",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "116.00",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.6",
+      "section": "Cables",
+      "description": "3-core 16 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "531",
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": "531.00",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.7",
+      "section": "Cables",
+      "description": "4-core 1.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "790",
+      "unit_price": null,
+      "raw_unit": "Metre",
+      "raw_quantity": "790",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.8",
+      "section": "Cables",
+      "description": "4-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "430",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "430.00",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.9",
+      "section": "Cables",
+      "description": "4-core 6 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "154",
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": "154.00",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "4.10",
+      "section": "Cables",
+      "description": "4-core 16 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "191",
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": "191",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "5.1",
+      "section": "Lighting",
+      "description": "LED panel luminaire, 600 x 600 mm, 36 W, recessed",
+      "unit": "no",
+      "quantity": "57",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "57",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "5.2",
+      "section": "Lighting",
+      "description": "LED batten luminaire, 1200 mm, 36 W",
+      "unit": "no",
+      "quantity": "72",
+      "unit_price": null,
+      "raw_unit": "No.",
+      "raw_quantity": "72",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "6.1",
+      "section": "Small Power",
+      "description": "Single switched socket outlet, 16 A",
+      "unit": "no",
+      "quantity": "52",
+      "unit_price": null,
+      "raw_unit": "No.",
+      "raw_quantity": "52",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "6.2",
+      "section": "Small Power",
+      "description": "Data outlet, Cat 6, double",
+      "unit": "no",
+      "quantity": "41",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "41",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 12,
+        "printed_page": "11",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "7.1",
+      "section": "Earthing and Testing",
+      "description": "Earth rod, copper clad, 1.5 m",
+      "unit": "no",
+      "quantity": "7",
+      "unit_price": null,
+      "raw_unit": "No.",
+      "raw_quantity": "7",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 13,
+        "printed_page": "12",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "7.2",
+      "section": "Earthing and Testing",
+      "description": "Bare copper earth conductor, 16 mm2",
+      "unit": "m",
+      "quantity": "77",
+      "unit_price": null,
+      "raw_unit": "Metre",
+      "raw_quantity": "77.00",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "tender.pdf",
+        "page": 13,
+        "printed_page": "12",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "7.3",
+      "section": "Earthing and Testing",
+      "description": "Testing, commissioning and certificate of compliance",
+      "unit": "sum",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "sum",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 13,
+        "printed_page": "12",
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "quotations": [
+    {
+      "supplier": "Greenvale Cable and Conduit",
+      "reference": "Q95177",
+      "date": "2026-10-23",
+      "valid_until": "2026-11-10",
+      "currency": "ZAR",
+      "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+      "items": [
+        {
+          "description": "4C+E 16 mm2 PVC/PVC copper cable, for conduit installation [SKU-1007]",
+          "unit": "m",
+          "quantity": "191",
+          "unit_price": "100.00",
+          "expected_match": "4.10",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Bare copper earth conductor, 16 mm2 [SKU-4511]",
+          "unit": "m",
+          "quantity": "77",
+          "unit_price": "187.00",
+          "expected_match": "7.2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Earth rod, copper clad, 1.5 m [SKU-2495]",
+          "unit": "no",
+          "quantity": "7",
+          "unit_price": "441.00",
+          "expected_match": "7.1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Testing, commissioning and certificate of compliance [SKU-7752]",
+          "unit": "sum",
+          "quantity": "1",
+          "unit_price": "15184.00",
+          "expected_match": "7.3",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Emergency light fitting, 3-hour maintained [SKU-9907]",
+          "unit": "no",
+          "quantity": "40",
+          "unit_price": "579.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 1.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-4137]",
+          "unit": "m",
+          "quantity": "121",
+          "unit_price": "26.00",
+          "expected_match": "4.1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "4C+E 4 mm2 PVC/PVC copper cable, for conduit installation [SKU-9711]",
+          "unit": "m",
+          "quantity": "430",
+          "unit_price": "46.00",
+          "expected_match": "4.8",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Sub distribution board, 63 A, 12-way, surface mounted [SKU-2448]",
+          "unit": "no",
+          "quantity": "8",
+          "unit_price": "5625.00",
+          "expected_match": "2.2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "3C+E 16 mm2 PVC/PVC copper cable, for conduit installation [SKU-3650]",
+          "unit": "m",
+          "quantity": "116",
+          "unit_price": "62.00",
+          "expected_match": null,
+          "confusable_with": "4.5",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "LED panel light fitting, 600 x 600 mm, 36 W, recessed [SKU-4255]",
+          "unit": "no",
+          "quantity": "57",
+          "unit_price": "924.00",
+          "expected_match": "5.1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "3C+E 1.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-1528]",
+          "unit": "roll",
+          "quantity": "12",
+          "unit_price": "29.00",
+          "expected_match": "4.2",
+          "confusable_with": null,
+          "unit_mismatch": true,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-5732]",
+          "unit": "m",
+          "quantity": "1176",
+          "unit_price": "35.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Data outlet, Cat 6, double [SKU-8467]",
+          "unit": "no",
+          "quantity": "41",
+          "unit_price": "197.00",
+          "expected_match": "6.2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Insurance and guarantees [SKU-7425]",
+          "unit": "sum",
+          "quantity": "1",
+          "unit_price": "23176.00",
+          "expected_match": "1.2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "MCB, 1-pole, 32 A, 6 kA [SKU-7607]",
+          "unit": "no",
+          "quantity": "38",
+          "unit_price": "93.00",
+          "expected_match": "2.3",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-8345]",
+          "unit": "m",
+          "quantity": "121",
+          "unit_price": "26.00",
+          "expected_match": null,
+          "confusable_with": "4.1",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_greenvale_cable_and_conduit.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        }
+      ]
+    }
+  ],
+  "non_requirements": [
+    {
+      "kind": "boilerplate",
+      "text": "Site hours of the facility are from 08:00 to 22:00 on weekdays and the caretaker locks the gates at 22:30.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 2,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "Meetings of the evaluation committee are held at the civic centre and the minutes are kept by the supply chain office.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The facility is required to keep a register of all electrical faults reported by the caretaker.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 9,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "Meetings of the evaluation committee are held at the civic centre and the minutes are kept by the supply chain office.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The facility is required to keep a register of all electrical faults reported by the caretaker.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 5,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "schema_version": "1.0",
+  "synthetic": true
+}
