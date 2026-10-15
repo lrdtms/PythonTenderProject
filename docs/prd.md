@@ -69,7 +69,7 @@ Additions and clarifications:
 | FR-58 | Retrieval and extraction are tenant-scoped: every organisation-owned row (including child tables such as requirements, BoQ items, quotation items, tasks and jobs) carries `organisation_id`, child rows reference their parent with composite foreign keys, and all retrieval goes through one scoped function (`knowledge.search`), with must-pass cross-tenant tests. |
 | FR-59 | Ingestion is idempotent: a document version's chunks are replaced **as a set** with `UNIQUE(document_version_id, ordinal)`. `text_hash` is used only to reuse embeddings, not as the uniqueness key (identical text on different pages must keep its own provenance). |
 | FR-60 | OCR jobs run one document at a time to cap memory. |
-| FR-61 | Requirement extraction (FR-18 to FR-22) runs over **every section** of the tender pack (map-then-merge), not top-k retrieval, so recall is high. Sections are about 1,200–1,500 tokens, separate from the smaller retrieval chunks, to keep CPU processing time realistic. Page provenance is found by locating the LLM's `evidence_quote` in the page text. Top-k is for Q&A only. |
+| FR-61 | Requirement extraction (FR-18 to FR-22) screens **every sentence** of the tender pack with a deterministic pre-filter (obligation words, dates, times, grades, amounts, standards, periods). Matching sentences plus one sentence of context are batched into windows of about 1,350 tokens and sent to the LLM with a prompt that defines a tenderer requirement, its type and its status. The trigger vocabulary is configurable. A **deep scan** option sends every section to the LLM instead, for documents where the filter finds suspiciously few candidates and for evaluation. Page provenance is found by locating the LLM's `evidence_quote` in the page text. Top-k retrieval is for Q&A only. Measured results: `docs/spikes/m2-1b-prefilter-experiment.md` and `docs/spikes/m2-1c-prompt-evaluation.md`. |
 | FR-62 | Estimates and exports carry a status of draft, reviewed or approved (FR-41) and a version number. |
 | FR-63 | Supplier match suggestions and their human confirm/reject decisions are stored with evidence and reviewer (FR-34, FR-35). Matching is rule-based (no LLM). |
 | FR-64 | Structured-output idempotency: re-running an extraction stage replaces only `unreviewed` rows. Reviewed or corrected rows are never overwritten or duplicated. |
@@ -101,7 +101,7 @@ Performance, reliability, security, privacy (POPIA), usability, maintainability 
 - Set `num_ctx` explicitly (minimum 4096, since Ollama's default may silently truncate); low temperature; preload the model before demos instead of relying on a short `keep_alive`.
 - Stream responses so slow generation feels responsive (fetch with a stream reader, see §9).
 - Prompt-injection hardening: document text is data only. The LLM has no tools, no code execution and no cross-tenant access (base spec §7.6).
-- **Processing-time target:** a 100-page native-PDF tender pack is fully processed in under 45 minutes on the reference laptop, with progress visible at least every 10 seconds of work. Ingestion without the LLM takes under 3 minutes. Demo documents are pre-processed. Measure on day 1 (§15).
+- **Processing-time target:** a 100-page native-PDF tender pack is fully processed in under 45 minutes on the reference laptop, with progress visible at least every 10 seconds of work. Ingestion without the LLM takes under 3 minutes. Demo documents are pre-processed. **Measured (M2-1b):** the pre-filter path processed a 96-page synthetic pack in about 3 minutes on the reference laptop; the deep scan (every section to the LLM) is estimated at about 100 minutes.
 - **Other targets:** search p95 under 300 ms on 20k chunks; non-AI API p95 under 500 ms; one job at a time (worker concurrency 1).
 - **Environments:** development and "production" are both the local Docker Compose stack; production is that stack exposed through the tunnel (§21). A separate staging environment is out of scope. "Tested in staging" in the Definition of Done means tested through the tunnel URL.
 - **Demo build:** use `next build && next start` for demos, not the dev server (the RAM budget assumes this). If containers must reach host Ollama, `OLLAMA_HOST=0.0.0.0` may be needed; firewall port 11434.
@@ -204,7 +204,7 @@ All endpoints validate request bodies, enforce roles and organisation checks on 
 4. **Index:** embed, then insert into the chunk table (vector + tsvector), scoped by `organisation_id`.
 5. **Extract structured data:**
    - BoQ: deterministic parsing first, LLM only to classify/clean/suggest gap fills.
-   - Requirements: map over **all** chunks with a schema-constrained prompt, then merge and de-duplicate (FR-61). Requirement recall depends on this.
+   - Requirements: deterministic pre-filter, then the LLM on candidate windows with a schema-constrained prompt (deep scan optional); merge and de-duplicate (FR-61). Filter recall and LLM recall are measured separately.
    - Provenance (document, page) is attached by code from chunk metadata, never generated by the LLM.
 6. **Validate** with Pydantic and business rules (numeric quantities, units present or marked missing, known source reference, defined currency). Missing is never zero. Remember that schema-constrained output guarantees valid JSON, not correct values.
 7. **Human review** beside the source PDF (edit/approve/reject, recording original value, correction, reviewer and timestamp).
@@ -323,7 +323,7 @@ SaaS subscription model; initial niche is electrical subcontractors, validated w
 2. Final default model, decided by the §13 evaluation.
 3. ~~Evaluation owner~~ **Decided:** M1 (platform/trust).
 4. Q&A is a stretch goal behind a feature flag, with a go/no-go on day 25.
-5. Accept the 45-minute processing target and section-based extraction (FR-61)? Confirm after the day-1 throughput measurement.
+5. ~~45-minute target and section-based extraction~~ **Decided:** pre-filter path with an optional deep scan (FR-61); the 45-minute target is met with a wide margin on synthetic data. Real-document recall of the filter is still unknown (§20).
 
 ## 20. Adding Real Documents Later
 

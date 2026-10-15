@@ -240,6 +240,7 @@ def score(gt: dict, pages: list[str], items: list[dict]) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--packs", nargs="+", required=True)
+    ap.add_argument("--gen", default=None, help="generated packs folder (default eval/generated)")
     ap.add_argument("--model", default="qwen3:4b")
     ap.add_argument("--base", default="http://localhost:11434")
     ap.add_argument("--num-ctx", type=int, default=4096)
@@ -251,6 +252,9 @@ def main() -> None:
                     help="write harness-format predictions to <dir>/prefilter and <dir>/baseline")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
+    if args.gen:
+        global GENERATED
+        GENERATED = Path(args.gen).resolve()
 
     results = []
     for pack_id in args.packs:

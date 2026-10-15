@@ -1,0 +1,695 @@
+{
+  "pack_id": "pack05",
+  "title": "Electrical works at Greenvale Community Hall",
+  "reference": "GRE/ELEC/2026/091",
+  "client": "Greenvale Municipality",
+  "location": "Greenvale",
+  "closing_at": "2026-11-24T11:00:00+02:00",
+  "tags": [
+    "clean",
+    "boq-pdf",
+    "clean",
+    "scanned"
+  ],
+  "documents": [
+    {
+      "filename": "tender.pdf",
+      "kind": "tender_document",
+      "format": "pdf",
+      "scanned": true,
+      "pages": 8
+    },
+    {
+      "filename": "quotation_1_ridgeway_lighting_and_power.pdf",
+      "kind": "quotation",
+      "format": "pdf",
+      "scanned": false,
+      "pages": null
+    }
+  ],
+  "requirements": [
+    {
+      "id": "pack05-R01",
+      "description": "Submit sealed tender by 11:00 on Tuesday 24 November 2026",
+      "requirement_type": "deadline",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Sealed tenders must be deposited in the tender box at Greenvale Civic Centre, 12 Example Street no later than 11:00 on Tuesday 24 November 2026.",
+      "keyword": "tuesday 24 november 2026",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "2",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack05-R02",
+      "description": "CIDB grading of 6EP or higher (electrical)",
+      "requirement_type": "eligibility",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Only tenderers registered with the Construction Industry Development Board with a contractor grading of 6EP or higher in the electrical engineering works category may submit tenders.",
+      "keyword": "6ep",
+      "source": {
+        "document": "tender.pdf",
+        "page": 7,
+        "printed_page": "5",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack05-R03",
+      "description": "Valid tax compliance status pin",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must submit a valid tax compliance status pin issued by the South African Revenue Service.",
+      "keyword": "tax compliance",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": "4",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack05-R04",
+      "description": "Attend compulsory site meeting on Thursday 10 November 2026",
+      "requirement_type": "meeting",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "A compulsory site inspection and clarification meeting will be held at Greenvale Community Hall on Thursday 10 November 2026 at 10:30, and tenderers who do not attend will be disqualified.",
+      "keyword": "thursday 10 november 2026",
+      "source": {
+        "document": "tender.pdf",
+        "page": 5,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack05-R05",
+      "description": "Completed and signed Form of Offer and Acceptance",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "The Form of Offer and Acceptance must be completed and signed by an authorised representative of the tenderer.",
+      "keyword": "form of offer",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": "4",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack05-R06",
+      "description": "Send written queries 5 days before closing",
+      "requirement_type": "other",
+      "mandatory_status": "informational",
+      "evidence_quote": "Written queries should reach the contact person at least 5 days before the closing date.",
+      "keyword": "queries",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "2",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack05-R07",
+      "description": "Prices in rand with VAT shown separately",
+      "requirement_type": "pricing",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Prices must be stated in South African rand and must show value-added tax separately at the end of the pricing schedule.",
+      "keyword": "value-added tax",
+      "source": {
+        "document": "tender.pdf",
+        "page": 7,
+        "printed_page": "5",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack05-R08",
+      "description": "Rates valid for 120 days",
+      "requirement_type": "pricing",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tender rates must remain valid for 120 days after the closing date.",
+      "keyword": "120 days",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "2",
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "boq_items": [
+    {
+      "item_number": "A1",
+      "section": "Preliminaries and General",
+      "description": "Health and safety plan and file",
+      "unit": "sum",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "sum",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "B1",
+      "section": "Distribution Boards",
+      "description": "Main distribution board, 400 A, 3-phase, wall mounted, with busbars",
+      "unit": "no",
+      "quantity": "2",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "2",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "C1",
+      "section": "Containment",
+      "description": "PVC trunking, 100 x 50 mm",
+      "unit": "m",
+      "quantity": "118",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "118",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D1",
+      "section": "Cables",
+      "description": "2-core 2.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "1071",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "1071",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D2",
+      "section": "Cables",
+      "description": "2-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "1091",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "1091",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D3",
+      "section": "Cables",
+      "description": "2-core 10 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "506",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "506",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D4",
+      "section": "Cables",
+      "description": "3-core 2.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "1155",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "1155",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D5",
+      "section": "Cables",
+      "description": "3-core 10 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "198",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "198",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D6",
+      "section": "Cables",
+      "description": "4-core 2.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "1071",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "1071",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "D7",
+      "section": "Cables",
+      "description": "4-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "347",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "347",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "E1",
+      "section": "Lighting",
+      "description": "LED batten luminaire, 1200 mm, 36 W",
+      "unit": "no",
+      "quantity": "60",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "60",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "E2",
+      "section": "Lighting",
+      "description": "Light switch, 1-lever, 1-way",
+      "unit": "no",
+      "quantity": "90",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "90",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "F1",
+      "section": "Small Power",
+      "description": "Double switched socket outlet, 16 A",
+      "unit": "no",
+      "quantity": "38",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "38",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "F2",
+      "section": "Small Power",
+      "description": "Data outlet, Cat 6, double",
+      "unit": "no",
+      "quantity": "25",
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": "25",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "G1",
+      "section": "Earthing and Testing",
+      "description": "Testing, commissioning and certificate of compliance",
+      "unit": "sum",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "sum",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "item_number": "G2",
+      "section": "Earthing and Testing",
+      "description": "As-built drawings and operating manuals",
+      "unit": "item",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "item",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "quotations": [
+    {
+      "supplier": "Ridgeway Lighting and Power",
+      "reference": "Q11574",
+      "date": "2026-10-22",
+      "valid_until": "2026-11-12",
+      "currency": "ZAR",
+      "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+      "items": [
+        {
+          "description": "Data outlet, Cat 10, double [SKU-8772]",
+          "unit": "no",
+          "quantity": "25",
+          "unit_price": "324.00",
+          "expected_match": null,
+          "confusable_with": "F2",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "4C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-4196]",
+          "unit": "m",
+          "quantity": "1071",
+          "unit_price": "41.00",
+          "expected_match": "D6",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 16 mm2 PVC/PVC copper cable, for conduit installation [SKU-3867]",
+          "unit": "m",
+          "quantity": "506",
+          "unit_price": "79.00",
+          "expected_match": null,
+          "confusable_with": "D3",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "3C+E 6 mm2 PVC/PVC copper cable, for conduit installation [SKU-8472]",
+          "unit": "m",
+          "quantity": "201",
+          "unit_price": "63.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "PVC trunking, 100 x 50 mm [SKU-7651]",
+          "unit": "m",
+          "quantity": "118",
+          "unit_price": "139.00",
+          "expected_match": "C1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Health and safety plan and file [SKU-8739]",
+          "unit": "sum",
+          "quantity": "1",
+          "unit_price": "9006.00",
+          "expected_match": "A1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "LED floodlight, 100 W, IP65 [SKU-6139]",
+          "unit": "no",
+          "quantity": "11",
+          "unit_price": "1024.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "2C+E 10 mm2 PVC/PVC copper cable, for conduit installation [SKU-7360]",
+          "unit": "m",
+          "quantity": "506",
+          "unit_price": "59.00",
+          "expected_match": "D3",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "3C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-4588]",
+          "unit": "roll",
+          "quantity": "12",
+          "unit_price": "28.00",
+          "expected_match": "D4",
+          "confusable_with": null,
+          "unit_mismatch": true,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "Double switched socket, 16 A [SKU-8677]",
+          "unit": "no",
+          "quantity": "38",
+          "unit_price": "93.00",
+          "expected_match": "F1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "3C+E 10 mm2 PVC/PVC copper cable, for conduit installation [SKU-7596]",
+          "unit": "roll",
+          "quantity": "2",
+          "unit_price": "62.00",
+          "expected_match": "D5",
+          "confusable_with": null,
+          "unit_mismatch": true,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        },
+        {
+          "description": "As-built drawings and operating manuals [SKU-3208]",
+          "unit": "item",
+          "quantity": "1",
+          "unit_price": "8702.00",
+          "expected_match": "G2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_ridgeway_lighting_and_power.pdf",
+            "page": 1,
+            "printed_page": null,
+            "sheet": null,
+            "cell_range": null
+          }
+        }
+      ]
+    }
+  ],
+  "non_requirements": [
+    {
+      "kind": "boilerplate",
+      "text": "The employer must give the contractor access to the site within seven days of the commencement date.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "Site hours of the facility are from 08:00 to 22:00 on weekdays and the caretaker locks the gates at 22:30.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 3,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The employer shall appoint a project manager who will act as the employer's representative during the contract.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 2,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "schema_version": "1.0",
+  "synthetic": true
+}

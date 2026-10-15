@@ -92,6 +92,8 @@ Controls are defined in ADR-0005. Each attack path below names the control and t
 
 **Throughput reality check (needs measuring on day 1).** A 3-4B Q4 model on the laptop CPU or a partially offloaded GTX 1050 processes prompts at about 30-80 tokens/s and generates at 5-15 tokens/s. With FR-61 mapped over 300-450-token retrieval chunks, a 100-page pack (~150 chunks) needs about 150 calls x 20-55 s, which is **1-2+ hours**. Recommendation: run requirement extraction over **sections of about 1,200-1,500 tokens** (separate from the retrieval chunks; still "every section", so FR-61's recall intent holds). That is about 35 calls and roughly 25-40 minutes. Page provenance comes from locating the `evidence_quote` in the page text. Disable Qwen3 "thinking" output (`think: false`), or it spends tokens on reasoning. Pre-process demo documents.
 
+**Measured update (spikes M2-1, M2-1b, M2-1c; synthetic data, Qwen3-4B).** Generation runs at about 15 tokens/s and time is driven by output length, not input. Sending every section to the LLM takes about 100 minutes for a 96-page pack. A deterministic pre-filter (obligation, date, grade, amount, standard and period triggers, plus one sentence of context) sends about 3% of the text and finishes in about 3 minutes with equal or better recall on the packs tested, so **FR-61 now means pre-filter then LLM, with a manual deep scan as the fallback**. The filter's recall on real tenders is unknown and must be measured; filter recall is reported separately from LLM recall. The extraction prompt (v3) defines a tenderer requirement, each type and each status; see `docs/spikes/m2-1c-prompt-evaluation.md`.
+
 ## 6. Fitness functions (run in CI unless noted)
 
 | ID | Fitness function | Guards |
@@ -129,7 +131,7 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 4. **Environment wording is stale.** §6 ("deployed VM acts as staging/production") and the §7 diagram ("Blob when deployed") conflict with the §21 decision (laptop + tunnel). Production is the tunnelled laptop, and "tested in staging" means tested via the tunnel URL.
 5. **Two exposure stories.** §9 suggests calling FastAPI directly with CORS; §21 says to tunnel only the frontend or Caddy. Resolved: single origin via Caddy (ADR-0009).
 6. **POPIA and the tunnel.** Cloudflare terminates TLS at its edge, which may be outside South Africa. That makes it a processor that sees plaintext, so it is a cross-border consideration, not just "hosting region" (§12). Keep synthetic data only and document this in the assessment.
-7. **No processing-time target, and FR-61 is costly on CPU** (section 5). Suggested NFR: "100-page native pack fully processed in < 45 min on the reference laptop, with progress visible."
+7. **No processing-time target, and FR-61 is costly on CPU** (section 5; resolved by the pre-filter, see the measured update above). Suggested NFR: "100-page native pack fully processed in < 45 min on the reference laptop, with progress visible."
 8. **Retry semantics undefined.** FR-56 "retry once" and job `attempt_count` are different layers; they are defined in section 5.
 9. **JWT role claims go stale** after role change or deactivation. Roles are loaded from the DB instead (ADR-0008).
 10. **Retrieval must filter to the current document version** (BR-06). FR-52/58 mention only the tenant filter.

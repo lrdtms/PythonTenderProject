@@ -1,0 +1,844 @@
+{
+  "pack_id": "pack06",
+  "title": "Electrical works at Stonebridge Clinic",
+  "reference": "STO/ELEC/2026/054",
+  "client": "Stonebridge District Council",
+  "location": "Stonebridge",
+  "closing_at": "2026-12-26T11:00:00+02:00",
+  "tags": [
+    "dense",
+    "boq-xlsx",
+    "messy",
+    "scanned"
+  ],
+  "documents": [
+    {
+      "filename": "tender.pdf",
+      "kind": "tender_document",
+      "format": "pdf",
+      "scanned": true,
+      "pages": 9
+    },
+    {
+      "filename": "boq.xlsx",
+      "kind": "boq",
+      "format": "xlsx",
+      "scanned": false,
+      "pages": null
+    },
+    {
+      "filename": "quotation_1_voltline_electrical_wholesalers.xlsx",
+      "kind": "quotation",
+      "format": "xlsx",
+      "scanned": false,
+      "pages": null
+    }
+  ],
+  "requirements": [
+    {
+      "id": "pack06-R01",
+      "description": "Submit sealed tender by 11:00 on Monday 26 December 2026",
+      "requirement_type": "deadline",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Sealed tenders must be deposited in the tender box at Stonebridge Municipal Offices, 9 Demo Avenue no later than 11:00 on Monday 26 December 2026.",
+      "keyword": "monday 26 december 2026",
+      "source": {
+        "document": "tender.pdf",
+        "page": 5,
+        "printed_page": "4",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R02",
+      "description": "CIDB grading of 3EP or higher (electrical)",
+      "requirement_type": "eligibility",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Only tenderers registered with the Construction Industry Development Board with a contractor grading of 3EP or higher in the electrical engineering works category may submit tenders.",
+      "keyword": "3ep",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R03",
+      "description": "Valid tax compliance status pin",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tenderers must submit a valid tax compliance status pin issued by the South African Revenue Service.",
+      "keyword": "tax compliance",
+      "source": {
+        "document": "tender.pdf",
+        "page": 2,
+        "printed_page": "1",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R04",
+      "description": "Certified copy of company registration certificate",
+      "requirement_type": "document",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "A certified copy of the company registration certificate must be included in the tender submission.",
+      "keyword": "registration certificate",
+      "source": {
+        "document": "tender.pdf",
+        "page": 2,
+        "printed_page": "1",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R05",
+      "description": "Comply with SANS 10142-1",
+      "requirement_type": "technical",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "All electrical work must comply with SANS 10142-1 and be certified by a registered person.",
+      "keyword": "10142",
+      "source": {
+        "document": "tender.pdf",
+        "page": 2,
+        "printed_page": "1",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R06",
+      "description": "Rates valid for 120 days",
+      "requirement_type": "pricing",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "Tender rates must remain valid for 120 days after the closing date.",
+      "keyword": "120 days",
+      "source": {
+        "document": "tender.pdf",
+        "page": 6,
+        "printed_page": "5",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R07",
+      "description": "B-BBEE certificate or affidavit if claiming preference points",
+      "requirement_type": "document",
+      "mandatory_status": "conditional",
+      "evidence_quote": "If preference points are claimed, a certified copy of a valid B-BBEE certificate or sworn affidavit must be submitted.",
+      "keyword": "b-bbee",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": "3",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R08",
+      "description": "Defects liability period of 24 months",
+      "requirement_type": "technical",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "The contractor shall provide a defects liability period of 24 months from the date of practical completion.",
+      "keyword": "24 months",
+      "source": {
+        "document": "tender.pdf",
+        "page": 7,
+        "printed_page": "6",
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "id": "pack06-R09",
+      "description": "Attend compulsory site meeting on Tuesday 11 December 2026",
+      "requirement_type": "meeting",
+      "mandatory_status": "mandatory",
+      "evidence_quote": "A compulsory site inspection and clarification meeting will be held at Stonebridge Clinic on Tuesday 11 December 2026 at 09:00, and tenderers who do not attend will be disqualified.",
+      "keyword": "tuesday 11 december 2026",
+      "source": {
+        "document": "tender.pdf",
+        "page": 5,
+        "printed_page": "4",
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "boq_items": [
+    {
+      "item_number": "1.1",
+      "section": "Preliminaries and General",
+      "description": "Health and safety plan and file",
+      "unit": "sum",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "sum",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A8:F8"
+      }
+    },
+    {
+      "item_number": "1.2",
+      "section": "Preliminaries and General",
+      "description": "Insurance and guarantees",
+      "unit": "sum",
+      "quantity": "1",
+      "unit_price": null,
+      "raw_unit": "sum",
+      "raw_quantity": "1",
+      "flags": [],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A9:F9"
+      }
+    },
+    {
+      "item_number": "2.1",
+      "section": "Distribution Boards",
+      "description": "Miniature circuit breaker, 1-pole, 32 A, 6 kA (rate only)",
+      "unit": "no",
+      "quantity": null,
+      "unit_price": null,
+      "raw_unit": "each",
+      "raw_quantity": null,
+      "flags": [
+        "rate_only",
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A12:F12"
+      }
+    },
+    {
+      "item_number": "2.2",
+      "section": "Distribution Boards",
+      "description": "Miniature circuit breaker, 3-pole, 63 A, 10 kA",
+      "unit": "no",
+      "quantity": "10",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "10",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A13:F13"
+      }
+    },
+    {
+      "item_number": "2.3",
+      "section": "Distribution Boards",
+      "description": "Earth leakage unit, 63 A, 30 mA",
+      "unit": "no",
+      "quantity": "12",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "12",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A14:F14"
+      }
+    },
+    {
+      "item_number": "2.4",
+      "section": "Distribution Boards",
+      "description": "Surge protection device, type 2, 3-phase",
+      "unit": "no",
+      "quantity": "3",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "3",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A15:F15"
+      }
+    },
+    {
+      "item_number": "3.1",
+      "section": "Containment",
+      "description": "PVC conduit, 20 mm, surface mounted",
+      "unit": "m",
+      "quantity": "991",
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": "991,00",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A18:F18"
+      }
+    },
+    {
+      "item_number": "3.2",
+      "section": "Containment",
+      "description": "Steel conduit, 25 mm, surface mounted",
+      "unit": "m",
+      "quantity": "325",
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": "325,00",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A19:F19"
+      }
+    },
+    {
+      "item_number": "3.3",
+      "section": "Containment",
+      "description": "PVC trunking, 100 x 50 mm (rate only)",
+      "unit": "m",
+      "quantity": null,
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": null,
+      "flags": [
+        "rate_only"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A20:F20"
+      }
+    },
+    {
+      "item_number": "4.1",
+      "section": "Cables",
+      "description": "2-core 1.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "870",
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": "870,00",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A23:F23"
+      }
+    },
+    {
+      "item_number": "4.2",
+      "section": "Cables",
+      "description": "2-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": null,
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": null,
+      "flags": [
+        "missing_quantity",
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A24:F24"
+      }
+    },
+    {
+      "item_number": "4.3",
+      "section": "Cables",
+      "description": "2-core 16 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "313",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "313",
+      "flags": [],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A25:F25"
+      }
+    },
+    {
+      "item_number": "4.4",
+      "section": "Cables",
+      "description": "3-core 4 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "783",
+      "unit_price": null,
+      "raw_unit": "Metre",
+      "raw_quantity": "783",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A26:F26"
+      }
+    },
+    {
+      "item_number": "4.5",
+      "section": "Cables",
+      "description": "3-core 6 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": null,
+      "unit_price": null,
+      "raw_unit": "mtr",
+      "raw_quantity": null,
+      "flags": [
+        "missing_quantity",
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A27:F27"
+      }
+    },
+    {
+      "item_number": "4.6",
+      "section": "Cables",
+      "description": "4-core 2.5 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "397",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "397,00",
+      "flags": [],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A28:F28"
+      }
+    },
+    {
+      "item_number": "4.7",
+      "section": "Cables",
+      "description": "4-core 6 mm2 PVC insulated copper cable, installed in conduit",
+      "unit": "m",
+      "quantity": "819",
+      "unit_price": null,
+      "raw_unit": "m",
+      "raw_quantity": "819,00",
+      "flags": [],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A29:F29"
+      }
+    },
+    {
+      "item_number": "5.1",
+      "section": "Lighting",
+      "description": "LED panel luminaire, 600 x 600 mm, 36 W, recessed",
+      "unit": "no",
+      "quantity": "56",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "56",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A32:F32"
+      }
+    },
+    {
+      "item_number": "5.2",
+      "section": "Lighting",
+      "description": "LED batten luminaire, 1200 mm, 36 W",
+      "unit": "no",
+      "quantity": "49",
+      "unit_price": null,
+      "raw_unit": "Nr",
+      "raw_quantity": "49",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A33:F33"
+      }
+    },
+    {
+      "item_number": "5.3",
+      "section": "Lighting",
+      "description": "Light switch, 1-lever, 1-way",
+      "unit": "no",
+      "quantity": "91",
+      "unit_price": null,
+      "raw_unit": "No.",
+      "raw_quantity": "91",
+      "flags": [
+        "unit_alias"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A34:F34"
+      }
+    },
+    {
+      "item_number": "6.1",
+      "section": "Earthing and Testing",
+      "description": "Earth rod, copper clad, 1.5 m",
+      "unit": "no",
+      "quantity": null,
+      "unit_price": null,
+      "raw_unit": "no",
+      "raw_quantity": null,
+      "flags": [
+        "missing_quantity"
+      ],
+      "source": {
+        "document": "boq.xlsx",
+        "page": null,
+        "printed_page": null,
+        "sheet": "BoQ",
+        "cell_range": "A37:F37"
+      }
+    }
+  ],
+  "quotations": [
+    {
+      "supplier": "Voltline Electrical Wholesalers",
+      "reference": "Q27301",
+      "date": "2026-10-21",
+      "valid_until": "2026-11-19",
+      "currency": "ZAR",
+      "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+      "items": [
+        {
+          "description": "LED panel light fitting, 600 x 600 mm, 36 W, recessed [SKU-2265]",
+          "unit": "no",
+          "quantity": "56",
+          "unit_price": "915.00",
+          "expected_match": "5.1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A8:E8"
+          }
+        },
+        {
+          "description": "6C+E 6 mm2 PVC/PVC copper cable, for conduit installation [SKU-7471]",
+          "unit": "m",
+          "quantity": "819",
+          "unit_price": "46.00",
+          "expected_match": null,
+          "confusable_with": "4.7",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A9:E9"
+          }
+        },
+        {
+          "description": "Insurance and guarantees [SKU-5213]",
+          "unit": "sum",
+          "quantity": "1",
+          "unit_price": "20560.00",
+          "expected_match": "1.2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A10:E10"
+          }
+        },
+        {
+          "description": "Earth leakage unit, 63 A, 30 mA [SKU-6045]",
+          "unit": "no",
+          "quantity": "12",
+          "unit_price": "970.00",
+          "expected_match": "2.3",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A11:E11"
+          }
+        },
+        {
+          "description": "LED batten light fitting, 1200 mm, 36 W [SKU-2090]",
+          "unit": "no",
+          "quantity": "49",
+          "unit_price": "490.00",
+          "expected_match": "5.2",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A12:E12"
+          }
+        },
+        {
+          "description": "3C+E 6 mm2 PVC/PVC copper cable, for conduit installation [SKU-4756]",
+          "unit": "m",
+          "quantity": "783",
+          "unit_price": "43.00",
+          "expected_match": null,
+          "confusable_with": "4.4",
+          "unit_mismatch": false,
+          "ambiguous": true,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A13:E13"
+          }
+        },
+        {
+          "description": "3C+E 2.5 mm2 PVC/PVC copper cable, for conduit installation [SKU-5288]",
+          "unit": "m",
+          "quantity": "641",
+          "unit_price": "33.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A14:E14"
+          }
+        },
+        {
+          "description": "Main distribution board, 400 A, 3-phase, wall mounted, with busbars [SKU-1506]",
+          "unit": "no",
+          "quantity": "1",
+          "unit_price": "40639.00",
+          "expected_match": null,
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A15:E15"
+          }
+        },
+        {
+          "description": "3C+E 4 mm2 PVC/PVC copper cable, for conduit installation [SKU-5059]",
+          "unit": "roll",
+          "quantity": "8",
+          "unit_price": "50.00",
+          "expected_match": "4.4",
+          "confusable_with": null,
+          "unit_mismatch": true,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A16:E16"
+          }
+        },
+        {
+          "description": "2C+E 16 mm2 PVC/PVC copper cable, for conduit installation [SKU-6992]",
+          "unit": "m",
+          "quantity": "313",
+          "unit_price": "91.00",
+          "expected_match": "4.3",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A17:E17"
+          }
+        },
+        {
+          "description": "PVC conduit, 20 mm, surface mounted [SKU-5605]",
+          "unit": "m",
+          "quantity": "991",
+          "unit_price": "27.00",
+          "expected_match": "3.1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A18:E18"
+          }
+        },
+        {
+          "description": "Health and safety plan and file [SKU-9526]",
+          "unit": "sum",
+          "quantity": "1",
+          "unit_price": "8692.00",
+          "expected_match": "1.1",
+          "confusable_with": null,
+          "unit_mismatch": false,
+          "ambiguous": false,
+          "source": {
+            "document": "quotation_1_voltline_electrical_wholesalers.xlsx",
+            "page": null,
+            "printed_page": null,
+            "sheet": "Quote",
+            "cell_range": "A19:E19"
+          }
+        }
+      ]
+    }
+  ],
+  "non_requirements": [
+    {
+      "kind": "boilerplate",
+      "text": "The facility is required to keep a register of all electrical faults reported by the caretaker.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 9,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "Payment certificates shall be issued monthly and the employer shall pay within thirty days of receipt of a valid invoice.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 4,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The agreement shall be governed by the laws of the Republic of South Africa.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 3,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The employer's agent shall inspect the works at intervals and must record defects in the site diary.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 8,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    },
+    {
+      "kind": "boilerplate",
+      "text": "The employer must give the contractor access to the site within seven days of the commencement date.",
+      "source": {
+        "document": "tender.pdf",
+        "page": 5,
+        "printed_page": null,
+        "sheet": null,
+        "cell_range": null
+      }
+    }
+  ],
+  "schema_version": "1.0",
+  "synthetic": true
+}
