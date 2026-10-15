@@ -145,6 +145,7 @@ class MembershipRepo(ScopedRepository[Membership]):
         stmt = (
             self._select()
             .where(Membership.role == "admin", Membership.status == "active")
+            .order_by(Membership.id)  # one lock order for every caller (no deadlock)
             .with_for_update()
         )
         return len(self.session.scalars(stmt).all())

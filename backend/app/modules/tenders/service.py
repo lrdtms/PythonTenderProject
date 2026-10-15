@@ -51,10 +51,11 @@ def update_tender(
         raise ValidationFailed(
             f"Status must be one of: {', '.join(TENDER_STATUSES)}.", {"field": "status"}
         )
-    if tender.status == "archived" and (
-        set(changes) != {"status"} or changes["status"] == "archived"
-    ):
-        raise Conflict("An archived tender is read-only. Re-open it first.", {"field": "status"})
+    if tender.status == "archived":
+        if changes == {"status": "archived"}:
+            return _dto(tender)  # archiving again is a no-op
+        if set(changes) != {"status"}:
+            raise Conflict("An archived tender is read-only. Re-open it first.")
     old_status = tender.status
     for key, value in changes.items():
         setattr(tender, key, value)

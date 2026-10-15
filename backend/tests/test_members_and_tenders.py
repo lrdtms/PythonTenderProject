@@ -173,10 +173,16 @@ def test_an_archived_tender_can_only_be_reopened(admin) -> None:
     c = admin.client
     tid = c.post("/api/v1/tenders", json={"title": "Old bid"}).json()["id"]
     assert c.post(f"/api/v1/tenders/{tid}/archive").status_code == 200
+    archived_at = c.get(f"/api/v1/tenders/{tid}").json()["archived_at"]
     for body in ({"title": "Edited"}, {"location": "X"}, {"status": "ready", "title": "Edited"}):
         r = c.patch(f"/api/v1/tenders/{tid}", json=body)
         assert r.status_code == 409, (body, r.status_code)
-    assert c.post(f"/api/v1/tenders/{tid}/archive").status_code == 409  # already archived
+        assert "details" not in r.json()["error"]  # no misleading field detail
+    # Archiving again is an idempotent no-op.
+    again = c.post(f"/api/v1/tenders/{tid}/archive")
+    assert again.status_code == 200 and again.json()["archived_at"] == archived_at
+    patched = c.patch(f"/api/v1/tenders/{tid}", json={"status": "archived"})
+    assert patched.status_code == 200 and patched.json()["archived_at"] == archived_at
     assert c.get(f"/api/v1/tenders/{tid}").json()["title"] == "Old bid"
     reopened = c.patch(f"/api/v1/tenders/{tid}", json={"status": "preparing"})
     assert reopened.status_code == 200
