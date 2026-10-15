@@ -2,6 +2,9 @@
 
 from .schemas import DocumentDTO, ProcessingInfo, UploadResultDTO, VersionDTO
 from .service import (
+    EXTRACT_BOQ_JOB,
+    EXTRACT_REQUIREMENTS_JOB,
+    EXTRACTION_JOBS,
     INGEST_JOB,
     ensure_job_retry_allowed,
     get_document,
@@ -16,6 +19,9 @@ from .service import (
 )
 
 __all__ = [
+    "EXTRACTION_JOBS",
+    "EXTRACT_BOQ_JOB",
+    "EXTRACT_REQUIREMENTS_JOB",
     "INGEST_JOB",
     "DocumentDTO",
     "ProcessingInfo",

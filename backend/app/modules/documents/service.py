@@ -24,6 +24,9 @@ from .sniff import MIME, safe_filename, sniff
 log = logging.getLogger("documents")
 
 INGEST_JOB = "ingest_document"
+EXTRACT_BOQ_JOB = "extract_boq"
+EXTRACT_REQUIREMENTS_JOB = "extract_requirements"
+EXTRACTION_JOBS = (EXTRACT_BOQ_JOB, EXTRACT_REQUIREMENTS_JOB)
 ALLOWED_EXTENSIONS = {"pdf", "xlsx", "csv", "docx"}
 
 
@@ -195,7 +198,7 @@ def list_documents(session: Session, ctx: OrgContext, tender_id: UUID) -> list[D
     out = []
     for d in documents:
         version = current.get(d.id)
-        job = jobs.latest_job_for_subject(session, ctx, version.id) if version else None
+        job = jobs.latest_job_for_subject(session, ctx, version.id, INGEST_JOB) if version else None
         out.append(_document_dto(d, version, job.id if job else None))
     return out
 
@@ -204,7 +207,7 @@ def get_document(session: Session, ctx: OrgContext, document_id: UUID) -> Docume
     ctx.require(Permission.READ)
     document = DocumentRepo(session, ctx).get(document_id)
     current = VersionRepo(session, ctx).current_for_documents([document.id]).get(document.id)
-    job = jobs.latest_job_for_subject(session, ctx, current.id) if current else None
+    job = jobs.latest_job_for_subject(session, ctx, current.id, INGEST_JOB) if current else None
     return _document_dto(document, current, job.id if job else None)
 
 
@@ -213,7 +216,7 @@ def list_versions(session: Session, ctx: OrgContext, document_id: UUID) -> list[
     DocumentRepo(session, ctx).get(document_id)
     out = []
     for v in VersionRepo(session, ctx).for_document(document_id):
-        job = jobs.latest_job_for_subject(session, ctx, v.id)
+        job = jobs.latest_job_for_subject(session, ctx, v.id, INGEST_JOB)
         out.append(_version_dto(v, job.id if job else None))
     return out
 
@@ -221,7 +224,7 @@ def list_versions(session: Session, ctx: OrgContext, document_id: UUID) -> list[
 def get_version(session: Session, ctx: OrgContext, version_id: UUID) -> VersionDTO:
     ctx.require(Permission.READ)
     v = VersionRepo(session, ctx).get(version_id)
-    job = jobs.latest_job_for_subject(session, ctx, v.id)
+    job = jobs.latest_job_for_subject(session, ctx, v.id, INGEST_JOB)
     return _version_dto(v, job.id if job else None)
 
 
@@ -241,7 +244,7 @@ def ensure_job_retry_allowed(
 ) -> None:
     """Re-processing a document re-writes its pages: not allowed on an archived tender."""
     ctx.require(Permission.UPLOAD_DOCUMENTS)
-    if job_type != INGEST_JOB:
+    if job_type != INGEST_JOB and job_type not in EXTRACTION_JOBS:
         return
     found = VersionRepo(session, ctx).find(DocumentVersion.id == subject_id, limit=1)
     if not found:  # nothing left to protect; the worker reports a missing version itself
