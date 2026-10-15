@@ -177,6 +177,59 @@ def make_xlsx(rows: list[list[object]], sheet: str = "BoQ") -> bytes:
     return buf.getvalue()
 
 
+def make_encrypted_pdf(phrase: str = "open-sesame") -> bytes:
+    import pymupdf
+
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 72), "Confidential tender text")
+    data = doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256, owner_pw=phrase, user_pw=phrase)
+    doc.close()
+    return data
+
+
+def make_table_pdf(rows: list[list[str]]) -> bytes:
+    """One page holding a ruled grid table that pdfplumber can detect."""
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    x0, y0, cell_w, cell_h = 72.0, 100.0, 120.0, 30.0
+    cols = len(rows[0])
+    right, bottom = x0 + cols * cell_w, y0 + len(rows) * cell_h
+    for r in range(len(rows) + 1):
+        page.draw_line((x0, y0 + r * cell_h), (right, y0 + r * cell_h))
+    for c in range(cols + 1):
+        page.draw_line((x0 + c * cell_w, y0), (x0 + c * cell_w, bottom))
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            page.insert_text((x0 + c * cell_w + 6, y0 + r * cell_h + 20), value, fontsize=10)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def make_csv(rows: list[list[str]], delimiter: str = ";", encoding: str = "cp1252") -> bytes:
+    return "\n".join(delimiter.join(r) for r in rows).encode(encoding)
+
+
+def make_docx(paragraphs: list[str], table: list[list[str]] | None = None) -> bytes:
+    import io
+
+    from docx import Document
+
+    doc = Document()
+    for text in paragraphs:
+        doc.add_paragraph(text)
+    if table:
+        grid = doc.add_table(rows=len(table), cols=len(table[0]))
+        for r, row in enumerate(table):
+            for c, value in enumerate(row):
+                grid.cell(r, c).text = value
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
 def upload(
     actor: Actor,
     tender_id: str,
