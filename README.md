@@ -35,6 +35,17 @@ Documents are limited to 25 MB per upload (`MAX_UPLOAD_MB`). Scanned PDFs are re
 
 Ollama runs on the host and containers reach it at `host.docker.internal:11434` (`LLM_BASE_URL`). If containers cannot connect, start Ollama with `OLLAMA_HOST=0.0.0.0` and firewall port 11434.
 
+Pull the model once on the host (`ollama pull qwen3:4b`, the `LLM_MODEL` default). Without Docker, set `LLM_BASE_URL=http://127.0.0.1:11434`.
+
+To score extraction on the synthetic packs against the running stack (manual; slow on CPU, a few minutes per pack):
+
+```bash
+uv run --project backend python scripts/score_slice3.py --email scorer@example.com     --gen eval/generated --packs pack01 pack02 --out preds_slice3
+cd eval && uv run python -m harness score --gen generated --pred ../preds_slice3 --label slice3
+```
+
+The script registers (or logs in) one account per run; registration is limited to 5 per hour per IP, so reuse `--email`. Results of the Slice 3 gate: `docs/spikes/slice-3-scores.md`.
+
 ## Develop without Docker
 
 ```bash

@@ -71,6 +71,8 @@ Controls are defined in ADR-0005. Each attack path below names the control and t
 
 **Stages (each its own job, ADR-0006):** `ingest` -> `extract_boq` -> `extract_requirements` (tender docs) / `extract_quotation` (quotes) -> `match_suppliers`. Each stage commits its outputs and enqueues the next stage in one transaction.
 
+**As built in Slice 3.** Ingest enqueues the extraction jobs for the document's kind in one transaction: a tender document gets `extract_boq` and `extract_requirements` (two independent job types, so one can fail or be retried without the other), a `boq` document gets `extract_boq` only, and a quotation gets none yet. `POST /api/v1/document-versions/{id}/extract` re-enqueues them (optionally with `deep_scan`). The `pipeline` module records one `extraction_runs` row per job and kind (status, prompt/filter/schema versions, model, warnings, counts) and `GET .../extraction` reports job and run per kind. Re-runs replace only unreviewed rows. The worker reaches the host's Ollama through `LLM_BASE_URL` (Compose default `http://host.docker.internal:11434`; local non-Docker runs use `http://127.0.0.1:11434`) and the model comes from `LLM_MODEL`. Real-stack scores: `docs/spikes/slice-3-scores.md`.
+
 **Two retry layers. Define them once and do not mix them:**
 - *Call level* (inside a stage): one LLM call that returns invalid output is retried **once** (FR-56) with the validation error appended. If it fails again, that chunk/row is flagged and the stage continues.
 - *Job level*: transient infrastructure errors retry up to 3 attempts with backoff. Permanent errors fail immediately. Users can retry failed jobs (FR-16).
