@@ -230,3 +230,60 @@ def test_attach_provenance_keeps_unverifiable_items_and_flags_ocr_pages() -> Non
     assert [c.page_number for c in out] == [1, 2, None]
     assert [c.needs_review for c in out] == [False, True, False]
     assert out[0].quote_start is not None and out[2].quote_start is None
+
+
+# --- provenance: bounded cost, best page, near-miss; hostile JSON ---------------------------------
+
+
+def _big_page() -> str:
+    import random
+
+    rng = random.Random(7)  # noqa: S311
+    words = [
+        "".join(rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(rng.randint(3, 9)))
+        for _ in range(150)
+    ]
+    return " ".join(rng.choice(words) for _ in range(2000))[:13000]
+
+
+def test_locate_is_fast_on_a_large_page_for_a_miss_and_a_fuzzy_hit() -> None:
+    import random
+    import time
+
+    text = _big_page()
+    pages = [page(1, text)]
+    rng = random.Random(3)  # noqa: S311
+    words = text.split()[:400]
+    shuffled = " ".join(rng.sample(words, 30))[:160]  # the page's own words, a different order
+    started = time.perf_counter()
+    assert ex.locate(shuffled, pages) is None
+    assert time.perf_counter() - started < 0.3
+
+    original = text[5000:5160]
+    garbled = original[:20] + "Q" + original[21:80] + "Z" + original[81:120] + "X" + original[121:]
+    started = time.perf_counter()
+    found = ex.locate(garbled, pages)
+    assert time.perf_counter() - started < 0.3
+    assert found is not None and found.exact is False and abs(found.start - 5000) <= 5
+
+
+def test_locate_prefers_the_best_scoring_page_over_the_first_acceptable_one() -> None:
+    quote = "The tenderer shall submit an original valid tax clearance certificate"
+    worse = (
+        quote.replace("shall", "shal1").replace("original", "orlginal").replace("valid", "val1d")
+    )
+    better = quote.replace("shall", "shal1")
+    found = ex.locate(quote + " x", [page(1, worse), page(2, better)])
+    assert found is not None and found.page_number == 2 and found.exact is False
+
+
+def test_locate_rejects_a_fuzzy_near_miss_below_the_threshold() -> None:
+    quote = "The tenderer shall submit an original valid tax clearance certificate"
+    garbled = "Tbe tenderer sha11 subm1t an orlginal val1d tax cIearance certificate"
+    assert ex.locate(quote, [page(1, garbled)]) is None
+
+
+def test_deeply_nested_json_is_invalid_output_not_a_crash() -> None:
+    llm = FakeLLM(["[" * 100_000, "[" * 100_000])
+    out = ex.extract_requirements([ex.Window("x", (1,))], llm, max_items_per_response=10)
+    assert out.candidates == [] and out.warnings[0]["code"] == "WINDOW_INVALID_OUTPUT"

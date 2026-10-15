@@ -35,7 +35,7 @@ def parse_response(raw: str, max_items: int) -> tuple[list[RequirementCandidate]
     """Return (candidates, capped). Raises InvalidOutput with a code, never document text."""
     try:
         data = json.loads(raw)
-    except ValueError:
+    except (ValueError, RecursionError):
         raise InvalidOutput("not_json") from None
     items = data.get("requirements") if isinstance(data, dict) else None
     if not isinstance(items, list):
