@@ -27,7 +27,7 @@ Thumbs.db
 .vscode/
 
 # Generated synthetic evaluation data (reproducible from the seed)
-eval/generated/
+eval/generated*/
 eval/.venv/
 
 # Evaluation run output
