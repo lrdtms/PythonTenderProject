@@ -15,7 +15,8 @@ from app.config import get_settings
 
 @lru_cache
 def get_engine() -> Engine:
-    return create_engine(get_settings().database_url, pool_pre_ping=True)
+    # hide_parameters: error messages must not embed bound values (document text, hashes).
+    return create_engine(get_settings().database_url, pool_pre_ping=True, hide_parameters=True)
 
 
 @lru_cache

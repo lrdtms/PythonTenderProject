@@ -4,8 +4,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.errors import error_body, register_error_handlers
-from app.api.routers import auth, members, tenders
+from app.api.routers import auth, documents, jobs, members, tenders
 from app.db.session import ping
+from app.infrastructure.model_registry import import_all_models
+
+import_all_models()
 
 app = FastAPI(title="IntelTPS API", version="0.1.0")
 register_error_handlers(app)
@@ -44,3 +47,5 @@ def health_db() -> dict[str, str]:
 app.include_router(auth.router)
 app.include_router(members.router)
 app.include_router(tenders.router)
+app.include_router(documents.router)
+app.include_router(jobs.router)

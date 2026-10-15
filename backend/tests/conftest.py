@@ -8,6 +8,7 @@ at it with TEST_DATABASE_URL, or with DB_HOST_PORT when it is not on 5432. The d
 from __future__ import annotations
 
 import os
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,6 +26,8 @@ TEST_DATABASE_URL = os.environ.get(
 # Must be set before the application reads its settings.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ENVIRONMENT"] = "development"
+os.environ["COOKIE_SECURE"] = "false"  # the test client talks plain http
+os.environ["STORAGE_PATH"] = tempfile.mkdtemp(prefix="inteltps-test-files-")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 CSRF = {"X-Requested-With": "IntelTPS"}
@@ -127,3 +130,120 @@ def add_member(admin: Actor, email: str, role: str, name: str = "Member") -> Act
 @pytest.fixture
 def admin() -> Actor:
     return register()
+
+
+# --- file builders (self-contained: PyMuPDF, openpyxl and python-docx are runtime dependencies) -----
+
+
+def make_pdf(pages: list[str]) -> bytes:
+    import pymupdf
+
+    doc = pymupdf.open()
+    for page_text in pages:
+        page = doc.new_page()
+        page.insert_textbox(pymupdf.Rect(50, 50, 545, 790), page_text, fontsize=10)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def make_scanned_pdf(texts: list[str]) -> bytes:
+    """A PDF whose pages are images only (no text layer), like a scan."""
+    import pymupdf
+
+    source = pymupdf.open(stream=make_pdf(texts), filetype="pdf")
+    out = pymupdf.open()
+    for page in source:
+        png = page.get_pixmap(dpi=100).tobytes("png")
+        new = out.new_page(width=page.rect.width, height=page.rect.height)
+        new.insert_image(new.rect, stream=png)
+    data = out.tobytes()
+    out.close()
+    source.close()
+    return data
+
+
+def make_xlsx(rows: list[list[object]], sheet: str = "BoQ") -> bytes:
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def make_encrypted_pdf(phrase: str = "open-sesame") -> bytes:
+    import pymupdf
+
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 72), "Confidential tender text")
+    data = doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256, owner_pw=phrase, user_pw=phrase)
+    doc.close()
+    return data
+
+
+def make_table_pdf(rows: list[list[str]]) -> bytes:
+    """One page holding a ruled grid table that pdfplumber can detect."""
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    x0, y0, cell_w, cell_h = 72.0, 100.0, 120.0, 30.0
+    cols = len(rows[0])
+    right, bottom = x0 + cols * cell_w, y0 + len(rows) * cell_h
+    for r in range(len(rows) + 1):
+        page.draw_line((x0, y0 + r * cell_h), (right, y0 + r * cell_h))
+    for c in range(cols + 1):
+        page.draw_line((x0 + c * cell_w, y0), (x0 + c * cell_w, bottom))
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            page.insert_text((x0 + c * cell_w + 6, y0 + r * cell_h + 20), value, fontsize=10)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def make_csv(rows: list[list[str]], delimiter: str = ";", encoding: str = "cp1252") -> bytes:
+    return "\n".join(delimiter.join(r) for r in rows).encode(encoding)
+
+
+def make_docx(paragraphs: list[str], table: list[list[str]] | None = None) -> bytes:
+    import io
+
+    from docx import Document
+
+    doc = Document()
+    for paragraph in paragraphs:
+        doc.add_paragraph(paragraph)
+    if table:
+        grid = doc.add_table(rows=len(table), cols=len(table[0]))
+        for r, row in enumerate(table):
+            for c, value in enumerate(row):
+                grid.cell(r, c).text = value
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def upload(
+    actor: Actor,
+    tender_id: str,
+    data: bytes,
+    name: str = "tender.pdf",
+    kind: str = "tender_document",
+):
+    return actor.client.post(
+        f"/api/v1/tenders/{tender_id}/documents",
+        files={"file": (name, data, "application/octet-stream")},
+        data={"kind": kind},
+    )
+
+
+def make_tender(actor: Actor, title: str = "Hall wiring") -> str:
+    return actor.client.post("/api/v1/tenders", json={"title": title}).json()["id"]

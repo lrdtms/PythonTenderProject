@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TenderCreate(BaseModel):
@@ -25,6 +25,14 @@ class TenderUpdate(BaseModel):
     location: str | None = Field(default=None, max_length=200)
     closing_at: datetime | None = None
     status: str | None = None
+
+    @field_validator("title", "status")
+    @classmethod
+    def _not_null(cls, value: str | None) -> str:
+        """title and status are NOT NULL: they may be left out, but not set to null."""
+        if value is None:
+            raise ValueError("This field cannot be empty.")
+        return value
 
 
 class TenderDTO(BaseModel):

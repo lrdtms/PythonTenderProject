@@ -6,10 +6,12 @@ from .errors import (
     Forbidden,
     LimitExceeded,
     NotFound,
+    ProcessingFailed,
     RateLimited,
     Unauthorized,
     ValidationFailed,
 )
+from .ports import StoragePort
 from .types import ROLE_PERMISSIONS, OrgContext, Permission, Role
 
 __all__ = [
@@ -21,8 +23,10 @@ __all__ = [
     "NotFound",
     "OrgContext",
     "Permission",
+    "ProcessingFailed",
     "RateLimited",
     "Role",
+    "StoragePort",
     "Unauthorized",
     "ValidationFailed",
 ]

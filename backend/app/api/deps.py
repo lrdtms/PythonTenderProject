@@ -9,7 +9,8 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from app.db.session import get_sessionmaker, set_org
-from app.kernel import OrgContext
+from app.infrastructure.storage import get_storage
+from app.kernel import OrgContext, StoragePort
 from app.modules.identity import public as identity
 
 SESSION_COOKIE = "intel_session"
@@ -28,7 +29,9 @@ def get_session() -> Iterator[Session]:
         session.close()
 
 
-DbSession = Annotated[Session, Depends(get_session)]
+# scope="function": the commit runs when the handler returns, before the response is sent, so a
+# failing commit becomes a 500 instead of a 2xx for work that was never saved.
+DbSession = Annotated[Session, Depends(get_session, scope="function")]
 
 
 def get_ctx(request: Request, session: DbSession) -> OrgContext:
@@ -38,3 +41,6 @@ def get_ctx(request: Request, session: DbSession) -> OrgContext:
 
 
 Ctx = Annotated[OrgContext, Depends(get_ctx)]
+
+
+Storage = Annotated[StoragePort, Depends(get_storage)]

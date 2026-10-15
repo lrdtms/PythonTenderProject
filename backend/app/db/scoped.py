@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from typing import Any, ClassVar
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Delete, Select, delete, select
 from sqlalchemy.orm import Session
 
 from app.kernel import NotFound, OrgContext
@@ -28,6 +28,9 @@ class ScopedRepository[M]:
 
     def _select(self) -> Select[Any]:
         return select(self.model).where(self.model.organisation_id == self.ctx.organisation_id)
+
+    def _delete(self) -> Delete:
+        return delete(self.model).where(self.model.organisation_id == self.ctx.organisation_id)
 
     def get(self, entity_id: UUID) -> M:
         row = self.session.scalar(self._select().where(self.model.id == entity_id))

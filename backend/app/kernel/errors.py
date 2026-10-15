@@ -40,3 +40,13 @@ class LimitExceeded(DomainError):
 
 class RateLimited(DomainError):
     code = "rate_limited"
+
+
+class ProcessingFailed(Exception):
+    """A document-processing failure. `error_code` is a short stable code (never document text);
+    transient failures are retried by the queue, permanent ones are not."""
+
+    def __init__(self, error_code: str, message: str = "", *, transient: bool = False):
+        super().__init__(message or error_code)
+        self.error_code = error_code
+        self.transient = transient

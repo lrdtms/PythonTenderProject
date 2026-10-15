@@ -1,0 +1,153 @@
+"""Repository contract: every ScopedRepository subclass isolates organisations on its own.
+
+The F1 sweep goes through the API, where an ownership check in front of a repository (for
+example the version lookup before PageRepo.one) can hide a missing organisation filter inside
+the repository. This test calls every repository directly with another organisation's ids.
+"""
+
+from __future__ import annotations
+
+import importlib
+import pkgutil
+from collections.abc import Iterator
+from uuid import UUID
+
+import pytest
+from sqlalchemy import select
+
+import app.modules
+from app.db.scoped import ScopedRepository
+from app.db.session import session_scope
+from app.kernel import NotFound, OrgContext, Role
+from app.modules.identity.models import Membership
+from app.worker import handlers
+from app.worker.runner import process_one
+from tests.conftest import Actor, add_member, make_pdf, make_tender, register, upload
+
+
+def _import_every_repo_module() -> list[str]:
+    names = []
+    for info in pkgutil.iter_modules(app.modules.__path__):
+        name = f"{app.modules.__name__}.{info.name}.repo"
+        try:
+            importlib.import_module(name)
+        except ModuleNotFoundError as exc:
+            if exc.name != name:
+                raise
+            continue
+        names.append(name)
+    return names
+
+
+def _subclasses(cls: type) -> Iterator[type]:
+    for sub in cls.__subclasses__():
+        yield sub
+        yield from _subclasses(sub)
+
+
+REPO_MODULES = _import_every_repo_module()
+REPOSITORIES = {cls.__name__: cls for cls in _subclasses(ScopedRepository)}
+EXERCISED = {
+    "TenderRepo",
+    "DocumentRepo",
+    "VersionRepo",
+    "PageRepo",
+    "ChunkRepo",
+    "JobRepo",
+    "MembershipRepo",
+}
+
+
+def test_every_scoped_repository_is_exercised() -> None:
+    assert REPO_MODULES, "no repo.py modules were found"
+    defined_in_repo_modules = {
+        cls.__name__ for cls in REPOSITORIES.values() if cls.__module__ in REPO_MODULES
+    }
+    assert defined_in_repo_modules == set(REPOSITORIES), "a ScopedRepository outside repo.py"
+    missing = set(REPOSITORIES) - EXERCISED
+    assert not missing, f"add {missing} to the repository contract test"
+    assert not EXERCISED - set(REPOSITORIES), "EXERCISED names a repository that is gone"
+
+
+def _seed(email: str, org: str, secret: str) -> Actor:
+    """An organisation with a tender, a document version, its pages and chunks (via the
+    worker), a finished job and two memberships."""
+    actor = register(email, org=org)
+    tender = make_tender(actor, f"{secret} tender")
+    r = upload(actor, tender, make_pdf([f"{secret} clause on page one"]), f"{secret}.pdf")
+    assert r.status_code == 201, r.text
+    assert process_one(handlers.HANDLERS) is True
+    add_member(actor, f"member-{email}", "estimator")
+    return actor
+
+
+def _ctx(actor: Actor) -> OrgContext:
+    me = actor.me
+    with session_scope() as s:
+        membership_id = s.scalar(
+            select(Membership.id).where(
+                Membership.organisation_id == UUID(me["organisation_id"]),
+                Membership.user_id == UUID(me["user_id"]),
+            )
+        )
+    return OrgContext(UUID(me["user_id"]), UUID(me["organisation_id"]), Role.ADMIN, membership_id)
+
+
+def test_repositories_never_return_another_organisations_rows() -> None:
+    b = _seed("b@example.com", "Org B", "Bravo")
+    c = _seed("c@example.com", "Org C", "Charlie")
+    org_b, ctx_c = UUID(b.org_id), _ctx(c)
+
+    with session_scope() as s:
+        b_ids = {
+            name: s.scalars(select(cls.model.id).where(cls.model.organisation_id == org_b)).all()
+            for name, cls in REPOSITORIES.items()
+        }
+        empty = [name for name, ids in b_ids.items() if not ids]
+        assert not empty, f"the seed has no organisation B rows for {empty}"
+
+        # Generic contract: find() and get() on every repository.
+        for name, cls in REPOSITORIES.items():
+            repo = cls(s, ctx_c)
+            rows = repo.find()
+            assert rows, f"{name}.find() returned nothing for organisation C"
+            assert all(r.organisation_id == ctx_c.organisation_id for r in rows), name
+            assert not {r.id for r in rows} & set(b_ids[name]), f"{name}.find() leaked B rows"
+            for b_id in b_ids[name]:
+                with pytest.raises(NotFound):
+                    repo.get(b_id)
+
+        # Query methods that take ids: organisation B's ids give nothing back.
+        repos = {name: cls(s, ctx_c) for name, cls in REPOSITORIES.items()}
+        tender_b, document_b = b_ids["TenderRepo"][0], b_ids["DocumentRepo"][0]
+        version_b = b_ids["VersionRepo"][0]
+        job_subject_b = s.scalar(
+            select(REPOSITORIES["JobRepo"].model.subject_id).where(
+                REPOSITORIES["JobRepo"].model.id == b_ids["JobRepo"][0]
+            )
+        )
+        b_tenders = set(b_ids["TenderRepo"])
+        assert not {t.id for t in repos["TenderRepo"].list_for_org(True)} & b_tenders
+        assert repos["DocumentRepo"].for_tender(tender_b) == []
+        assert repos["VersionRepo"].for_document(document_b) == []
+        assert repos["VersionRepo"].current_for_documents([document_b]) == {}
+        assert repos["VersionRepo"].next_number(document_b) == 1
+        assert repos["PageRepo"].for_version(version_b) == []
+        assert repos["PageRepo"].one(version_b, 1) is None
+        assert repos["ChunkRepo"].search(tender_b, "Bravo", 50) == []
+        assert repos["JobRepo"].latest_for_subject(job_subject_b) is None
+        members = repos["MembershipRepo"].list_with_users()
+        assert {m.organisation_id for m, _ in members} == {ctx_c.organisation_id}
+        assert repos["MembershipRepo"].count_active_admins() == 1
+
+        # Scoped writes aimed at B's ids change nothing of B's.
+        repos["PageRepo"].replace_for_version(version_b, [])
+        repos["ChunkRepo"].replace_for_version(version_b, [])
+        repos["VersionRepo"].clear_current(document_b)
+
+    with session_scope() as s:
+        for name in ("PageRepo", "ChunkRepo"):
+            model = REPOSITORIES[name].model
+            assert s.scalars(select(model.id).where(model.organisation_id == org_b)).all()
+        version = REPOSITORIES["VersionRepo"].model
+        assert s.scalar(select(version.is_current).where(version.id == version_b)) is True

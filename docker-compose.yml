@@ -4,6 +4,7 @@ name: inteltps
 services:
   db:
     image: pgvector/pgvector:pg17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-intel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-intel}
@@ -20,6 +21,7 @@ services:
 
   api:
     build: ./backend
+    restart: unless-stopped
     # Apply database migrations, then serve.
     command: ["sh", "-c", "alembic upgrade head && uvicorn app.api.main:app --host 0.0.0.0 --port 8000"]
     env_file: [.env]
@@ -35,6 +37,8 @@ services:
 
   worker:
     build: ./backend
+    # Comes back on its own after a crash or an out-of-memory kill.
+    restart: unless-stopped
     command: ["python", "-m", "app.worker.main"]
     env_file: [.env]
     environment:
@@ -49,11 +53,16 @@ services:
 
   web:
     build: ./frontend
+    restart: unless-stopped
 
   caddy:
     image: caddy:2
+    restart: unless-stopped
+    # Loopback only: the browser on this machine and cloudflared (on the same host) connect to
+    # 127.0.0.1:8080. Nothing else can reach Caddy, so nobody can send it a forged
+    # CF-Connecting-IP. The api (8000) and web (3000) ports are not published at all.
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:

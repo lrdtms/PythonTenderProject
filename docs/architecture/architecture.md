@@ -28,7 +28,7 @@ Each backend module is a package `modules/<name>/` containing `public.py` (the o
 | `billing` | M1 | Plans and limits (mocked) | `check_and_increment(ctx, metric)` raises `LimitExceeded`; `usage(ctx)` | plans, organisation_usage |
 | `audit` | M1 | Append-only events, with no document text | `record(ctx, entity_type, entity_id, action, safe_metadata)` | audit_events |
 | `tenders` | M1 | Tender workspace and archive | `get(ctx, tender_id) -> TenderDTO` (404 if other org) | tenders |
-| `documents` | M1 | Upload validation, versions, file access | `upload(ctx, tender_id, kind, file) -> (DocumentVersionDTO, job_id)`, `get_version(ctx, id)`, `open_original(ctx, version_id)`, `current_versions(ctx, tender_id)`, `signed_link(ctx, version_id)` | documents, document_versions |
+| `documents` | M1 | Upload validation, versions, file access | `upload(ctx, tender_id, kind, file) -> (DocumentVersionDTO, job_id)`, `get_version(ctx, id)`, `open_original(ctx, version_id)`, `current_versions(ctx, tender_id)` (downloads are an authenticated same-origin endpoint, not signed links) | documents, document_versions |
 | `knowledge` | M2 | Parse, OCR, page text and tables, chunking, embeddings, **the only retrieval path** | `ingest(ctx, version_id, progress) -> IngestResult`, `get_tables(ctx, version_id)`, `iter_sections(ctx, version_id)`, `search(ctx, tender_id, query, k) -> [ChunkHit]` | document_pages, document_chunks |
 | `extraction` | M2 | **Pure core.** BoQ table parser, LLM prompts and schemas, validators, evidence check, merge/de-dupe | `parse_boq(tables) -> [BoqCandidate]`, `refine_boq(cands, llm)`, `extract_requirements(section, llm) -> [RequirementCandidate]`, `merge_requirements(...)`, `parse_quotation(...)` | none. The worker persists `extraction_unit_results` via `knowledge`'s repo (or a small `pipeline` repo) |
 | `estimating` | M4 | BoQ items, review, Decimal calculations, estimate versions | `replace_unreviewed(ctx, version_id, cands)`, `correct_item(ctx, id, patch)`, `compute(ctx, tender_id) -> EstimateDTO`, `set_status(ctx, estimate_id, status)` | boq_items, estimates |
@@ -145,7 +145,7 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 ## 9. Implementation Brief — for stack-specialist agent
 
 ### Components to Build
-- **Edge (Caddy + cloudflared):** single origin. `/api/*` goes to FastAPI and `/*` to Next.js, with no buffering on the ask route.
+- **Edge (Caddy, plus cloudflared on the host):** Caddy is the only edge container, published on `127.0.0.1:8080`; `cloudflared` runs as a host process outside the Compose stack and connects to it. Single origin. `/api/*` goes to FastAPI and `/*` to Next.js, with no buffering on the ask route.
 - **API (FastAPI):** HTTP surface `/api/v1`, auth dependency producing `OrgContext`, consistent error format, rate limits.
 - **Worker:** Postgres job loop (SKIP LOCKED, leases, reaper, backoff), concurrency 1, stage handlers.
 - **kernel:** shared types and ports (`OrgContext`, `SourceRef`, `Money`, `LLMPort`, `EmbeddingPort`, `StoragePort`, `JobQueuePort`).
@@ -196,10 +196,25 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 - FastEmbed inside the API image (for query embeddings) vs embedding queries via Ollama: measure RAM.
 - `tsvector` as a generated column with `simple` config, and whether to add an `english` column.
 - PDF report library: ReportLab (pure Python) vs WeasyPrint (needs Pango system libraries in the image).
-- Tesseract settings: DPI for rasterising (300), `eng` pack, per-page timeout.
+- ~~Tesseract settings~~ Resolved: `eng` pack, 300 DPI, 60 s per-page timeout.
 - Ollama and NVIDIA driver versions that work with Pascal (GTX 1050); the `num_ctx`/`num_gpu` split for 2 GB VRAM.
 - PDF.js integration (`pdfjs-dist` directly vs `react-pdf`) with App Router.
 - Exact import-linter contract set and the CI check for raw `session.execute`.
+
+## Slice 2 notes
+
+- **Search is full-text for now.** Chunks are searched with Postgres `tsvector` (current document versions only, tenant-scoped). Embeddings are deferred to a later slice; the chunk table is unchanged by that.
+- **Downloads are authenticated, not signed links.** `GET /api/v1/document-versions/{id}/file` checks the session and tenant on every request and streams the file (PDFs inline, others as attachment) with `nosniff`, `private, no-store` and `Content-Security-Policy: sandbox`. No signed URLs exist (this supersedes the signed-link text in ADR-0005 item 7 and ADR-0007).
+- **Storage keys** are `org/{org}/tenders/{tender}/{document}/v{n}/{uuid}.{ext}`; the user's (sanitised) filename is metadata only. A stored file is deleted if the upload transaction rolls back.
+- **Search snippets are plain text.** Matches are wrapped in `⟦` and `⟧` (U+27E6/U+27E7), never HTML; snippets are untrusted document text that clients must escape.
+- **OCR route.** A PDF page with no embedded text is rendered at `OCR_DPI` and sent to Tesseract (`tesseract-ocr`, English model, installed in the backend image) one page at a time with a per-page timeout and `OMP_THREAD_LIMIT=1`. The rendered image is capped at `OCR_MAX_MEGAPIXELS` (40): a larger page is rendered at a lower DPI (never below 100), and a page still too large is marked `ocr_failed` without rendering. Text and mean word confidence are stored on the page (`text_source = "ocr"`).
+- **Spreadsheet caps.** The declared sheet dimension is ignored (rows are not padded to it) and trailing empty cells are trimmed. More than `XLSX_MAX_COLUMNS` (200) columns in a row, more than `XLSX_MAX_CELLS` (2,000,000) cells in a file (XLSX or CSV), or more than 100,000 rows in a sheet fails the job with `SHEET_TOO_LARGE`. NUL characters are removed from all extracted text, labels and cells.
+- **`processing_status`** of a document version: `pending`, `processing`, `ready`, `ready_with_warnings`, `failed`. `processing` is committed on its own as soon as the worker claims the job, so clients see it while ingest runs. When a job fails for good (including a job reaped as `LEASE_EXPIRED`), its version becomes `failed`; a version whose ingest already committed (`ready`) is never set back to `failed`.
+- **Job warning codes** (job ends `succeeded_with_warnings`): `OCR_FAILED`, `OCR_LOW_CONFIDENCE`, `OCR_UNAVAILABLE`, each with the affected page numbers. **Failure codes** (job `failed`, never contain document text): `FILE_CORRUPT`, `PDF_ENCRYPTED`, `UNSUPPORTED_FORMAT`, `SHEET_TOO_LARGE` (permanent), `NO_HANDLER`, `UNEXPECTED`, `LEASE_EXPIRED` (the worker died on the last attempt), and `INFRASTRUCTURE` once retries are used up.
+- **Transient errors.** Database connection errors (`OperationalError`, `InterfaceError`, invalidated connections) and storage `OSError`s requeue the job with backoff (`INFRASTRUCTURE`, 30 s x attempt) up to `max_attempts` (3); anything else is permanent. If the handler's transaction committed but recording success fails, completion is retried and then left to the lease reaper; the version is not failed.
+- **Worker logs** carry job IDs, error codes and exception type names only: no tracebacks or exception messages (they can hold document text), and the engine uses `hide_parameters=True`.
+- **Restart policy.** Every Compose service has `restart: unless-stopped`, so a worker killed by the kernel comes back on its own.
+- **Every entry point registers all models.** `app.infrastructure.model_registry.import_all_models()` imports each `app.modules.*.models`; the API, worker and Alembic env call it, so SQLAlchemy can resolve foreign keys in any process. `tests/test_worker_isolation.py` guards the worker.
 
 ## 10. Next steps
 

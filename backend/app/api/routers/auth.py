@@ -8,7 +8,6 @@ from app.api.deps import SESSION_COOKIE, Ctx, DbSession
 from app.api.ratelimit import client_ip, limiter
 from app.config import get_settings
 from app.modules.identity import public as identity
-from app.modules.identity.service import SESSION_LIFETIME
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 
@@ -17,10 +16,10 @@ def _set_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         token,
-        max_age=int(SESSION_LIFETIME.total_seconds()),
+        max_age=int(identity.SESSION_LIFETIME.total_seconds()),
         httponly=True,
         samesite="lax",
-        secure=get_settings().environment != "development",
+        secure=get_settings().cookie_secure,
         path="/api",
     )
 
@@ -39,7 +38,10 @@ def register(
 
 @router.post("/auth/login", response_model=identity.MeDTO)
 def login(body: identity.LoginRequest, request: Request, response: Response, session: DbSession):
-    limiter.check(f"login:{client_ip(request)}:{body.email.lower()}", limit=10, window_seconds=300)
+    ip = client_ip(request)
+    # Per IP (password spraying across emails) and per IP and email (guessing one account).
+    limiter.check(f"login-ip:{ip}", limit=30, window_seconds=300)
+    limiter.check(f"login:{ip}:{body.email.lower()}", limit=10, window_seconds=300)
     token, ctx = identity.login(session, body.email, body.password)
     _set_cookie(response, token)
     return identity.me(session, ctx)

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import select, update
 
 from app.db.session import session_scope
@@ -119,3 +120,221 @@ def test_state_changing_requests_need_the_csrf_header(admin) -> None:
     assert (
         admin.client.post("/api/v1/tenders", json={"title": "x"}, headers=CSRF).status_code == 201
     )
+
+
+# --- rate limiting (review I-2) ------------------------------------------------------------------
+
+
+def _wrong_login(c, email: str = "owner@example.com", headers: dict | None = None) -> int:
+    return c.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "wrong-password-1"},
+        headers=headers or {},
+    ).status_code
+
+
+def test_rotating_x_forwarded_for_does_not_escape_the_login_limit(admin) -> None:
+    c = make_client()
+    codes = [_wrong_login(c, headers={"X-Forwarded-For": f"10.0.0.{i}"}) for i in range(12)]
+    assert codes[:10] == [401] * 10 and codes[10:] == [429, 429]
+
+
+def test_spraying_one_password_across_many_emails_is_limited_per_ip(admin) -> None:
+    c = make_client()
+    codes = [_wrong_login(c, email=f"user{i}@example.com") for i in range(40)]
+    assert codes[:30] == [401] * 30 and set(codes[30:]) == {429}
+
+
+def test_the_configured_client_ip_header_is_honoured(admin, monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "client_ip_header", "X-Client-IP")
+    c = make_client()
+    first = [_wrong_login(c, headers={"X-Client-IP": "203.0.113.1"}) for _ in range(11)]
+    assert first[:10] == [401] * 10 and first[10] == 429
+    # Another visitor behind the same proxy has their own bucket.
+    assert _wrong_login(c, headers={"X-Client-IP": "203.0.113.2"}) == 401
+
+
+def _request(headers: dict[str, str]):
+    from starlette.requests import Request
+
+    raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+    return Request({"type": "http", "headers": raw, "client": ("198.51.100.7", 5000)})
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        ({"X-Client-IP": "203.0.113.9"}, "203.0.113.9"),
+        ({"X-Client-IP": " 2001:db8::1 "}, "2001:db8::1"),
+        ({"X-Client-IP": "not-an-ip"}, "198.51.100.7"),
+        ({"X-Client-IP": "203.0.113.9, 10.0.0.1"}, "198.51.100.7"),
+        ({"X-Client-IP": ""}, "198.51.100.7"),
+        ({}, "198.51.100.7"),
+    ],
+)
+def test_client_ip_uses_a_valid_header_value_else_the_peer(monkeypatch, headers, expected) -> None:
+    from app.api.ratelimit import client_ip
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "client_ip_header", "X-Client-IP")
+    assert client_ip(_request(headers)) == expected
+
+
+def test_client_ip_ignores_headers_when_none_is_configured(monkeypatch) -> None:
+    from app.api.ratelimit import client_ip
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "client_ip_header", None)
+    spoofed = {"X-Client-IP": "203.0.113.9", "X-Forwarded-For": "203.0.113.10"}
+    assert client_ip(_request(spoofed)) == "198.51.100.7"
+
+
+def test_register_is_rate_limited(client) -> None:
+    codes = [
+        client.post(
+            "/api/v1/auth/register",
+            json={"organisation_name": f"Org {i}", "name": "N", "email": f"r{i}@example.com",
+                  "password": STRONG_PASSWORD},
+        ).status_code
+        for i in range(6)
+    ]  # fmt: skip
+    assert codes == [201] * 5 + [429]
+
+
+def test_member_creation_is_rate_limited_per_organisation(admin) -> None:
+    # Probing addresses with an existing email (409) still counts toward the limit.
+    body = {"name": "X", "email": "owner@example.com", "role": "reviewer",
+            "password": STRONG_PASSWORD}  # fmt: skip
+    codes = [admin.client.post("/api/v1/members", json=body).status_code for _ in range(21)]
+    assert codes == [409] * 20 + [429]
+
+
+# --- secure cookie (review I-3) ------------------------------------------------------------------
+
+
+def _register_cookie(client) -> str:
+    r = client.post(
+        "/api/v1/auth/register",
+        json={"organisation_name": "Acme", "name": "Ann", "email": "ann@example.com",
+              "password": STRONG_PASSWORD},
+    )  # fmt: skip
+    assert r.status_code == 201
+    return r.headers["set-cookie"].lower()
+
+
+def test_cookie_secure_defaults_to_on() -> None:
+    from app.config import Settings
+
+    assert Settings.model_fields["cookie_secure"].default is True
+
+
+def test_session_cookie_is_secure_when_the_setting_is_on(client, monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "cookie_secure", True)
+    assert "secure" in _register_cookie(client)
+
+
+def test_session_cookie_is_not_secure_when_the_setting_is_off(client, monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "cookie_secure", False)
+    assert "secure" not in _register_cookie(client)
+
+
+# --- small items (review minors) -----------------------------------------------------------------
+
+
+def test_login_upgrades_an_outdated_password_hash(admin, monkeypatch) -> None:
+    from argon2 import PasswordHasher
+
+    from app.modules.identity import passwords
+    from app.modules.identity.models import User
+
+    with session_scope() as s:
+        before = s.scalar(select(User.password_hash))
+    stronger = PasswordHasher(time_cost=passwords._hasher.time_cost + 1)
+    monkeypatch.setattr(passwords, "_hasher", stronger)
+    r = make_client().post(
+        "/api/v1/auth/login", json={"email": "owner@example.com", "password": STRONG_PASSWORD}
+    )
+    assert r.status_code == 200
+    with session_scope() as s:
+        after = s.scalar(select(User.password_hash))
+    assert after != before and not stronger.check_needs_rehash(after)
+    assert stronger.verify(after, STRONG_PASSWORD)
+
+
+def test_patch_and_logout_need_the_csrf_header(admin) -> None:
+    tid = admin.client.post("/api/v1/tenders", json={"title": "T"}).json()["id"]
+    no_header = make_client()
+    no_header.headers.pop("X-Requested-With")
+    no_header.cookies.update(admin.client.cookies)
+    patch = no_header.patch(f"/api/v1/tenders/{tid}", json={"title": "changed"})
+    assert patch.status_code == 403 and patch.json()["error"]["code"] == "csrf_failed"
+    logout = no_header.post("/api/v1/auth/logout")
+    assert logout.status_code == 403 and logout.json()["error"]["code"] == "csrf_failed"
+    # Neither went through: the title is unchanged and the session is still live.
+    assert admin.client.get(f"/api/v1/tenders/{tid}").json()["title"] == "T"
+    assert admin.client.get("/api/v1/me").status_code == 200
+
+
+def test_member_actions_and_login_are_audited(admin) -> None:
+    from tests.conftest import add_member
+
+    add_member(admin, "est@example.com", "estimator")  # logs in as the new member
+    mid = next(
+        m["membership_id"]
+        for m in admin.client.get("/api/v1/members").json()
+        if m["email"] == "est@example.com"
+    )
+    admin.client.patch(f"/api/v1/members/{mid}/role", json={"role": "reviewer"})
+    admin.client.post(f"/api/v1/members/{mid}/reset-password", json={"password": "another-pass-1"})
+    admin.client.post(f"/api/v1/members/{mid}/deactivate")
+    with session_scope() as s:
+        events = s.scalars(select(AuditEvent).order_by(AuditEvent.created_at)).all()
+    by_action = {e.action: e for e in events}
+    for action in ("login", "role_changed", "password_reset", "member_deactivated"):
+        assert action in by_action, action
+        assert by_action[action].organisation_id is not None
+    assert by_action["role_changed"].event_metadata == {
+        "old_role": "estimator",
+        "new_role": "reviewer",
+    }
+    assert "another-pass-1" not in str([e.event_metadata for e in events])
+
+
+def test_get_ctx_sets_the_transaction_local_org_id(admin) -> None:
+    from sqlalchemy import text
+    from starlette.requests import Request
+
+    from app.api.deps import SESSION_COOKIE, get_ctx
+
+    token = admin.client.cookies.get(SESSION_COOKIE)
+    request = Request(
+        {"type": "http", "headers": [(b"cookie", f"{SESSION_COOKIE}={token}".encode())]}
+    )
+    setting = text("SELECT current_setting('app.org_id', true)")
+    with session_scope() as s:
+        assert not s.scalar(setting)
+        ctx = get_ctx(request, s)
+        assert s.scalar(setting) == str(ctx.organisation_id) == admin.org_id
+        s.commit()
+        assert not s.scalar(setting)  # transaction-local: gone after the commit
+
+
+def test_cookie_secure_off_is_refused_outside_development(monkeypatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SECRET_KEY", "a-real-secret-for-this-test")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    with pytest.raises(RuntimeError, match="COOKIE_SECURE"):
+        get_settings.__wrapped__()
+    monkeypatch.setenv("COOKIE_SECURE", "true")
+    assert get_settings.__wrapped__().cookie_secure is True
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    assert get_settings.__wrapped__().cookie_secure is False

@@ -32,3 +32,6 @@ eval/.venv/
 
 # Evaluation run output
 eval/runs/
+
+# Subagent-driven-development scratch workspace
+.superpowers/

@@ -83,6 +83,8 @@ def login(session: Session, email: str, password: str) -> tuple[str, OrgContext]
         # Commit the audit row even though the request fails.
         session.commit()
         raise Unauthorized(INVALID_LOGIN)
+    if passwords.needs_rehash(user.password_hash):
+        user.password_hash = passwords.hash_password(password)  # upgrade to current parameters
     ctx = OrgContext(user.id, membership.organisation_id, Role(membership.role), membership.id)
     audit.record(session, ctx, "session", None, "login")
     return _new_session(session, user.id, membership.organisation_id), ctx
@@ -168,6 +170,7 @@ def change_role(session: Session, ctx: OrgContext, membership_id: UUID, role: Ro
     repo, membership = _target(session, ctx, membership_id)
     if (
         membership.role == Role.ADMIN.value
+        and membership.status == "active"
         and role != Role.ADMIN
         and repo.count_active_admins() <= 1
     ):
@@ -184,7 +187,12 @@ def set_member_status(
 ) -> MemberDTO:
     ctx.require(Permission.MANAGE_MEMBERS)
     repo, membership = _target(session, ctx, membership_id)
-    if not active and membership.role == Role.ADMIN.value and repo.count_active_admins() <= 1:
+    if (
+        not active
+        and membership.role == Role.ADMIN.value
+        and membership.status == "active"
+        and repo.count_active_admins() <= 1
+    ):
         raise ValidationFailed("An organisation needs at least one active admin.")
     membership.status = "active" if active else "deactivated"
     if not active:
@@ -202,5 +210,6 @@ def reset_member_password(
     user = repo.user_for(membership)
     passwords.check_policy(password, user.email)
     user.password_hash = passwords.hash_password(password)
-    SessionRepo(session).revoke_for_membership(membership.organisation_id, membership.user_id)
+    # The password is global to the user, so every session goes, not only this organisation's.
+    SessionRepo(session).revoke_for_user(membership.user_id)
     audit.record(session, ctx, "membership", membership.id, "password_reset")

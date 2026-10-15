@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.kernel import OrgContext, Permission, ValidationFailed
+from app.kernel import Conflict, OrgContext, Permission, ValidationFailed
 from app.modules.audit import public as audit
 
 from .models import TENDER_STATUSES, Tender
@@ -51,6 +51,11 @@ def update_tender(
         raise ValidationFailed(
             f"Status must be one of: {', '.join(TENDER_STATUSES)}.", {"field": "status"}
         )
+    if tender.status == "archived":
+        if changes == {"status": "archived"}:
+            return _dto(tender)  # archiving again is a no-op
+        if set(changes) != {"status"}:
+            raise Conflict("An archived tender is read-only. Re-open it first.")
     old_status = tender.status
     for key, value in changes.items():
         setattr(tender, key, value)

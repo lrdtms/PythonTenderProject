@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import ipaddress
 import threading
 import time
 from collections import defaultdict, deque
 
 from fastapi import Request
 
+from app.config import get_settings
 from app.kernel import RateLimited
 
 
@@ -35,5 +37,13 @@ limiter = SlidingWindowLimiter()
 
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    """The configured proxy header when set (CF-Connecting-IP behind the tunnel), otherwise the
+    socket peer. X-Forwarded-For is never trusted: any client can send it."""
+    header = get_settings().client_ip_header
+    if header:
+        value = request.headers.get(header, "").strip()
+        try:
+            return str(ipaddress.ip_address(value))
+        except ValueError:
+            pass  # missing or not a single valid address: use the peer
+    return request.client.host if request.client else "unknown"
