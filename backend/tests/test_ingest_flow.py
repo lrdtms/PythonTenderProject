@@ -360,3 +360,58 @@ def test_csv_with_nul_bytes_ingests_with_them_removed(admin) -> None:
     page = admin.client.get(f"{API}/document-versions/{vid}/pages/1").json()
     assert "\x00" not in page["text"] and "Nulified cable | 7" in page["text"]
     assert ["Nulified cable", "7"] in page["tables"][0]["rows"]
+
+
+def test_reaped_job_fails_its_version(admin) -> None:
+    """A worker that crashed on the last attempt: the reaper fails the job AND its version."""
+    from datetime import timedelta
+
+    from sqlalchemy import update
+
+    from app.modules.jobs import public as jobs
+
+    tid = make_tender(admin)
+    body = upload(admin, tid, make_pdf(["text"])).json()
+    with session_scope() as s:
+        claimed = jobs.claim_next(s, 60)  # the worker took it, then died
+    assert claimed and str(claimed.id) == body["job_id"]
+    with session_scope() as s:
+        s.execute(
+            update(Job)
+            .where(Job.id == claimed.id)
+            .values(leased_until=datetime.now(UTC) - timedelta(seconds=1), attempt_count=3)
+        )
+    assert run_worker() is False  # nothing left to run
+    job = get_job(admin, body["job_id"])
+    assert job["status"] == "failed" and job["error_code"] == "LEASE_EXPIRED"
+    v = get_version(admin, body["document"]["id"], body["version"]["id"])
+    assert v["processing_status"] == "failed"
+
+
+def test_processing_status_is_visible_while_ingest_runs(admin, monkeypatch) -> None:
+    import threading
+
+    from app.modules.knowledge import service as knowledge_service
+
+    real_parse = knowledge_service.parse_document
+    started, release = threading.Event(), threading.Event()
+
+    def slow_parse(*args, **kwargs):
+        started.set()
+        assert release.wait(10)
+        return real_parse(*args, **kwargs)
+
+    monkeypatch.setattr(knowledge_service, "parse_document", slow_parse)
+    tid = make_tender(admin)
+    body = upload(admin, tid, make_pdf(["Slow tender text for the parser."])).json()
+    did, vid = body["document"]["id"], body["version"]["id"]
+    worker = threading.Thread(target=run_worker)
+    worker.start()
+    try:
+        assert started.wait(10)
+        seen = get_version(admin, did, vid)["processing_status"]  # another session
+    finally:
+        release.set()
+        worker.join(10)
+    assert seen == "processing"
+    assert get_version(admin, did, vid)["processing_status"] == "ready"

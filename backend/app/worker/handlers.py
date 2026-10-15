@@ -34,10 +34,16 @@ def ingest_document(
     return result.warnings
 
 
+def ingest_started(session: Session, ctx: OrgContext, job: jobs.ClaimedJob) -> None:
+    knowledge.mark_processing(session, ctx, job.subject_id)
+
+
 def ingest_failed(session: Session, ctx: OrgContext, job: jobs.ClaimedJob) -> None:
     knowledge.mark_failed(session, ctx, job.subject_id)
 
 
 HANDLERS: dict[str, JobHandler] = {
-    documents.INGEST_JOB: JobHandler(run=ingest_document, on_failure=ingest_failed),
+    documents.INGEST_JOB: JobHandler(
+        run=ingest_document, on_failure=ingest_failed, on_start=ingest_started
+    ),
 }

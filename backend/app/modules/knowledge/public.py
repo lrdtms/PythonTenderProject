@@ -2,7 +2,14 @@
 
 from .ocr import OcrFailed, OcrRunner, TesseractOcr
 from .schemas import IngestResult, PageDetailDTO, PageDTO, SearchHitDTO
-from .service import get_page, ingest_version, list_pages, mark_failed, search_tender
+from .service import (
+    get_page,
+    ingest_version,
+    list_pages,
+    mark_failed,
+    mark_processing,
+    search_tender,
+)
 
 __all__ = [
     "IngestResult",
@@ -16,5 +23,6 @@ __all__ = [
     "ingest_version",
     "list_pages",
     "mark_failed",
+    "mark_processing",
     "search_tender",
 ]

@@ -11,6 +11,7 @@ from .service import (
     get_job,
     heartbeat,
     latest_job_for_subject,
+    reap_exhausted,
     retry_job,
 )
 
@@ -26,5 +27,6 @@ __all__ = [
     "get_job",
     "heartbeat",
     "latest_job_for_subject",
+    "reap_exhausted",
     "retry_job",
 ]

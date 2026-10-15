@@ -36,7 +36,6 @@ def ingest_version(
     """Parse a stored file and replace its pages and chunks. Safe to run again (idempotent):
     the original file is never touched, and a failure leaves the previous results in place."""
     info = documents.processing_info(session, ctx, version_id)
-    documents.set_processing_status(session, ctx, version_id, "processing")
     with storage.open(info.storage_key) as fh:
         data = fh.read()
     parsed = parse_document(info.file_format, data, ocr, ocr_dpi, progress)
@@ -71,6 +70,11 @@ def ingest_version(
     final = "ready_with_warnings" if warnings else "ready"
     documents.set_processing_status(session, ctx, version_id, final)
     return IngestResult(pages=len(parsed), chunks=len(drafts), warnings=warnings)
+
+
+def mark_processing(session: Session, ctx: OrgContext, version_id: UUID) -> None:
+    """Committed on its own by the worker before ingest starts, so clients can see it."""
+    documents.set_processing_status(session, ctx, version_id, "processing")
 
 
 def mark_failed(session: Session, ctx: OrgContext, version_id: UUID) -> None:

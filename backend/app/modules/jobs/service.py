@@ -60,10 +60,7 @@ def retry_job(session: Session, ctx: OrgContext, job_id: UUID) -> JobDTO:
 # --- worker side (system level) ----------------------------------------------------------------
 
 
-def claim_next(session: Session, lease_seconds: int) -> ClaimedJob | None:
-    job = QueueRepo(session).claim(lease_seconds)
-    if job is None:
-        return None
+def _claimed(job: Job) -> ClaimedJob:
     return ClaimedJob(
         id=job.id,
         organisation_id=job.organisation_id,
@@ -75,6 +72,17 @@ def claim_next(session: Session, lease_seconds: int) -> ClaimedJob | None:
         max_attempts=job.max_attempts,
         created_by=job.created_by,
     )
+
+
+def reap_exhausted(session: Session) -> list[ClaimedJob]:
+    """Fail running jobs whose lease expired with no attempts left (LEASE_EXPIRED: the worker
+    died on the last attempt). The caller runs each handler's failure hook."""
+    return [_claimed(job) for job in QueueRepo(session).reap_exhausted()]
+
+
+def claim_next(session: Session, lease_seconds: int) -> ClaimedJob | None:
+    job = QueueRepo(session).claim(lease_seconds)
+    return _claimed(job) if job is not None else None
 
 
 def heartbeat(session: Session, job_id: UUID, done: int, total: int, lease_seconds: int) -> None:

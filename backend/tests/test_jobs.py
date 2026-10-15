@@ -75,8 +75,12 @@ def test_expired_lease_is_reclaimed_until_attempts_run_out(admin) -> None:
 
     set_job(job.id, leased_until=datetime.now(UTC) - timedelta(seconds=1), attempt_count=3)
     with session_scope() as s:
-        assert jobs.claim_next(s, 60) is None  # exhausted
+        assert jobs.claim_next(s, 60) is None  # exhausted: never claimed again
     with session_scope() as s:
+        reaped = jobs.reap_exhausted(s)  # the worker runs each reaped job's failure hook
+    assert [r.id for r in reaped] == [job.id] and reaped[0].organisation_id == UUID(admin.org_id)
+    with session_scope() as s:
+        assert jobs.reap_exhausted(s) == []
         done = jobs.get_for_worker(s, job.id)
     assert done.status == "failed" and done.error_code == "LEASE_EXPIRED"
 

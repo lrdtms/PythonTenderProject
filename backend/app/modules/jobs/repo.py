@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, text, update
+from sqlalchemy import desc, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -67,19 +67,23 @@ class QueueRepo:
     def __init__(self, session: Session):
         self.session = session
 
-    def reap_exhausted(self) -> None:
-        """Running jobs whose lease expired and that used all attempts become failed."""
-        self.session.execute(
-            text(
-                "UPDATE jobs SET status='failed', error_code='LEASE_EXPIRED', completed_at=now(), "
-                "leased_until=NULL WHERE status='running' AND leased_until < now() "
-                "AND attempt_count >= max_attempts"
-            )
+    def reap_exhausted(self) -> list[Job]:
+        """Running jobs whose lease expired and that used all attempts become failed. Returns
+        them, so the worker can run each handler's failure hook (e.g. mark the version failed)."""
+        reap = text(
+            "UPDATE jobs SET status='failed', error_code='LEASE_EXPIRED', completed_at=now(), "
+            "leased_until=NULL WHERE status='running' AND leased_until < now() "
+            "AND attempt_count >= max_attempts RETURNING id"
         )
+        ids = self.session.execute(reap).scalars().all()
+        if not ids:
+            return []
+        self.session.expire_all()
+        return list(self.session.scalars(select(Job).where(Job.id.in_(ids))).all())
 
     def claim(self, lease_seconds: int) -> Job | None:
-        """Atomically take the next runnable job (queued, or running with an expired lease)."""
-        self.reap_exhausted()
+        """Atomically take the next runnable job (queued, or running with an expired lease).
+        Exhausted jobs are not claimable; reap_exhausted fails them."""
         row = self.session.execute(
             text(
                 """
