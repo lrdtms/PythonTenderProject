@@ -24,9 +24,12 @@ Slimmer schema (no free-text `description`): qwen3:4b 105-124 s per section, rec
 6. **Structured output works.** Ollama's `format` (JSON schema) produced valid JSON in all runs where output was not truncated. The first llama3.2 attempt failed only because verbose output hit the 1,024-token cap; the cap is now 2,048. `think: false` worked for Qwen3.
 7. **Model load times:** 4-23 s when cached, but a cold first load of llama3.2 took 75 s. Preload before demos.
 
+## Container to host Ollama: works
+
+With Docker Desktop on Windows, the `api` container reached the native Ollama through `LLM_BASE_URL=http://host.docker.internal:11434` (returned version 0.40.4) **without** setting `OLLAMA_HOST=0.0.0.0`. The full stack (db, api, worker, web, caddy) started, `/api/v1/health` and `/api/v1/health/db` returned ok through Caddy on port 8080, and the pgvector extension (0.8.7) can be created in the database. Other members on Mac/Linux may still need `OLLAMA_HOST=0.0.0.0` (see README).
+
 ## Not tested
 
-- **Container to host Ollama** (the second half of M2-1): Docker Desktop was not running. Test with `docker compose up` and `curl http://host.docker.internal:11434/api/version` from the api container.
 - Real-world section density, scanned/low-quality text, BoQ refinement, quotation extraction, larger models, `qwen3:1.7b`, a smaller `num_ctx` to improve GPU fit.
 - Only 1 section and 2 runs per model: indicative, not statistical.
 
