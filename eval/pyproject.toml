@@ -30,3 +30,4 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "synthgen/catalogue.py" = ["E501"]  # data tables and fictional prose
+"tests/test_harness.py" = ["E501"]  # compact test data literals
