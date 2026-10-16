@@ -6,13 +6,16 @@ if a re-run deleted the row in between)."""
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api.deps import Ctx, DbSession
 from app.api.reviewers import with_reviewer_names
+from app.kernel.vocab import REQUIREMENT_TYPES
 from app.modules.checklist import public as checklist
+from app.modules.documents import public as documents
 from app.modules.estimating import public as estimating
 from app.modules.pipeline import public as pipeline
 
@@ -63,3 +66,22 @@ def confirm_requirement(requirement_id: UUID, ctx: Ctx, session: DbSession):
 @router.post("/requirements/{requirement_id}/reject", response_model=checklist.RequirementDTO)
 def reject_requirement(requirement_id: UUID, ctx: Ctx, session: DbSession):
     return _requirement(session, ctx, requirement_id, "reject")
+
+
+@router.get("/tenders/{tender_id}/requirements", response_model=list[checklist.RequirementDTO])
+def tender_requirements(
+    tender_id: UUID,
+    ctx: Ctx,
+    session: DbSession,
+    review_status: Literal["unreviewed", "confirmed", "corrected", "rejected"] | None = None,
+    requirement_type: Literal[*REQUIREMENT_TYPES] | None = None,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+):
+    """The checklist: requirements of every document's current version in this tender."""
+    docs = documents.list_documents(session, ctx, tender_id)  # NotFound for another organisation
+    version_ids = [d.current_version.id for d in docs if d.current_version]
+    rows = checklist.list_for_versions(
+        session, ctx, version_ids, review_status, requirement_type, limit, offset
+    )
+    return with_reviewer_names(session, ctx, rows)

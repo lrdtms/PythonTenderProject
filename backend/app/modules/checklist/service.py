@@ -98,6 +98,25 @@ def list_requirements(
     return [_dto(i) for i in repo.for_version(version_id, limit, max(0, offset))]
 
 
+def list_for_versions(
+    session: Session,
+    ctx: OrgContext,
+    version_ids: Sequence[UUID],
+    review_status: str | None = None,
+    requirement_type: str | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[RequirementDTO]:
+    """Requirements across several document versions (the caller picks the current ones)."""
+    ctx.require(Permission.READ)
+    if not version_ids:
+        return []
+    limit = max(1, min(limit, 1000))
+    repo = RequirementRepo(session, ctx)
+    rows = repo.for_versions(version_ids, review_status, requirement_type, limit, max(0, offset))
+    return [_dto(r) for r in rows]
+
+
 def version_of(session: Session, ctx: OrgContext, item_id: UUID) -> UUID:
     ctx.require(Permission.REVIEW_DATA)
     return RequirementRepo(session, ctx).version_id_of(item_id)

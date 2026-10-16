@@ -27,6 +27,26 @@ class RequirementRepo(ScopedRepository[Requirement]):
         )
         return self.session.scalars(stmt).all()
 
+    def for_versions(
+        self,
+        version_ids: Sequence[UUID],
+        review_status: str | None,
+        requirement_type: str | None,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Requirement]:
+        stmt = self._select().where(Requirement.document_version_id.in_(version_ids))
+        if review_status:
+            stmt = stmt.where(Requirement.review_status == review_status)
+        if requirement_type:
+            stmt = stmt.where(Requirement.requirement_type == requirement_type)
+        stmt = (
+            stmt.order_by(Requirement.source_order, Requirement.position, Requirement.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return self.session.scalars(stmt).all()
+
     def reviewed(self, version_id: UUID) -> Sequence[Requirement]:
         return self.find(
             Requirement.document_version_id == version_id,

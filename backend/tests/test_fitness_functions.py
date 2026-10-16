@@ -121,7 +121,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     schema_count = sum(
         len(ops) for path, ops in fastapi_app.openapi()["paths"].items() if "{" in path
     )
-    assert swept == schema_count >= 28, f"swept {swept} of {schema_count} routes with an id"
+    assert swept == schema_count >= 29, f"swept {swept} of {schema_count} routes with an id"
     paths = {p for _, p, _ in routes}
     for needle in (
         "documents",
