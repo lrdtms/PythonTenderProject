@@ -45,13 +45,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             disabled={logout.isPending}
-            onClick={() => logout.mutate(undefined, { onSettled: () => router.replace("/login") })}
+            onClick={() => logout.mutate(undefined, { onSuccess: () => router.replace("/login") })}
             className="rounded border border-zinc-300 px-3 py-1 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
             Sign out
           </button>
         </div>
       </header>
+      {logout.isError ? (
+        <p role="alert" className="bg-red-100 px-4 py-2 text-sm text-red-900">
+          Could not sign out. Try again.
+        </p>
+      ) : null}
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-8">
         {children}
       </main>

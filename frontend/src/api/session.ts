@@ -1,6 +1,7 @@
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { get, post } from "./client";
+import { ApiError } from "./errors";
 import type { LoginInput, Me, RegisterInput } from "./types";
 
 export const meQueryOptions = queryOptions({
@@ -35,7 +36,17 @@ export function useRegister() {
 export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => post<void>("/api/v1/auth/logout"),
-    onSettled: () => queryClient.clear(), // drop every cached tenant row, signed in or not
+    mutationFn: async () => {
+      try {
+        await post<void>("/api/v1/auth/logout");
+      } catch (error) {
+        // 401: the session is already gone, which is what signing out wants.
+        if (error instanceof ApiError && error.isUnauthorized) return;
+        throw error;
+      }
+    },
+    // Only once the server has ended the session: on a failure the cookie is still valid, so the
+    // user stays signed in (and sees an error) rather than being shown a fake sign-out.
+    onSuccess: () => queryClient.clear(),
   });
 }
