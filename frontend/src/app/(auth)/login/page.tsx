@@ -12,7 +12,7 @@ import { Field } from "@/components/field";
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
-  const { data: me } = useQuery(meQueryOptions);
+  const { data: me, isPending } = useQuery(meQueryOptions);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -23,7 +23,11 @@ export default function LoginPage() {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (login.isPending) return;
-    login.mutate({ email, password }, { onSuccess: () => router.replace("/tenders") });
+    login.mutate({ email, password });
+  }
+
+  if (isPending || me) {
+    return <p role="status" className="text-sm text-zinc-500">Loading…</p>;
   }
 
   return (

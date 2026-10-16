@@ -54,4 +54,24 @@ describe("AuthGate", () => {
     expect((await screen.findAllByRole("alert")).at(-1)).toHaveTextContent(/could not reach the server/i);
     expect(replace).not.toHaveBeenCalled();
   });
+
+  it("keeps the app mounted when a later refetch fails with a server error", async () => {
+    fetchMock.mockResolvedValueOnce(respond(200, ME));
+    const { client } = renderWithClient(<AuthGate><Who /></AuthGate>);
+    expect(await screen.findByText("Esta Mator|true|false")).toBeInTheDocument();
+    fetchMock.mockResolvedValueOnce(respond(500, errorBody("internal_error", "Something went wrong.")));
+    await client.invalidateQueries({ queryKey: ["me"] });
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("Esta Mator|true|false")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("redirects to /login when a later refetch returns 401", async () => {
+    fetchMock.mockResolvedValueOnce(respond(200, ME));
+    const { client } = renderWithClient(<AuthGate><Who /></AuthGate>);
+    expect(await screen.findByText("Esta Mator|true|false")).toBeInTheDocument();
+    fetchMock.mockResolvedValueOnce(respond(401, errorBody("unauthorized", "Sign in.")));
+    await client.invalidateQueries({ queryKey: ["me"] });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+  });
 });

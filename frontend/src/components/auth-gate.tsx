@@ -34,7 +34,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (isPending || unauthorized) {
     return <p role="status" className="p-8 text-sm text-zinc-500">Loading…</p>;
   }
-  if (error || !me) {
+  if (!me) {
     return (
       <div role="alert" className="mx-auto max-w-md p-8">
         <p className="mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
@@ -48,5 +48,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  return <SessionContext value={me}>{children}</SessionContext>;
+  return (
+    <SessionContext value={me}>
+      {error ? (
+        <p role="status" className="bg-amber-100 px-4 py-2 text-sm text-amber-900">
+          Could not refresh your session. Showing the last known data.
+        </p>
+      ) : null}
+      {children}
+    </SessionContext>
+  );
 }

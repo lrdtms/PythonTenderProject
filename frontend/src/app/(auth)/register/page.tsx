@@ -12,7 +12,7 @@ import { Field } from "@/components/field";
 export default function RegisterPage() {
   const router = useRouter();
   const register = useRegister();
-  const { data: me } = useQuery(meQueryOptions);
+  const { data: me, isPending } = useQuery(meQueryOptions);
   const [organisationName, setOrganisationName] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -27,8 +27,11 @@ export default function RegisterPage() {
     if (register.isPending) return;
     register.mutate(
       { organisation_name: organisationName, name, email, password },
-      { onSuccess: () => router.replace("/tenders") },
     );
+  }
+
+  if (isPending || me) {
+    return <p role="status" className="text-sm text-zinc-500">Loading…</p>;
   }
 
   return (

@@ -35,6 +35,7 @@ describe("login page", () => {
     await userEvent.type(screen.getByLabelText(/password/i), "correct-horse-battery");
     await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/tenders"));
+    expect(replace).toHaveBeenCalledTimes(1);
     const call = fetchMock.mock.calls.find(([url]) => url === "/api/v1/auth/login")!;
     expect(call[1].headers["X-Requested-With"]).toBe("IntelTPS");
     expect(JSON.parse(call[1].body)).toEqual({
@@ -78,7 +79,10 @@ describe("login page", () => {
   it("sends an already signed-in user straight to /tenders", async () => {
     fetchMock.mockResolvedValue(respond(200, ME));
     renderWithClient(<LoginPage />);
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading");
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/tenders"));
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
   });
 });
 
