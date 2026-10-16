@@ -14,7 +14,7 @@ from .chunking import chunk_document
 from .ocr import OcrRunner
 from .parsers import Progress, parse_document
 from .repo import ChunkRepo, PageRepo
-from .schemas import IngestResult, PageDetailDTO, PageDTO, SearchHitDTO
+from .schemas import ExtractionPageDTO, IngestResult, PageDetailDTO, PageDTO, SearchHitDTO
 
 PAGE_WARNINGS = {
     "ocr_failed": "OCR_FAILED",
@@ -113,6 +113,25 @@ def get_page(
     if page is None:
         raise NotFound("Page not found")
     return PageDetailDTO(**_page_dto(page).model_dump(), text=page.text, tables=page.tables)
+
+
+def get_extraction_input(
+    session: Session, ctx: OrgContext, version_id: UUID
+) -> list[ExtractionPageDTO]:
+    """Everything extraction reads about a version: page text, source and tables."""
+    ctx.require(Permission.READ)
+    documents.get_version(session, ctx, version_id)  # NotFound for another organisation
+    return [
+        ExtractionPageDTO(
+            page_number=p.page_number,
+            label=p.label,
+            text=p.text,
+            text_source=p.text_source,
+            status=p.status,
+            tables=list(p.tables),
+        )
+        for p in PageRepo(session, ctx).for_version(version_id)
+    ]
 
 
 def search_tender(

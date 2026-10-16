@@ -165,3 +165,22 @@ def test_active_job_uniqueness_is_enforced_by_the_database(admin) -> None:
             {"s": subject},
         ).scalar()
     assert active == 1
+
+
+def test_version_job_id_stays_on_the_ingest_job_when_other_jobs_exist() -> None:
+    from uuid import UUID
+
+    from app.db.session import session_scope
+    from app.kernel import OrgContext, Role
+    from app.modules.jobs import public as jobs
+    from tests.conftest import make_pdf, make_tender, register, upload
+
+    admin = register("jid@example.com")
+    tid = make_tender(admin)
+    body = upload(admin, tid, make_pdf(["clause"]), "t.pdf").json()
+    version_id = UUID(body["version"]["id"])
+    ctx = OrgContext(UUID(admin.me["user_id"]), UUID(admin.org_id), Role.ADMIN, None)
+    with session_scope() as s:
+        jobs.enqueue(s, ctx, "extract_boq", "document_version", version_id)
+    versions = admin.client.get(f"/api/v1/documents/{body['document']['id']}/versions").json()
+    assert versions[0]["job_id"] == str(body["job_id"])

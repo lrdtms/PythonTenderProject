@@ -47,3 +47,5 @@ class ProcessingInfo(BaseModel):
     storage_key: str
     file_format: str
     filename: str
+    kind: str
+    tender_archived: bool = False

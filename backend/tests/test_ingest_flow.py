@@ -48,7 +48,9 @@ def get_version(actor, document_id: str, version_id: str) -> dict:
 
 def upload_and_ingest(actor, tid: str, data: bytes, name: str = "tender.pdf") -> dict:
     body = upload(actor, tid, data, name).json()
-    assert run_worker() is True
+    assert run_worker() is True  # the ingest job
+    while run_worker():  # the extraction jobs that ingest queued
+        pass
     return body
 
 
@@ -467,13 +469,13 @@ def test_failed_completion_after_commit_does_not_fail_the_version(admin, monkeyp
     from app.worker import runner
 
     real_complete = jobs.complete
-    calls = {"n": 0}
+    calls: list[UUID] = []  # job ids, in order; the ingest job completes first
 
-    def flaky_complete(*args, **kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
+    def flaky_complete(session, job_id, warnings):
+        calls.append(job_id)
+        if len(calls) == 1:
             raise OperationalError("UPDATE jobs", {}, Exception("connection lost"))
-        return real_complete(*args, **kwargs)
+        return real_complete(session, job_id, warnings)
 
     monkeypatch.setattr(jobs, "complete", flaky_complete)
     monkeypatch.setattr(runner, "COMPLETE_RETRY_DELAYS", (0, 0))
@@ -482,7 +484,7 @@ def test_failed_completion_after_commit_does_not_fail_the_version(admin, monkeyp
     v = get_version(admin, body["document"]["id"], body["version"]["id"])
     assert v["processing_status"] == "ready"
     assert get_job(admin, str(body["job_id"]))["status"] == "succeeded"
-    assert calls["n"] == 2
+    assert calls.count(UUID(body["job_id"])) == 2
 
 
 def test_completion_that_keeps_failing_is_left_to_the_lease(admin, monkeypatch) -> None:

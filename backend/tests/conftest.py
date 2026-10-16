@@ -26,6 +26,7 @@ TEST_DATABASE_URL = os.environ.get(
 # Must be set before the application reads its settings.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ENVIRONMENT"] = "development"
+os.environ["LLM_PROVIDER"] = "fake"
 os.environ["COOKIE_SECURE"] = "false"  # the test client talks plain http
 os.environ["STORAGE_PATH"] = tempfile.mkdtemp(prefix="inteltps-test-files-")
 
@@ -247,3 +248,17 @@ def upload(
 
 def make_tender(actor: Actor, title: str = "Hall wiring") -> str:
     return actor.client.post("/api/v1/tenders", json={"title": title}).json()["id"]
+
+
+@pytest.fixture
+def fake_llm():
+    """Script the model for one test: `fake_llm(["json", LLMTimeout(), ...])`."""
+    from app.infrastructure.llm import FakeLLM, set_llm_override
+
+    def install(responses=None, default='{"requirements": []}') -> FakeLLM:
+        llm = FakeLLM(responses, default)
+        set_llm_override(llm)
+        return llm
+
+    yield install
+    set_llm_override(None)
