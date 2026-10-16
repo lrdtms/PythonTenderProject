@@ -17,12 +17,18 @@ export function withQuery(path: string, query?: Query): string {
   return text ? `${path}?${text}` : path;
 }
 
-function toApiError(status: number, statusText: string, parsed: unknown): ApiError {
+/** A body that is not the API's error format (e.g. a proxy's plain-text 500) gets a generic,
+ * readable message rather than the raw status text. */
+function fallbackMessage(status: number): string {
+  return status >= 500 ? "The server had a problem. Try again in a moment." : "The request failed.";
+}
+
+function toApiError(status: number, parsed: unknown): ApiError {
   const error = (parsed as Partial<ErrorBody> | null)?.error;
   return new ApiError(
     status,
     error?.code ?? "http_error",
-    error?.message ?? (statusText || "The request failed."),
+    error?.message ?? fallbackMessage(status),
     error?.details,
   );
 }
@@ -75,7 +81,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     } catch {
       parsed = null;
     }
-    throw toApiError(response.status, response.statusText, parsed);
+    throw toApiError(response.status, parsed);
   }
   return parseSuccess<T>(response.status, await response.text());
 }
@@ -129,7 +135,7 @@ export function upload<T>(
       } catch {
         parsed = null;
       }
-      reject(toApiError(xhr.status, "", parsed));
+      reject(toApiError(xhr.status, parsed));
     };
     xhr.send(form);
   });

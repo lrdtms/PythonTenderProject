@@ -128,10 +128,26 @@ describe("errors", () => {
     expect(((await get("/api/v1/x").catch((e: unknown) => e)) as ApiError).isNotFound).toBe(true);
   });
 
-  it("falls back to http_error for a non-JSON error body", async () => {
-    fetchMock.mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 }));
+  it("falls back to http_error with a friendly message for a non-JSON error body", async () => {
+    const serverProblem = "The server had a problem. Try again in a moment.";
+    fetchMock.mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }));
+    const badGateway = (await get("/api/v1/x").catch((e: unknown) => e)) as ApiError;
+    expect(badGateway).toBeInstanceOf(ApiError);
+    expect(badGateway).toMatchObject({ status: 502, code: "http_error", message: serverProblem });
+    fetchMock.mockResolvedValueOnce(
+      new Response("Internal Server Error", { status: 500, statusText: "Internal Server Error" }),
+    );
+    const internal = (await get("/api/v1/x").catch((e: unknown) => e)) as ApiError;
+    expect(internal).toMatchObject({ status: 500, code: "http_error", message: serverProblem });
+    fetchMock.mockResolvedValueOnce(new Response("nope", { status: 404, statusText: "Not Found" }));
+    const notFound = (await get("/api/v1/x").catch((e: unknown) => e)) as ApiError;
+    expect(notFound).toMatchObject({ status: 404, code: "http_error", message: "The request failed." });
+  });
+
+  it("keeps the API's own message on a JSON error body, even for a 5xx", async () => {
+    fetchMock.mockResolvedValue(respond(500, { error: { code: "internal_error", message: "Database is down." } }));
     const error = (await get("/api/v1/x").catch((e: unknown) => e)) as ApiError;
-    expect(error).toMatchObject({ status: 502, code: "http_error" });
+    expect(error).toMatchObject({ status: 500, code: "internal_error", message: "Database is down." });
   });
 
   it("reports a network failure as ApiError status 0", async () => {
@@ -257,6 +273,10 @@ describe("upload", () => {
     FakeXhr.last.status = 502;
     FakeXhr.last.responseText = "<html>bad gateway</html>";
     FakeXhr.last.onload?.();
-    await expect(pending).rejects.toMatchObject({ status: 502, code: "http_error" });
+    await expect(pending).rejects.toMatchObject({
+      status: 502,
+      code: "http_error",
+      message: "The server had a problem. Try again in a moment.",
+    });
   });
 });
