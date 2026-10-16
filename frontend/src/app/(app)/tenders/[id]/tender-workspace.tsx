@@ -16,7 +16,7 @@ import { DocumentCard } from "./document-card";
 export function TenderWorkspace() {
   const { id } = useParams<{ id: string }>();
   const tender = useQuery(tenderQueryOptions(id));
-  const documents = useQuery(documentsQueryOptions(id));
+  const documents = useQuery({ ...documentsQueryOptions(id), enabled: !!tender.data });
 
   if (tender.isPending) return <p role="status" className="text-sm text-zinc-500">Loading tender…</p>;
   if (!tender.data) {

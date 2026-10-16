@@ -40,7 +40,10 @@ export function JobProgress({ jobId, tenderId, pollMs }: Props) {
             <button
               type="button"
               disabled={retry.isPending}
-              onClick={() => retry.mutate(job.id)}
+              onClick={() => {
+                retry.reset();
+                retry.mutate(job.id);
+              }}
               className="mt-1 rounded border border-red-600 px-3 py-1 disabled:opacity-50"
             >
               {retry.isPending ? "Retrying…" : "Retry"}
@@ -48,7 +51,7 @@ export function JobProgress({ jobId, tenderId, pollMs }: Props) {
           ) : null}
         </div>
       ) : null}
-      {retry.error ? (
+      {retry.error && job.status === "failed" ? (
         <p role="alert" className="text-red-600">
           {retry.error instanceof ApiError ? retry.error.message : "Could not retry."}
         </p>

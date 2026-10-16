@@ -2,7 +2,7 @@ import { screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ids, makeDocument, makeJob, makeTender, makeVersion } from "@/test/fixtures";
-import { errorBody, mockApi, renderSignedIn, respond } from "@/test/render";
+import { callsTo, errorBody, mockApi, renderSignedIn, respond } from "@/test/render";
 
 import { TenderWorkspace } from "./tender-workspace";
 
@@ -65,5 +65,12 @@ describe("TenderWorkspace", () => {
     });
     renderSignedIn(<TenderWorkspace />);
     expect(await screen.findByText(/archived.*read-only/i)).toBeInTheDocument();
+  });
+
+  it("does not request the documents of a tender that was not found", async () => {
+    const fetchMock = mockApi({ [`GET ${TENDER}`]: () => respond(404, errorBody("not_found", "Tender not found")) });
+    renderSignedIn(<TenderWorkspace />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not found/i);
+    expect(callsTo(fetchMock, "GET", `${TENDER}/documents`)).toHaveLength(0);
   });
 });
