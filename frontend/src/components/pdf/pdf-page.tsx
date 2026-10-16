@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import type { PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist";
+
 import { clampPage } from "./clamp-page";
+
+/** Destroying a loading task can reject (e.g. worker already gone); that must not surface as an
+ * unhandled rejection. */
+function destroyQuietly(task: { destroy: () => Promise<void> | void }): void {
+  Promise.resolve(task.destroy()).catch(() => {});
+}
 
 type State =
   | { status: "loading" }
@@ -26,12 +34,16 @@ export function PdfPage({ url, pageNumber, scale = 1.25 }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    let loadingTask: { destroy: () => Promise<void> | void } | undefined;
+    let loadingTask: PDFDocumentLoadingTask | undefined;
+    let renderTask: RenderTask | undefined;
     const setState = (next: Exclude<State, { status: "loading" }>) => setOutcome({ ...next, key });
 
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
+        // Cleanup may already have run (Strict Mode remount, navigation during the chunk load):
+        // never start a fetch and a worker that nothing will destroy.
+        if (cancelled) return;
         pdfjs.GlobalWorkerOptions.workerSrc = new URL(
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
@@ -39,16 +51,22 @@ export function PdfPage({ url, pageNumber, scale = 1.25 }: Props) {
         const task = pdfjs.getDocument({ url, withCredentials: true });
         loadingTask = task;
         const pdf = await task.promise;
+        if (cancelled) return;
         const shown = clampPage(pageNumber, pdf.numPages);
         const page = await pdf.getPage(shown);
         const canvas = canvasRef.current;
-        if (cancelled || !canvas) return;
+        if (cancelled || !canvas) {
+          destroyQuietly(task);
+          return;
+        }
         const viewport = page.getViewport({ scale });
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        await page.render({ canvas, viewport }).promise;
+        renderTask = page.render({ canvas, viewport });
+        await renderTask.promise;
         if (!cancelled) setState({ status: "ready", numPages: pdf.numPages, shown });
       } catch {
+        // After cleanup, rejections (destroyed task, RenderingCancelledException) are expected.
         if (!cancelled) {
           setState({
             status: "error",
@@ -60,7 +78,8 @@ export function PdfPage({ url, pageNumber, scale = 1.25 }: Props) {
 
     return () => {
       cancelled = true;
-      void loadingTask?.destroy();
+      renderTask?.cancel();
+      if (loadingTask) destroyQuietly(loadingTask);
     };
   }, [key, url, pageNumber, scale]);
 
@@ -77,7 +96,20 @@ export function PdfPage({ url, pageNumber, scale = 1.25 }: Props) {
           Page {state.shown} of {state.numPages}
         </p>
       ) : null}
-      <canvas ref={canvasRef} className={state.status === "error" ? "hidden" : "max-w-full border"} />
+      {/* Hidden on error (never a blank canvas); invisible while loading so the previous page's
+          pixels do not show under "Loading page…". */}
+      <canvas
+        ref={canvasRef}
+        data-testid="pdf-canvas"
+        className={
+          state.status === "error"
+            ? "hidden"
+            : state.status === "loading"
+              ? "invisible max-w-full border"
+              : "max-w-full border"
+        }
+      />
+
     </div>
   );
 }
