@@ -58,3 +58,8 @@ Chosen option: **Option 1**.
 - **Run records.** `extraction_runs` (module `pipeline`) holds one row per (job, kind): status, warnings, counts, `prompt_version`, `filter_version`, `schema_version`, model. The current run per (version, kind) is the latest by `created_at`.
 - **Idempotency.** Re-running locks the version's run rows, deletes all `unreviewed` rows of that version and kind (from every earlier run), then inserts. Reviewed rows are never touched. A candidate that duplicates a reviewed row (BoQ: section/sheet + item number; requirements: normalised quote; corrected rows compare on `original_value`) is skipped with `DUPLICATE_OF_REVIEWED`. A rejected row suppresses re-extraction of the same item, deliberately.
 - **Not built.** `extraction_unit_results` (per-window resumability) is dropped for this slice: a window is a few seconds to a minute of work and the whole stage restarts on retry. F6 (kill mid-stage, resume without duplicates) is met by replace-unreviewed.
+
+## Addendum 2026-10-16 (Slice 4)
+
+- Review writes serialise with extraction through the same `(version, kind)` run-row lock (`pipeline.lock_runs`).
+- The earlier idea of a conditional `WHERE review_status = 'unreviewed'` update is dropped: the lock already orders review against extraction, and extraction only ever deletes unreviewed rows. A review write that finds its row gone returns 409 `row_replaced`.

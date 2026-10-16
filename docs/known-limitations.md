@@ -1,15 +1,18 @@
 # Known limitations and deferred items
 
-A running list (plan section 5, working agreements) for the final documentation. Each item says what happens today and when it should be dealt with. Last updated 2026-10-16 after Slice 3.
+A running list (plan section 5, working agreements) for the final documentation. Each item says what happens today and when it should be dealt with. Last updated 2026-10-16 after Slice 4 phase 1.
 
-## Slice 3 (extraction)
+## Slice 3 (extraction) and Slice 4 phase 1 (review API)
 
-Fix before or during Slice 4 (review UI), because review makes them user-visible:
+Fixed in Slice 4 phase 1: section carry-over, `source_order` list ordering, locked review writes, `ambiguous_separator` flag (the value is still read as thousands).
 
-- **Section is lost on a continuation page.** The BoQ parser resets the current section for every table, so items on a later PDF page have no section until the next heading. The re-run duplicate key is (section or sheet, item number); once reviewed rows exist, an item "A" with no section can suppress other section-less "A" items on re-run as `DUPLICATE_OF_REVIEWED`.
-- **List ordering after re-runs.** BoQ and requirement lists are ordered by `created_at` then `position`, so reviewed rows from older runs come before new rows and `position` values can collide. Order by document position within the current run, with reviewed rows slotted by position.
-- **Review updates must be conditional.** Slice 4 review writes must take the same version+kind lock as extraction and update `WHERE review_status = 'unreviewed'`, returning 409 when the row has been replaced (ADR-0006 addendum).
-- **Comma separators are ambiguous.** `1,500` is read as 1500; in South African comma-decimal usage it could be 1.5. A single comma followed by exactly three digits is not flagged.
+Slice 4 phase 1 notes (review API), deferred from code review:
+
+- **`_apply` re-adds `missing_quantity` even on rate-only or provisional lines**, and does not clear `ambiguous_separator` when the quantity or rate is corrected. Reviewers may see a stale flag; deal with it when the review UI shows flags.
+- **`BoqPatch` text fields are not stripped and `unit` is not canonicalised.** Clearing `item_no` drops the dedupe identity, so a re-run may add an unreviewed duplicate of that line. Deal with it when the BoQ editor lands.
+- **A lone `row_from` or `row_to` on page detail is not capped at 5000 rows** (only a full window is). Fine for the sizes seen so far; cap it before large sheets are uploaded.
+- **`source_order` saturates past 100 tables on one page**, and legacy rows (extracted before migration 0004) sort by position only until their version is re-extracted.
+- **Rows from several documents interleave in the tender-wide requirements list** (`GET /tenders/{id}/requirements`); the checklist page should group or filter by document.
 
 Documented trade-offs (acceptable for now):
 
@@ -21,8 +24,11 @@ Documented trade-offs (acceptable for now):
 - **Pre-filter `FOOTER` regex** strips the synthetic generator's footer text and any "Page N" in body text.
 - **No `raw_rate` column:** a rate that is too large or too precise is flagged `rate_unparsed` but its text is not kept.
 - **Extra extraction jobs after a re-claimed ingest:** if an ingest job completes its work but fails to record completion, the re-run enqueues a second set of extract jobs (idempotent, costs one more LLM pass).
-- **Extract jobs for archived tenders** are queued and then refused by the worker, leaving `failed` runs.
+- **Extract jobs already queued for a tender that is archived later** are refused by the worker, leaving `failed` runs. The extract route itself now returns 409 `tender_archived`.
 - **The `evaluation` requirement type** appears in prompt v3's wording but not in the output schema enum, matching the spike that was measured.
+- **Concurrent edits of one row are last-write-wins.** The DTO shows who reviewed it and when (`reviewed_by_name`, `reviewed_at`).
+- **Scanned BoQs have no manual line entry yet** (`BOQ_NEEDS_MANUAL_ENTRY`).
+- **DOCX sources have no rendered viewer.**
 - **Unit tests:** the store test reuses one run id; no write-isolation assertions for the new repositories; `ROW_CAP_REACHED` is untested; the `limit=0` API test accepts 200 or 422.
 - **Scoring script** silently skips a document if ingest times out or fails and hard-codes its prediction metadata; harness output under `eval/runs/` is git-ignored.
 
