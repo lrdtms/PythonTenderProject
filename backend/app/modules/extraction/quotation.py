@@ -48,6 +48,17 @@ NOT_A_NAME = re.compile(
     r"^\s*(to|attn|attention)\b",
     re.I,
 )
+ADDRESS_LINE = re.compile(
+    r"^\s*\d|\b(street|st|road|rd|avenue|ave|drive|dr|box|p\.o\.|postal|suite|floor)\b", re.I
+)
+COMPANY_SUFFIX = re.compile(r"\b(pty|ltd|cc|inc|limited|co)\b", re.I)
+CHARGE_WORD = r"vat|delivery|freight|discount|rounding|transport|handling|surcharge|carriage|levy"
+# A charge line: starts with a charge word (optionally "less"/"add"), or is only that word plus
+# a percentage, amount, "charge" or "fee".
+CHARGE_ROW = re.compile(
+    rf"^\s*(?:(?:less|add|plus)\s+)?(?:{CHARGE_WORD})\b(?:\s*(?:@|:|-)?\s*[-+R\d.,%()\s]*|\s+(?:charges?|fees?)\b.*)?$",
+    re.I,
+)
 BRACKET_SKU = re.compile(r"\[\s*((?:SKU[\s:\-]*)?[A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s*\]\s*$", re.I)
 LABEL_SKU = re.compile(
     r"\b(?:sku|code|part\s*no\.?|product\s*code)\s*[:#]\s*([A-Za-z0-9][\w\-/.]{1,40})\s*$", re.I
@@ -111,18 +122,17 @@ def _preamble_lines(
 def _read_header(lines: list[str]) -> QuotationHeader:
     header = QuotationHeader()
     blob = "\n".join(line for line in lines if line)
-    name = next(
-        (
-            line
-            for line in lines
-            if line
-            and re.search(r"[^\W\d_]", line)
-            and not NOT_A_NAME.search(line)
-            and len(line) <= 120
-        ),
-        None,
-    )
-    header.supplier_name = name
+    candidates = [
+        line
+        for line in lines
+        if line
+        and re.search(r"[^\W\d_]", line)
+        and not NOT_A_NAME.search(line)
+        and not ADDRESS_LINE.search(line)
+        and len(line) <= 120
+    ]
+    suffixed = next((line for line in candidates[:8] if COMPANY_SUFFIX.search(line)), None)
+    header.supplier_name = suffixed or (candidates[0] if candidates else None)
     ref = REFERENCE.search(blob)
     header.reference = ref.group(1) if ref else None
     dated = QUOTE_DATE.search(blob)
@@ -251,6 +261,8 @@ def parse_quotation(pages: Sequence[PageInput]) -> QuotationResult:
                     _get(row, columns, "unit") or _get(row, columns, "quantity")
                 ):
                     continue
+                if CHARGE_ROW.match(description):
+                    continue  # VAT, delivery, discount and similar charge lines
                 if not any(_get(row, columns, f) for f in ("unit", "quantity", "price")):
                     continue  # a heading line inside the table
                 result.items.append(

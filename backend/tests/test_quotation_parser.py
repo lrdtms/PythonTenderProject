@@ -225,3 +225,36 @@ def test_parser_reads_every_committed_quotation(pack: Path, quote: dict) -> None
         assert got.quantity == Decimal(truth["quantity"])
         assert got.unit_price == Decimal(truth["unit_price"])
         assert _norm(truth["description"].split(" [SKU")[0]) == _norm(got.description)
+
+
+def test_charge_rows_are_not_items() -> None:
+    rows = [
+        HEADER,
+        ["", "VAT", "", "", "7.5"],
+        ["", "Delivery", "", "", "150", ""],
+        ["", "Discount", "", "", "-5%"],
+        ["", "VAT @ 15%", "", "", "30"],
+        ["", "Less discount", "", "", "10"],
+        ["", "Delivery charge", "", "", "99"],
+        ["1", "Cable", "m", "10", "5"],
+    ]
+    assert [i.description for i in parse(rows).items] == ["Cable"]
+
+
+def test_a_product_starting_with_a_charge_word_stays_an_item() -> None:
+    items = parse([HEADER, ["1", "Delivery van tyre", "no", "4", "900"]]).items
+    assert [i.description for i in items] == ["Delivery van tyre"]
+
+
+def test_address_line_above_the_company_name_is_not_the_supplier() -> None:
+    text = "Pretoria Road 5, Sandton\nAcme Electrical (Pty) Ltd\nQUOTATION Q1\nDate: 2026-10-20"
+    assert parse([HEADER, ["1", "Cable", "m", "1", "5"]], text).header.supplier_name == (
+        "Acme Electrical (Pty) Ltd"
+    )
+
+
+def test_plain_first_line_name_wins_without_a_suffix_line() -> None:
+    text = "12 Main Street\nSPARKMORE SUPPLIES\nQUOTATION Q1\nDate: 2026-10-20"
+    assert parse([HEADER, ["1", "Cable", "m", "1", "5"]], text).header.supplier_name == (
+        "SPARKMORE SUPPLIES"
+    )
