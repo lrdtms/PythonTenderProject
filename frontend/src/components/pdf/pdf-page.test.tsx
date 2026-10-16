@@ -51,10 +51,10 @@ describe("PdfPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not display/i);
   });
 
-  it("loads the same-origin URL with default credentials, clamps an out-of-range page to the last page and renders it", async () => {
+  it("loads the same-origin URL with default credentials, renders the requested page", async () => {
     const { doc, render: renderPage, viewport } = fakeDocument(3);
     getDocument.mockReturnValue({ promise: Promise.resolve(doc), destroy: vi.fn() });
-    render(<PdfPage url={URL_} pageNumber={99} />);
+    render(<PdfPage url={URL_} pageNumber={3} />);
     expect(screen.getByRole("status")).toHaveTextContent(/loading/i);
     expect(screen.getByTestId("pdf-canvas")).toHaveClass("invisible");
 
@@ -101,5 +101,24 @@ describe("PdfPage", () => {
     expect(renderTask.cancel).toHaveBeenCalled();
     await flush();
     expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+  it("loads the document once when only the page changes", async () => {
+    const { doc } = fakeDocument(3);
+    getDocument.mockReturnValue({ promise: Promise.resolve(doc), destroy: vi.fn() });
+    const { rerender } = render(<PdfPage url={URL_} pageNumber={1} />);
+    expect(await screen.findByText("Page 1 of 3")).toBeInTheDocument();
+    rerender(<PdfPage url={URL_} pageNumber={2} />);
+    expect(await screen.findByText("Page 2 of 3")).toBeInTheDocument();
+    expect(getDocument).toHaveBeenCalledTimes(1);
+    expect(doc.getPage).toHaveBeenLastCalledWith(2);
+  });
+  it("says so, and draws nothing, when the page is past the end of the document", async () => {
+    const { doc, render: renderPage } = fakeDocument(3);
+    getDocument.mockReturnValue({ promise: Promise.resolve(doc), destroy: vi.fn() });
+    render(<PdfPage url={URL_} pageNumber={9} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("This document has no page 9.");
+    expect(screen.getByTestId("pdf-canvas")).toHaveClass("hidden");
+    expect(doc.getPage).not.toHaveBeenCalled();
+    expect(renderPage).not.toHaveBeenCalled();
   });
 });
