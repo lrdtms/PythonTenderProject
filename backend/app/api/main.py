@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.errors import error_body, register_error_handlers
-from app.api.routers import auth, documents, extraction, jobs, members, tenders
+from app.api.routers import auth, documents, extraction, jobs, members, review, tenders
 from app.db.session import ping
 from app.infrastructure.model_registry import import_all_models
 
@@ -49,4 +49,5 @@ app.include_router(members.router)
 app.include_router(tenders.router)
 app.include_router(documents.router)
 app.include_router(extraction.router)
+app.include_router(review.router)
 app.include_router(jobs.router)

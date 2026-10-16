@@ -103,15 +103,20 @@ def request_extraction(
     ctx.require(Permission.REVIEW_DATA)
     info = documents.processing_info(session, ctx, version_id)  # NotFound for another org
     if info.tender_archived:
-        raise Conflict("This tender is archived. Re-open it before extracting.")
+        raise Conflict(
+            "This tender is archived. Re-open it before extracting.", code="tender_archived"
+        )
     if documents.get_version(session, ctx, version_id).processing_status not in READY:
-        raise Conflict("The document has not finished processing.")
+        raise Conflict("The document has not finished processing.", code="not_processed")
     out: list[jobs.JobDTO] = []
     for job_type in job_types_for_kind(info.kind):
         active = jobs.find_active_job(session, ctx, job_type, version_id)
         if active is not None:
             if bool(active.payload.get("deep_scan")) != deep_scan:
-                raise Conflict("An extraction with different options is already running.")
+                raise Conflict(
+                    "An extraction with different options is already running.",
+                    code="extraction_options_conflict",
+                )
             out.append(active)
             continue
         out.append(

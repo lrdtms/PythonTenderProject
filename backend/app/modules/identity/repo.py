@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -132,6 +133,20 @@ class MembershipRepo(ScopedRepository[Membership]):
             .order_by(User.name)
         ).all()
         return [(m, u) for m, u in rows]
+
+    def names_for(self, user_ids: Collection[UUID]) -> dict[UUID, str]:
+        """Display names of this organisation's members, for showing who reviewed a row."""
+        if not user_ids:
+            return {}
+        rows = self.session.execute(
+            select(Membership.user_id, User.name)
+            .join(User, User.id == Membership.user_id)
+            .where(
+                Membership.organisation_id == self.ctx.organisation_id,
+                Membership.user_id.in_(user_ids),
+            )
+        ).all()
+        return {user_id: name for user_id, name in rows}
 
     def user_for(self, membership: Membership) -> User:
         user = self.session.get(User, membership.user_id)

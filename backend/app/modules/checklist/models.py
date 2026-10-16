@@ -33,6 +33,9 @@ class Requirement(Base):
     run_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     document_version_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     requirement_type: Mapped[str] = mapped_column(String(20), nullable=False)
     mandatory_status: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -66,5 +69,5 @@ class Requirement(Base):
             ["memberships.organisation_id", "memberships.user_id"],
             name="fk_requirements_reviewer_membership",
         ),
-        Index("ix_requirements_version", "document_version_id", "position"),
+        Index("ix_requirements_version", "document_version_id", "source_order", "position"),
     )

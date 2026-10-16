@@ -85,6 +85,11 @@ def list_versions(document_id: UUID, ctx: Ctx, session: DbSession):
     return documents.list_versions(session, ctx, document_id)
 
 
+@router.get("/document-versions/{version_id}", response_model=documents.VersionDTO)
+def get_version(version_id: UUID, ctx: Ctx, session: DbSession):
+    return documents.get_version(session, ctx, version_id)
+
+
 @router.get("/document-versions/{version_id}/file")
 def download_file(version_id: UUID, ctx: Ctx, session: DbSession, storage: Storage):
     """The original file. Only PDFs are shown inline (for the viewer); the rest download."""
@@ -112,8 +117,15 @@ def list_pages(version_id: UUID, ctx: Ctx, session: DbSession):
 @router.get(
     "/document-versions/{version_id}/pages/{page_number}", response_model=knowledge.PageDetailDTO
 )
-def get_page(version_id: UUID, page_number: int, ctx: Ctx, session: DbSession):
-    return knowledge.get_page(session, ctx, version_id, page_number)
+def get_page(
+    version_id: UUID,
+    page_number: int,
+    ctx: Ctx,
+    session: DbSession,
+    row_from: Annotated[int | None, Query(ge=1)] = None,
+    row_to: Annotated[int | None, Query(ge=1)] = None,
+):
+    return knowledge.get_page(session, ctx, version_id, page_number, row_from, row_to)
 
 
 @router.get("/tenders/{tender_id}/search", response_model=list[knowledge.SearchHitDTO])

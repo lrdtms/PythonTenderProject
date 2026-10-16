@@ -1,6 +1,21 @@
 """Public surface of the checklist module."""
 
-from .schemas import ReplaceResult, RequirementDTO
-from .service import list_requirements, replace_unreviewed
+from .schemas import ReplaceResult, RequirementDTO, RequirementPatch
+from .service import (
+    list_for_versions,
+    list_requirements,
+    replace_unreviewed,
+    review_item,
+    version_of,
+)
 
-__all__ = ["ReplaceResult", "RequirementDTO", "list_requirements", "replace_unreviewed"]
+__all__ = [
+    "ReplaceResult",
+    "RequirementDTO",
+    "RequirementPatch",
+    "list_for_versions",
+    "list_requirements",
+    "replace_unreviewed",
+    "review_item",
+    "version_of",
+]

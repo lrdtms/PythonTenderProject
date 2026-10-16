@@ -42,3 +42,14 @@ def parse_decimal(value: object) -> tuple[Decimal | None, bool]:
     if number.adjusted() >= _MAX_INTEGER_DIGITS:
         return None, True
     return number, False
+
+
+_SINGLE_COMMA_THREE = re.compile(r"\d{1,3},\d{3}")
+
+
+def is_ambiguous_separator(value: object) -> bool:
+    """True for a lone comma followed by exactly three digits (`1,500`). South African usage
+    can mean 1.5 or 1500; `parse_decimal` reads it as 1500 and the line is flagged for review."""
+    text = _SPACES.sub("", str(value if value is not None else ""))
+    text = re.sub(r"^[Rr](?=[\d.,])", "", text)
+    return _SINGLE_COMMA_THREE.fullmatch(text) is not None

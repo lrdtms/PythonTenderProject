@@ -104,15 +104,44 @@ def list_pages(session: Session, ctx: OrgContext, version_id: UUID) -> list[Page
     return [_page_dto(p) for p in PageRepo(session, ctx).for_version(version_id)]
 
 
+MAX_WINDOW_ROWS = 5000
+
+
+def window_tables(tables: list[Any], row_from: int | None, row_to: int | None) -> list[Any]:
+    """Slice sheet tables to the inclusive 1-based row range. Other tables pass through."""
+    if row_from is None and row_to is None:
+        return tables
+    out: list[Any] = []
+    for table in tables:
+        if not isinstance(table, dict) or table.get("kind") != "sheet":
+            out.append(table)
+            continue
+        first = int(table.get("first_row", 1))
+        rows = table.get("rows", [])
+        start = max((row_from or first) - first, 0)
+        stop = len(rows) if row_to is None else max(row_to - first + 1, start)
+        out.append({**table, "first_row": first + start, "rows": rows[start:stop]})
+    return out
+
+
 def get_page(
-    session: Session, ctx: OrgContext, version_id: UUID, page_number: int
+    session: Session,
+    ctx: OrgContext,
+    version_id: UUID,
+    page_number: int,
+    row_from: int | None = None,
+    row_to: int | None = None,
 ) -> PageDetailDTO:
     ctx.require(Permission.READ)
+    if row_from is not None and row_to is not None:
+        if row_to < row_from or row_to - row_from + 1 > MAX_WINDOW_ROWS:
+            raise ValidationFailed(f"Ask for at most {MAX_WINDOW_ROWS} rows, in order.")
     documents.get_version(session, ctx, version_id)
     page = PageRepo(session, ctx).one(version_id, page_number)
     if page is None:
         raise NotFound("Page not found")
-    return PageDetailDTO(**_page_dto(page).model_dump(), text=page.text, tables=page.tables)
+    tables = window_tables(page.tables, row_from, row_to)
+    return PageDetailDTO(**_page_dto(page).model_dump(), text=page.text, tables=tables)
 
 
 def get_extraction_input(
