@@ -43,6 +43,8 @@ Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md):
 - **Field-level 422 messages** are joined into one message at the top of the editor rather than shown beside each input.
 - **Tab counts show "200+"** while more pages exist; the real total needs a count endpoint.
 
+- **Checklist mandatory-status filter is client-side** (the API has no such parameter), so it applies to loaded pages only; the page says so while it is active and more pages exist.
+
 ## Slice 1 and Slice 2 (deferred review minors)
 
 - CHECK constraints on status and role columns.

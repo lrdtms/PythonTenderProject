@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "@/api/errors";
@@ -47,11 +47,14 @@ export function ReviewScreen() {
   const requirements = useRequirements(versionId, valid && !!version.data);
   const boq = useBoqItems(versionId, valid && !!version.data);
 
+  // The checklist links here with ?row=<requirement id>: that row starts selected.
+  const linkedRow = useSearchParams().get("row");
   const [pickedTab, setTab] = useState<Tab | null>(null);
   // Until the user picks a tab, open on whichever one has rows (requirements first).
-  const tab: Tab = pickedTab ?? (requirements.isSuccess && requirements.rows.length === 0 && boq.rows.length > 0 ? "boq" : "requirements");
+  const tab: Tab = pickedTab ?? (linkedRow ? "requirements" : requirements.isSuccess && requirements.rows.length === 0 && boq.rows.length > 0 ? "boq" : "requirements");
   const [pane, setPane] = useState<Pane>("rows");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pickedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = pickedId ?? (linkedRow && requirements.rows.some((r) => r.id === linkedRow) ? linkedRow : null);
   const [command, setCommand] = useState<RowCommand | undefined>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [replaced, setReplaced] = useState<string | null>(null);

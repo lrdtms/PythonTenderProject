@@ -5,9 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ids, makeBoqItem, makePageDetail, makeRequirement, makeTender, makeVersion } from "@/test/fixtures";
 import { callsTo, errorBody, meWith, mockApi, renderSignedIn, respond } from "@/test/render";
 
+const search = vi.hoisted(() => ({ row: null as string | null }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
   useParams: () => ({ id: ids.tender, versionId: ids.version }),
+  useSearchParams: () => new URLSearchParams(search.row ? { row: search.row } : {}),
 }));
 vi.mock("@/components/pdf/pdf-page", () => ({
   PdfPage: ({ pageNumber }: { pageNumber: number }) => <div data-testid="pdf">pdf page {pageNumber}</div>,
@@ -17,7 +19,10 @@ import { REVIEW_PAGE_SIZE } from "@/api/review";
 
 import { ReviewScreen } from "./review-screen";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  search.row = null;
+});
 
 const V = ids.version;
 const estimator = meWith(["read", "review_data"]);
@@ -193,5 +198,12 @@ describe("ReviewScreen", () => {
     mockApi(routes({ [`GET /api/v1/document-versions/${V}/requirements`]: () => respond(200, []) }), estimator);
     renderSignedIn(<ReviewScreen />);
     expect(await screen.findByText("LED panel")).toBeInTheDocument();
+  });
+
+  it("preselects the row named in ?row= and shows its source", async () => {
+    search.row = "q2";
+    mockApi(routes(), estimator);
+    renderSignedIn(<ReviewScreen />);
+    expect(await screen.findByTestId("pdf")).toHaveTextContent("pdf page 2");
   });
 });
