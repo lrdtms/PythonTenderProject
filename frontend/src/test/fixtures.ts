@@ -1,4 +1,4 @@
-import type { DocumentItem, DocumentVersion, ExtractionStatus, Job, KindStatus, Run, Tender } from "@/api/types";
+import type { BoqItem, DocumentItem, DocumentVersion, ExtractionStatus, Job, KindStatus, PageDetail, PageSummary, Requirement, Run, Tender } from "@/api/types";
 
 const NOW = "2026-10-16T08:00:00Z";
 const ID = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -53,4 +53,37 @@ export function makeKind(kind: "boq" | "requirements", job: Partial<Job> | null,
 
 export function makeExtraction(kinds: KindStatus[]): ExtractionStatus {
   return { kinds };
+}
+
+export function makeBoqItem(over: Partial<BoqItem> = {}): BoqItem {
+  return {
+    id: ID(10), run_id: ids.run, document_version_id: ids.version, position: 1, section: "Lighting",
+    item_no: "1.1", description: "LED panel 600x600", unit: "no", quantity: "10.0000", rate: null,
+    raw_unit: "no", raw_quantity: "10", flags: [], page_number: 1, sheet: null, cell_range: null,
+    review_status: "unreviewed", corrected_value: null, original_value: {}, reviewed_by: null,
+    reviewed_by_name: null, reviewed_at: null, ...over,
+  };
+}
+
+export function makeRequirement(over: Partial<Requirement> = {}): Requirement {
+  return {
+    id: ID(20), run_id: ids.run, document_version_id: ids.version, position: 1,
+    description: "Tenderers must hold a valid tax clearance certificate.",
+    requirement_type: "eligibility", mandatory_status: "mandatory",
+    evidence_quote: "must hold a valid tax clearance certificate", evidence_status: "verified",
+    needs_review: false, page_number: 1, quote_start: 10, quote_end: 52, review_status: "unreviewed",
+    corrected_value: null, original_value: {}, reviewed_by: null, reviewed_by_name: null,
+    reviewed_at: null, ...over,
+  };
+}
+
+export function makePage(over: Partial<PageSummary> = {}): PageSummary {
+  return {
+    page_number: 1, label: null, status: "ok", text_source: "native", ocr_confidence: null,
+    char_count: 100, table_count: 0, ...over,
+  };
+}
+
+export function makePageDetail(over: Partial<PageDetail> = {}): PageDetail {
+  return { ...makePage(), text: "Note: Tenderers must hold a valid tax clearance certificate.", tables: [], ...over };
 }
