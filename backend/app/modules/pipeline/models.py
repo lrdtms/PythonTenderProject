@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, created_at_col, uuid_pk
 
-RUN_KINDS = ("boq", "requirements")
+RUN_KINDS = ("boq", "requirements", "quotation")
 RUN_STATUSES = ("queued", "running", "succeeded", "succeeded_with_warnings", "failed")
 
 

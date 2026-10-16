@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -62,6 +63,7 @@ class BoqItem(Base):
     created_at: Mapped[datetime] = created_at_col()
 
     __table_args__ = (
+        UniqueConstraint("organisation_id", "id", name="uq_boq_items_org_id"),
         ForeignKeyConstraint(
             ["organisation_id", "run_id", "document_version_id"],
             [
