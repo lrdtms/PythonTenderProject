@@ -102,4 +102,14 @@ describe("PdfPage", () => {
     await flush();
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
+  it("loads the document once when only the page changes", async () => {
+    const { doc } = fakeDocument(3);
+    getDocument.mockReturnValue({ promise: Promise.resolve(doc), destroy: vi.fn() });
+    const { rerender } = render(<PdfPage url={URL_} pageNumber={1} />);
+    expect(await screen.findByText("Page 1 of 3")).toBeInTheDocument();
+    rerender(<PdfPage url={URL_} pageNumber={2} />);
+    expect(await screen.findByText("Page 2 of 3")).toBeInTheDocument();
+    expect(getDocument).toHaveBeenCalledTimes(1);
+    expect(doc.getPage).toHaveBeenLastCalledWith(2);
+  });
 });

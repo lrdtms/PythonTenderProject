@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 import { clampPage } from "./clamp-page";
 
@@ -12,32 +12,32 @@ function destroyQuietly(task: { destroy: () => Promise<void> | void }): void {
   Promise.resolve(task.destroy()).catch(() => {});
 }
 
-type State =
-  | { status: "loading" }
-  | { status: "ready"; numPages: number; shown: number }
-  | { status: "error"; message: string };
+type Failure = { url: string; message: string };
+type Loaded = { url: string; pdf: PDFDocumentProxy };
+/** A finished render, tagged with the request it answers. */
+type Shown = { key: string; shown: number } | { key: string; error: string };
 
-/** A finished load, tagged with the request it answers. */
-type Outcome = Exclude<State, { status: "loading" }> & { key: string };
+type Props = { url: string; pageNumber: number; scale?: number; onDocument?: (numPages: number) => void };
 
-type Props = { url: string; pageNumber: number; scale?: number };
+const FAILURE = "Could not display this document page. Reload, or download the original file.";
 
 /** Renders one page of a same-origin PDF to a canvas. pdfjs-dist is imported dynamically inside
- * the effect, so it never loads on the server and only loads when a PDF is shown. */
-export function PdfPage({ url, pageNumber, scale = 1.25 }: Props) {
+ * the effect, so it never loads on the server and only loads when a PDF is shown. The document is
+ * loaded once per URL; changing the page only renders again. */
+export function PdfPage({ url, pageNumber, scale = 1.25, onDocument }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const key = `${url}\n${pageNumber}\n${scale}`;
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  // "Loading" is derived: any outcome recorded for a different request is stale. This avoids a
-  // synchronous setState at the top of the effect (react-hooks/set-state-in-effect).
-  const state: State = outcome && outcome.key === key ? outcome : { status: "loading" };
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
+  const onDocumentRef = useRef(onDocument);
+  useEffect(() => {
+    onDocumentRef.current = onDocument;
+  });
 
+  // Effect 1: the document, keyed on the URL only.
   useEffect(() => {
     let cancelled = false;
     let loadingTask: PDFDocumentLoadingTask | undefined;
-    let renderTask: RenderTask | undefined;
-    const setState = (next: Exclude<State, { status: "loading" }>) => setOutcome({ ...next, key });
-
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
@@ -52,36 +52,58 @@ export function PdfPage({ url, pageNumber, scale = 1.25 }: Props) {
         loadingTask = task;
         const pdf = await task.promise;
         if (cancelled) return;
-        const shown = clampPage(pageNumber, pdf.numPages);
-        const page = await pdf.getPage(shown);
-        const canvas = canvasRef.current;
-        if (cancelled || !canvas) {
-          destroyQuietly(task);
-          return;
-        }
-        const viewport = page.getViewport({ scale });
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        renderTask = page.render({ canvas, viewport });
-        await renderTask.promise;
-        if (!cancelled) setState({ status: "ready", numPages: pdf.numPages, shown });
+        setLoaded({ url, pdf });
+        onDocumentRef.current?.(pdf.numPages);
       } catch {
-        // After cleanup, rejections (destroyed task, RenderingCancelledException) are expected.
-        if (!cancelled) {
-          setState({
-            status: "error",
-            message: "Could not display this document page. Reload, or download the original file.",
-          });
-        }
+        if (!cancelled) setFailure({ url, message: FAILURE });
       }
     })();
+    return () => {
+      cancelled = true;
+      if (loadingTask) destroyQuietly(loadingTask);
+    };
+  }, [url]);
 
+  // Effect 2: the page, keyed on the loaded document, page and scale.
+  const pdf = loaded && loaded.url === url ? loaded.pdf : null;
+  const key = `${url}
+${pageNumber}
+${scale}`;
+  useEffect(() => {
+    if (!pdf) return;
+    let cancelled = false;
+    let renderTask: RenderTask | undefined;
+    (async () => {
+      try {
+        const wanted = clampPage(pageNumber, pdf.numPages);
+        const page = await pdf.getPage(wanted);
+        const canvas = canvasRef.current;
+        if (cancelled || !canvas) return;
+        const dpr = typeof window === "undefined" ? 1 : Math.max(1, window.devicePixelRatio || 1);
+        const viewport = page.getViewport({ scale: scale * dpr });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        // CSS size stays in layout pixels; the extra canvas pixels keep HiDPI screens sharp.
+        canvas.style.width = `${viewport.width / dpr}px`;
+        renderTask = page.render({ canvas, viewport });
+        await renderTask.promise;
+        if (!cancelled) setShown({ key, shown: wanted });
+      } catch {
+        // After cleanup, rejections (RenderingCancelledException) are expected.
+        if (!cancelled) setShown({ key, error: FAILURE });
+      }
+    })();
     return () => {
       cancelled = true;
       renderTask?.cancel();
-      if (loadingTask) destroyQuietly(loadingTask);
     };
-  }, [key, url, pageNumber, scale]);
+  }, [pdf, pageNumber, scale, key]);
+
+  const documentFailed = failure && failure.url === url ? failure.message : null;
+  const outcome = shown && shown.key === key ? shown : null;
+  const error = documentFailed ?? (outcome && "error" in outcome ? outcome.error : null);
+  const ready = outcome && "shown" in outcome && pdf ? { shown: outcome.shown, numPages: pdf.numPages } : null;
+  const state = error ? ({ status: "error", message: error } as const) : ready ? ({ status: "ready", ...ready } as const) : ({ status: "loading" } as const);
 
   return (
     <div>
