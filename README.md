@@ -49,9 +49,12 @@ The script registers (or logs in) one account per run; registration is limited t
 ## Develop without Docker
 
 ```bash
-cd backend && uv sync && uv run uvicorn app.api.main:app --reload
-cd frontend && npm install && npm run dev
+cd backend && uv sync && COOKIE_SECURE=false uv run uvicorn app.api.main:app --reload
+cd frontend && npm install && API_PROXY_TARGET=http://127.0.0.1:8000 npm run dev
+# open http://localhost:3000 (use Chrome or Edge for local development)
 ```
+
+After changing API DTOs run `uv run python -m app.api.export_openapi` in `backend/` and `npm run gen:api` in `frontend/`; CI fails when the generated types are stale.
 
 ## Checks (also run in CI)
 
