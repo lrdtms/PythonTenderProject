@@ -34,6 +34,11 @@ STOPWORDS: frozenset[str] = frozenset(
     }
 )
 
+# The values of extraction's UNIT_CANON: the only unit strings the evidence may carry.
+CANONICAL_UNITS: frozenset[str] = frozenset(
+    {"m", "no", "item", "sum", "m2", "m3", "roll", "kg", "hr", "day", "set", "pair"}
+)
+
 
 @dataclass(frozen=True)
 class MatchConfig:
@@ -46,6 +51,7 @@ class MatchConfig:
     suggest_min: float = 0.70
     ambiguous_min: float = 0.45
     margin: float = 0.08
+    clear_text_min: float = 0.5  # a clear match needs real word overlap, not just matching specs
     top_n: int = 3
 
 

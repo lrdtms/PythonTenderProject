@@ -67,7 +67,15 @@ def test_identical_description_is_a_clear_match() -> None:
 def test_spec_conflict_is_never_clear_and_usually_dropped() -> None:
     line = boq("Miniature circuit breaker, 1-pole, 20 A, 6 kA")
     wrong = quote("MCB, 1-pole, 32 A, 6 kA")
-    assert all(s.classification != "clear" for s in m.suggest([line], [wrong]))
+    right = quote("MCB, 1-pole, 20 A, 6 kA")
+    out = m.suggest([line], [wrong])
+    assert out == [] or all(s.classification != "clear" for s in out)
+    for s in out:
+        assert "spec_conflict" in s.evidence["warnings"]
+    both = m.suggest([line], [wrong, right])
+    top = next(s for s in both if s.rank == 1)
+    assert top.quote_id == right.id and top.classification == "clear"
+    assert all(s.classification != "clear" for s in both if s.quote_id == wrong.id)
 
 
 def test_correct_candidate_beats_the_confusable_one() -> None:
@@ -104,7 +112,7 @@ def test_candidates_are_ranked_per_supplier_and_limited_to_top_n() -> None:
     line = boq("Emergency light fitting, 3-hour maintained")
     quotes = [quote(f"Emergency light fitting, 3-hour maintained variant {i}") for i in range(6)]
     out = m.suggest([line], quotes)
-    assert len(out) <= m.DEFAULT.top_n and [s.rank for s in out] == sorted(s.rank for s in out)
+    assert len(out) == m.DEFAULT.top_n and [s.rank for s in out] == [1, 2, 3]
 
 
 def test_each_supplier_is_judged_separately() -> None:
@@ -135,12 +143,14 @@ def test_price_and_validity_are_evidence_only() -> None:
     line = boq("Single switched socket, 16 A")
     cheap = quote("Single switched socket, 16 A", price="1.00", valid_until=date(2026, 10, 1))
     dear = quote("Single switched socket, 16 A", price="900.00", valid_until=date(2027, 1, 1))
-    [a] = m.suggest([line], [cheap], closing_date=date(2026, 11, 1))
-    [b] = m.suggest([line], [dear], closing_date=date(2026, 11, 1))
+    out = m.suggest([line], [cheap, dear], closing_date=date(2026, 11, 1))
+    a = next(s for s in out if s.quote_id == cheap.id)
+    b = next(s for s in out if s.quote_id == dear.id)
     assert a.score == b.score
     assert "quote_expires_before_closing" in a.evidence["warnings"]
     assert "quote_expires_before_closing" not in b.evidence["warnings"]
     assert a.evidence["price"]["unit_price"] == "1.00"
+    assert b.evidence["price"]["unit_price"] == "900.00"
 
 
 def test_missing_price_and_unit_do_not_crash() -> None:
@@ -196,7 +206,16 @@ def test_result_does_not_depend_on_input_order(
 ) -> None:
     lines = [m.BoqLine(UUID(int=i + 1), str(i), d, "no") for i, d in enumerate(boqs)]
     qs = [
-        m.QuoteLine(UUID(int=100 + i), SUP_A, UUID(int=500), d, None, "no", Decimal("1"), None)
+        m.QuoteLine(
+            UUID(int=100 + i),
+            (SUP_A, SUP_B)[i % 2],
+            UUID(int=500),
+            d,
+            None,
+            "no",
+            Decimal("1"),
+            None,
+        )
         for i, d in enumerate(quotes)
     ]
     first = m.suggest(lines, qs)
@@ -206,7 +225,8 @@ def test_result_does_not_depend_on_input_order(
 
     def key(out: list[m.Suggestion]) -> list:
         return sorted(
-            (str(s.boq_id), str(s.quote_id), s.score, s.classification, s.rank) for s in out
+            (str(s.boq_id), str(s.quote_id), s.score, s.classification, s.rank, repr(s.evidence))
+            for s in out
         )
 
     assert key(first) == key(m.suggest(shuffled_b, shuffled_q))
@@ -240,3 +260,148 @@ def test_a_spec_conflict_is_never_clear(boqs: list[str], quotes: list[str]) -> N
         if "spec_conflict" in s.evidence["warnings"]:
             assert s.classification != "clear"
         assert Decimal(0) <= s.score <= Decimal(1)
+
+
+# --- review fixes ------------------------------------------------------------------------------
+
+
+def test_shared_spec_number_alone_is_not_a_code_or_a_clear_match() -> None:
+    for a, b in [
+        ("Isolator, 63 A", "Contactor, 63 A"),
+        ("MCB 400 A", "Busbar 400 A"),
+        ("Isolator, 400 A", "Contactor, 400 A"),
+    ]:
+        out = m.suggest([boq(a)], [quote(b)])
+        assert all(s.classification != "clear" for s in out), (a, b)
+        assert all(s.evidence["signals"]["code"] is False for s in out), (a, b)
+
+
+def test_genuine_pair_with_the_same_spec_stays_clear() -> None:
+    [s] = m.suggest([boq("Isolator switch, 63 A")], [quote("Isolator switch, 63 A, IP65")])
+    assert s.classification == "clear" and s.evidence["signals"]["text"] >= m.DEFAULT.clear_text_min
+
+
+def test_codes_need_letters_and_digits_or_an_explicit_prefix() -> None:
+    assert m._codes("400 A, 1200 mm, 2.5 mm2, 3C+E, 3-pole, IP65") == frozenset()
+    assert m._codes("Widget AB12 and SKU-777 part 9") == {"ab12", "777", "9"}
+
+
+def test_multi_value_quote_is_never_clear() -> None:
+    for a, b in [("MCB 20 A", "MCB 20 A 32 A"), ("Cable 1.5 mm2", "Cable 1.5 mm2 2.5 mm2")]:
+        out = m.suggest([boq(a)], [quote(b)])
+        assert out and all(s.classification != "clear" for s in out), (a, b)
+        assert all("spec_multi_value" in s.evidence["warnings"] for s in out)
+        assert "spec_conflict" not in out[0].evidence["warnings"]
+
+
+def test_free_text_never_reaches_the_evidence() -> None:
+    line = boq("Conduit 20 mm secret-boq-words", unit="m")
+    [s] = m.suggest([line], [quote("Conduit 20 mm secret-quote-words", unit="supplier acme roll")])
+    assert s.evidence["unit"] == {"boq": "m", "quote": None, "state": "mismatch"}
+    blob = repr(s.evidence)
+    assert "acme" not in blob and "secret" not in blob and "Conduit" not in blob
+
+
+VOCAB = [
+    "cable",
+    "socket",
+    "mcb",
+    "board",
+    "light",
+    "led",
+    "conduit",
+    "16",
+    "a",
+    "20",
+    "32",
+    "mm2",
+    "2.5",
+    "3-pole",
+    "sku-123",
+    "ab12",
+    "m",
+    "mm",
+    "1.5",
+]
+
+
+def _reference_all_pairs(line: m._Prepared, index: m._Index) -> list[int]:
+    return list(range(index.size))
+
+
+def test_narrowing_never_drops_a_pair_that_reaches_ambiguous_min(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    rng = random.Random(7)  # noqa: S311
+
+    def desc() -> str:
+        return " ".join(rng.choice(VOCAB) for _ in range(rng.randint(1, 6)))
+
+    cases = []
+    for _ in range(300):
+        lines = [
+            m.BoqLine(UUID(int=i + 1), str(i), desc(), rng.choice(["no", "m", None]))
+            for i in range(3)
+        ]
+        qs = [
+            m.QuoteLine(
+                UUID(int=100 + i),
+                SUP_A,
+                UUID(int=500),
+                desc(),
+                rng.choice([None, "SKU-123"]),
+                rng.choice(["no", "m", None]),
+                None,
+                None,
+            )
+            for i in range(8)
+        ]
+        cases.append((lines, qs))
+    narrowed = [m.suggest(*c) for c in cases]
+    monkeypatch.setattr(m, "_candidate_indices", _reference_all_pairs)
+    full = [m.suggest(*c) for c in cases]
+    assert narrowed == full
+    assert any(full)
+
+
+def test_three_hundred_by_three_hundred_is_fast() -> None:
+    import time
+
+    rng = random.Random(3)  # noqa: S311
+    words = [f"item{i}" for i in range(60)] + ["cable", "board", "led", "light", "conduit"]
+    lines = [
+        m.BoqLine(
+            UUID(int=i + 1),
+            str(i),
+            " ".join(rng.sample(words, 5)) + f" {rng.choice([16, 20, 32, 63])} A",
+            "no",
+        )
+        for i in range(300)
+    ]
+    qs = [
+        m.QuoteLine(
+            UUID(int=1000 + i),
+            SUP_A,
+            UUID(int=9),
+            " ".join(rng.sample(words, 5)) + f" {rng.choice([16, 20, 32, 63])} A",
+            None,
+            "no",
+            Decimal("1"),
+            None,
+        )
+        for i in range(300)
+    ]
+    start = time.perf_counter()
+    m.suggest(lines, qs)
+    assert time.perf_counter() - start < 5
+
+
+@settings(max_examples=80, deadline=None)
+@given(st.lists(descs, min_size=1, max_size=3), st.lists(descs, min_size=1, max_size=6))
+def test_a_multi_value_pair_is_never_clear(boqs: list[str], quotes: list[str]) -> None:
+    lines = [m.BoqLine(UUID(int=i + 1), str(i), d, "no") for i, d in enumerate(boqs)]
+    qs = [
+        m.QuoteLine(UUID(int=100 + i), SUP_A, UUID(int=500), d, None, "no", None, None)
+        for i, d in enumerate(quotes)
+    ]
+    for s in m.suggest(lines, qs):
+        if "spec_multi_value" in s.evidence["warnings"]:
+            assert s.classification != "clear"

@@ -14,7 +14,7 @@ from uuid import UUID
 
 from app.modules.extraction.public import canon_unit
 
-from .matching_config import ALIASES, DEFAULT, STOPWORDS, MatchConfig
+from .matching_config import ALIASES, CANONICAL_UNITS, DEFAULT, STOPWORDS, MatchConfig
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ def _norm_number(raw: str) -> str:
 
 def spec_tokens(text: str) -> dict[str, frozenset[str]]:
     """Electrical specifics as {kind: values}: `400 A` -> a:{400}, `3C+E` -> core:{3c+e}."""
-    low = text.lower().replace("²", "2").replace("³", "3")
+    low = _normalise(text)
     kinds: dict[str, set[str]] = defaultdict(set)
     for number, unit in _VALUE_UNIT.findall(low):
         kinds[unit].add(_norm_number(number))
@@ -80,15 +80,40 @@ def spec_tokens(text: str) -> dict[str, frozenset[str]]:
     return {k: frozenset(v) for k, v in kinds.items()}
 
 
+_SPEC_SPANS = (_VALUE_UNIT, _CORES, _IP, *_STRUCT.values())
+
+
+def _normalise(text: str) -> str:
+    return text.lower().replace("²", "2").replace("³", "3")
+
+
+def _strip_specs(low: str) -> str:
+    """Blank out the spans that `spec_tokens` consumed, so they are not also words or codes."""
+    for pattern in _SPEC_SPANS:
+        low = pattern.sub(" ", low)
+    return low
+
+
 def _compare_specs(
     a: dict[str, frozenset[str]], b: dict[str, frozenset[str]]
 ) -> tuple[float | None, dict[str, Any]]:
     if not a and not b:
-        return None, {"matched": [], "conflicts": [], "boq_only": [], "quote_only": []}
-    matched, conflicts, boq_only, quote_only = [], [], [], []
+        return None, {
+            "matched": [],
+            "conflicts": [],
+            "multi_value": [],
+            "boq_only": [],
+            "quote_only": [],
+        }
+    matched, conflicts, multi, boq_only, quote_only = [], [], [], [], []
     for kind in sorted(set(a) | set(b)):
         if kind in a and kind in b:
-            (matched if a[kind] & b[kind] else conflicts).append(kind)
+            if a[kind] & b[kind]:
+                matched.append(kind)
+                if a[kind] != b[kind]:
+                    multi.append(kind)
+            else:
+                conflicts.append(kind)
         elif kind in a:
             boq_only.append(kind)
         else:
@@ -97,6 +122,7 @@ def _compare_specs(
     detail = {
         "matched": matched,
         "conflicts": conflicts,
+        "multi_value": multi,
         "boq_only": boq_only,
         "quote_only": quote_only,
     }
@@ -109,8 +135,9 @@ _WORD = re.compile(r"[a-z0-9]+(?:[.,][0-9]+)?")
 
 
 def _tokens(text: str) -> frozenset[str]:
+    """Descriptive words; spec values (`400 A`, `3C+E`) are scored by the spec signal instead."""
     out: set[str] = set()
-    for raw in _WORD.findall(text.lower().replace("²", "2")):
+    for raw in _WORD.findall(_strip_specs(_normalise(text))):
         for word in ALIASES.get(raw, raw).split():
             if word in STOPWORDS:
                 continue
@@ -118,32 +145,86 @@ def _tokens(text: str) -> frozenset[str]:
     return frozenset(out)
 
 
+_DICE_FLOOR = 0.2  # below this the (slow) sequence ratio cannot matter; text = dice
+
+
 def _text_similarity(a: frozenset[str], b: frozenset[str]) -> float:
     if not a or not b:
         return 0.0
     dice = 2 * len(a & b) / (len(a) + len(b))
+    if dice < _DICE_FLOOR:
+        return dice
     seq = SequenceMatcher(None, " ".join(sorted(a)), " ".join(sorted(b)), autojunk=False).ratio()
     return (dice + seq) / 2
 
 
-_CODE = re.compile(r"\b(?:sku[-\s]?)?([a-z]{0,6}-?\d{3,}[a-z0-9-]*)\b", re.I)
+_PREFIXED_CODE = re.compile(
+    r"(?<![a-z0-9])(?:sku|part|code|pn|p/n)\s*[-:#]?\s*([a-z0-9][a-z0-9-]*)"
+)
+_MIXED_CODE = re.compile(r"(?<![a-z0-9-])([a-z0-9]+(?:-[a-z0-9]+)*)(?![a-z0-9])")
+_PREFIX_HEAD = re.compile(r"^(?:sku|part|code|pn)-")
+_BARE_UNIT = re.compile(r"^(?:m2|m3|mm2)$")
 
 
-def _codes(text: str) -> set[str]:
-    return {c.lower() for c in _CODE.findall(text) if re.search(r"\d", c)}
+def _codes(text: str) -> frozenset[str]:
+    """Product codes: explicit `sku/part/code` references, or tokens mixing letters and digits."""
+    low = _strip_specs(_normalise(text))
+    out = {c.rstrip("-") for c in _PREFIXED_CODE.findall(low)}
+    for token in _MIXED_CODE.findall(low):
+        if (
+            re.search(r"\d", token)
+            and re.search(r"[a-z]", token)
+            and not _PREFIX_HEAD.match(token)
+            and not _BARE_UNIT.match(token)
+        ):
+            out.add(token)
+    return frozenset(c for c in out if c)
 
 
 # --- scoring -----------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
+class _Prepared:
+    """Everything derived from one description, computed once."""
+
+    specs: dict[str, frozenset[str]]
+    tokens: frozenset[str]
+    codes: frozenset[str]
+    spec_pairs: frozenset[tuple[str, str]]
+
+
+def _prepare(description: str, sku: str | None = None) -> _Prepared:
+    specs = spec_tokens(description)
+    codes = _codes(description)
+    if sku and sku.strip():
+        codes = codes | _codes(sku) | {sku.strip().lower()}
+    pairs = frozenset((k, v) for k, vs in specs.items() for v in vs)
+    return _Prepared(specs, _tokens(description), codes, pairs)
+
+
+@dataclass(frozen=True)
 class _Scored:
-    boq: BoqLine
     quote: QuoteLine
     score: float
-    conflict: bool
-    unit_mismatch: bool
-    evidence: dict[str, Any]
+    text: float
+    spec: float | None
+    spec_detail: dict[str, Any]
+    unit_state: str
+    unit_score: float
+    code_hit: bool
+
+    @property
+    def conflict(self) -> bool:
+        return bool(self.spec_detail["conflicts"])
+
+    @property
+    def multi_value(self) -> bool:
+        return bool(self.spec_detail["multi_value"])
+
+    @property
+    def unit_mismatch(self) -> bool:
+        return self.unit_state == "mismatch"
 
 
 def _unit_state(boq_unit: str | None, quote_unit: str | None) -> str:
@@ -153,13 +234,17 @@ def _unit_state(boq_unit: str | None, quote_unit: str | None) -> str:
     return "equal" if a == b else "mismatch"
 
 
+def _known_unit(raw: str | None) -> str | None:
+    """The canonical unit, or None: free text must never be echoed into the evidence."""
+    unit = canon_unit(raw)
+    return unit if unit in CANONICAL_UNITS else None
+
+
 def _score_pair(
-    boq: BoqLine, quote: QuoteLine, boq_data: tuple, closing: date | None, cfg: MatchConfig
+    boq: BoqLine, boq_p: _Prepared, quote: QuoteLine, quote_p: _Prepared, cfg: MatchConfig
 ) -> _Scored:
-    boq_specs, boq_tokens, boq_codes = boq_data
-    quote_specs = spec_tokens(quote.description)
-    spec_score, spec_detail = _compare_specs(boq_specs, quote_specs)
-    text_score = _text_similarity(boq_tokens, _tokens(quote.description))
+    spec_score, spec_detail = _compare_specs(boq_p.specs, quote_p.specs)
+    text_score = _text_similarity(boq_p.tokens, quote_p.tokens)
     state = _unit_state(boq.unit, quote.unit)
     unit_score = {"equal": 1.0, "mismatch": 0.0, "unknown": 0.5}[state]
     if spec_score is None:
@@ -170,36 +255,81 @@ def _score_pair(
         )
     else:
         score = cfg.w_spec * spec_score + cfg.w_text * text_score + cfg.w_unit * unit_score
-    code_hit = bool(quote.sku and (_codes(quote.sku) | {quote.sku.lower()}) & boq_codes) or bool(
-        boq_codes & _codes(quote.description)
-    )
+    code_hit = bool(boq_p.codes & quote_p.codes)
     if code_hit:
         score += cfg.code_bonus
-    conflict = bool(spec_detail["conflicts"])
-    if conflict:
+    if spec_detail["conflicts"]:
         score -= cfg.conflict_penalty
     score = max(0.0, min(1.0, score))
+    return _Scored(quote, score, text_score, spec_score, spec_detail, state, unit_score, code_hit)
+
+
+def _evidence(boq: BoqLine, s: _Scored, rank: int, closing: date | None) -> dict[str, Any]:
+    quote = s.quote
     warnings = []
-    if conflict:
+    if s.conflict:
         warnings.append("spec_conflict")
-    if state == "mismatch":
+    if s.multi_value:
+        warnings.append("spec_multi_value")
+    if s.unit_mismatch:
         warnings.append("unit_mismatch")
     if closing and quote.valid_until and quote.valid_until < closing:
         warnings.append("quote_expires_before_closing")
-    evidence = {
+    return {
         "signals": {
-            "text": round(text_score, 4),
-            "spec": None if spec_score is None else round(spec_score, 4),
-            "unit": unit_score,
-            "code": code_hit,
+            "text": round(s.text, 4),
+            "spec": None if s.spec is None else round(s.spec, 4),
+            "unit": s.unit_score,
+            "code": s.code_hit,
         },
-        "spec": spec_detail,
-        "unit": {"boq": canon_unit(boq.unit), "quote": canon_unit(quote.unit), "state": state},
+        "spec": s.spec_detail,
+        "unit": {
+            "boq": _known_unit(boq.unit),
+            "quote": _known_unit(quote.unit),
+            "state": s.unit_state,
+        },
         "price": {"unit_price": None if quote.unit_price is None else str(quote.unit_price)},
         "valid_until": quote.valid_until.isoformat() if quote.valid_until else None,
         "warnings": warnings,
+        "rank": rank,
     }
-    return _Scored(boq, quote, score, conflict, state == "mismatch", evidence)
+
+
+@dataclass
+class _Index:
+    """Inverted index over one supplier's quotes: which quotes share a word, a spec or a code."""
+
+    size: int
+    by_token: dict[str, list[int]]
+    by_spec: dict[tuple[str, str], list[int]]
+    by_code: dict[str, list[int]]
+
+
+def _build_index(prepared: Sequence[_Prepared]) -> _Index:
+    index = _Index(len(prepared), defaultdict(list), defaultdict(list), defaultdict(list))
+    for i, p in enumerate(prepared):
+        for t in p.tokens:
+            index.by_token[t].append(i)
+        for pair in p.spec_pairs:
+            index.by_spec[pair].append(i)
+        for c in p.codes:
+            index.by_code[c].append(i)
+    return index
+
+
+def _candidate_indices(line: _Prepared, index: _Index) -> Sequence[int]:
+    """Quotes that share a word, a (kind, value) spec or a code with the line.
+
+    A pair sharing none of these scores at most `w_unit + code_bonus`, far below `ambiguous_min`.
+    """
+    found: set[int] = set()
+    for t in line.tokens:
+        found.update(index.by_token.get(t, ()))
+    for pair in line.spec_pairs:
+        found.update(index.by_spec.get(pair, ()))
+    for c in line.codes:
+        found.update(index.by_code.get(c, ()))
+    return sorted(found)
 
 
 def suggest(
@@ -212,13 +342,19 @@ def suggest(
     by_supplier: dict[UUID, list[QuoteLine]] = defaultdict(list)
     for q in quotes:
         by_supplier[q.supplier_id].append(q)
+    suppliers = []
+    for supplier_id in sorted(by_supplier, key=str):
+        qs = sorted(by_supplier[supplier_id], key=lambda q: str(q.id))
+        prepared = [_prepare(q.description, q.sku) for q in qs]
+        suppliers.append((supplier_id, qs, prepared, _build_index(prepared)))
     for line in boq:
-        data = (spec_tokens(line.description), _tokens(line.description), _codes(line.description))
-        if not data[1] and not data[0]:
+        line_p = _prepare(line.description)
+        if not line_p.tokens and not line_p.specs:
             continue
-        for supplier_id in sorted(by_supplier, key=str):
+        for supplier_id, qs, prepared, index in suppliers:
             scored = [
-                _score_pair(line, q, data, closing_date, config) for q in by_supplier[supplier_id]
+                _score_pair(line, line_p, qs[i], prepared[i], config)
+                for i in _candidate_indices(line_p, index)
             ]
             scored = [s for s in scored if s.score >= config.ambiguous_min]
             scored.sort(key=lambda s: (-s.score, str(s.quote.id)))
@@ -227,11 +363,12 @@ def suggest(
                 clear = (
                     rank == 1
                     and s.score >= config.suggest_min
+                    and s.text >= config.clear_text_min
                     and not s.conflict
+                    and not s.multi_value
                     and not s.unit_mismatch
                     and (runner_up is None or s.score - runner_up >= config.margin)
                 )
-                evidence = {**s.evidence, "rank": rank}
                 out.append(
                     Suggestion(
                         line.id,
@@ -240,7 +377,7 @@ def suggest(
                         Decimal(str(round(s.score, 4))),
                         "clear" if clear else "ambiguous",
                         rank,
-                        evidence,
+                        _evidence(line, s, rank, closing_date),
                     )
                 )
     return out
