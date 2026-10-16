@@ -9,20 +9,38 @@ import type { Job } from "./types";
 
 export const JOB_POLL_MS = 2000;
 
-/** Failed fetches after which polling gives up. TanStack resets fetchFailureCount at the start of
- * every fetch (so it never exceeds 1 across refetches); errorUpdateCount is the cumulative count. */
+/** Consecutive failed fetches after which polling gives up. */
 export const MAX_POLL_FAILURES = 5;
 
-/** Polling rule shared by every polled query: stop on a terminal job, on a 4xx answer (the thing
- * is gone or forbidden; asking again changes nothing), and after MAX_POLL_FAILURES errors. A 5xx or network blip keeps polling. */
-export function shouldPoll(
-  query: { state: { data: { status: string } | undefined; error: unknown; errorUpdateCount: number } },
-  pollMs: number,
-): number | false {
-  if (isTerminalJob(query.state.data?.status)) return false;
+type PollQuery<T> = {
+  state: { data: T | undefined; error: unknown; errorUpdateCount: number; dataUpdatedAt: number };
+};
+
+/** TanStack exposes only a cumulative errorUpdateCount (fetchFailureCount resets at every fetch). To
+ * count CONSECUTIVE failures we remember, per cached query, the errorUpdateCount seen when the latest
+ * success landed (identified by a changed dataUpdatedAt). refetchInterval runs after every state
+ * change, so the baseline is refreshed after each success, and reading it is idempotent. */
+const baselines = new WeakMap<object, { dataUpdatedAt: number; errors: number }>();
+
+function consecutiveFailures(query: PollQuery<unknown>): number {
+  const { dataUpdatedAt, errorUpdateCount } = query.state;
+  let base = baselines.get(query);
+  if (!base || base.dataUpdatedAt !== dataUpdatedAt) {
+    // Never succeeded (dataUpdatedAt 0): every error so far counts.
+    base = { dataUpdatedAt, errors: dataUpdatedAt === 0 ? 0 : errorUpdateCount };
+    baselines.set(query, base);
+  }
+  return errorUpdateCount - base.errors;
+}
+
+/** Polling rule shared by every polled query: stop when isDone(data), on a 4xx answer (the thing is
+ * gone or forbidden; asking again changes nothing), and after MAX_POLL_FAILURES consecutive errors.
+ * A 5xx or network blip keeps polling, and a success resets the failure count. */
+export function shouldPoll<T>(query: PollQuery<T>, pollMs: number, isDone: (data: T | undefined) => boolean): number | false {
+  if (isDone(query.state.data)) return false;
   const error = query.state.error;
   if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
-  if (query.state.errorUpdateCount >= MAX_POLL_FAILURES) return false;
+  if (consecutiveFailures(query) >= MAX_POLL_FAILURES) return false;
   return pollMs;
 }
 
@@ -31,7 +49,7 @@ export const jobQueryOptions = (jobId: string, pollMs = JOB_POLL_MS) =>
     queryKey: ["job", jobId] as const,
     queryFn: ({ signal }) => get<Job>(`/api/v1/jobs/${jobId}`, undefined, signal),
     // Poll until the job is over; a finished job is fetched once and then left alone.
-    refetchInterval: (query) => shouldPoll(query, pollMs),
+    refetchInterval: (query) => shouldPoll(query, pollMs, (job) => isTerminalJob(job?.status)),
     staleTime: 0,
   });
 
