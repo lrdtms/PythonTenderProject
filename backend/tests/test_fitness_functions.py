@@ -25,6 +25,7 @@ from app.modules.tenders import models as _tenders_models  # noqa: F401
 from app.worker import handlers
 from app.worker.runner import process_one
 from tests.conftest import add_member, make_pdf, make_tender, register, upload
+from tests.review_helpers import seed_review_rows
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 
@@ -52,6 +53,10 @@ REQUESTS = {
     ("POST", "/api/v1/document-versions/{version_id}/extract"): lambda: {
         "json": {"deep_scan": False}
     },
+    ("PATCH", "/api/v1/boq-items/{boq_item_id}"): lambda: {"json": {"description": "hijacked"}},
+    ("PATCH", "/api/v1/requirements/{requirement_id}"): lambda: {
+        "json": {"description": "hijacked"}
+    },
 }
 SEARCH_PARAMS = {("GET", "/api/v1/tenders/{tender_id}/search"): lambda: {"params": {"q": "secret"}}}
 
@@ -73,6 +78,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     tender_b = make_tender(org_b, "B-only secret")
     uploaded = upload(org_b, tender_b, make_pdf(["B-only secret clause"]), "b-secret.pdf").json()
     assert process_one(handlers.HANDLERS) is True  # B now has page 1 and searchable chunks
+    seeded = seed_review_rows(org_b, uploaded["version"]["id"], str(uploaded["job_id"]))
     member_b = add_member(org_b, "b2@example.com", "estimator")
     membership_b = next(
         m["membership_id"]
@@ -86,8 +92,16 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "job_id": str(uploaded["job_id"]),
         "membership_id": membership_b,
         "page_number": 1,
+        **seeded,
     }
-    forbidden = ("B-only secret", "b2@example.com", "b-secret.pdf", known["version_id"])
+    forbidden = (
+        "B-only secret",
+        "b2@example.com",
+        "b-secret.pdf",
+        known["version_id"],
+        "seeded-b-line",
+        "seeded-b-rule",
+    )
 
     routes = _routes_with_params()
     swept = 0
@@ -107,7 +121,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     schema_count = sum(
         len(ops) for path, ops in fastapi_app.openapi()["paths"].items() if "{" in path
     )
-    assert swept == schema_count >= 18, f"swept {swept} of {schema_count} routes with an id"
+    assert swept == schema_count >= 28, f"swept {swept} of {schema_count} routes with an id"
     paths = {p for _, p, _ in routes}
     for needle in (
         "documents",
@@ -135,6 +149,16 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     # Org A's extract attempt queued nothing: B's jobs are only the ones its own ingest queued.
     assert all(k["job"]["status"] == "queued" for k in status_b.json()["kinds"])
     assert member_b.client.get("/api/v1/me").status_code == 200
+    b_lines = org_b.client.get(f"/api/v1/document-versions/{known['version_id']}/boq-items").json()
+    assert [(x["description"], x["review_status"]) for x in b_lines] == [
+        ("seeded-b-line", "unreviewed")
+    ]
+    b_rules = org_b.client.get(
+        f"/api/v1/document-versions/{known['version_id']}/requirements"
+    ).json()
+    assert [(x["description"], x["review_status"]) for x in b_rules] == [
+        ("seeded-b-rule", "unreviewed")
+    ]
 
 
 def test_f1_lists_never_mix_organisations() -> None:
