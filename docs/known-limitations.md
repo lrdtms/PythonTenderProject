@@ -45,6 +45,14 @@ Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md):
 - **Dates are read day-first** for dd/mm/yyyy.
 - **The header is read only from the page that holds the item table**, so a cover-letter first page is missed.
 - **Supplier creation through a future API can race the worker.** Insert-on-conflict handling is due with the Phase 3 supplier API.
+- **A match job enqueued while another is running is not repeated** until the next trigger. Phase 3 adds `POST /tenders/{id}/match`; multi-worker deployments need re-enqueue-when-running.
+- **Matching ignores quantity and price by design** and does no unit conversion (different units are flagged `unit_mismatch`).
+- **The synonym and qualifier vocabulary is small and trade-specific.** Qualifiers are read from the whole description, so a shared incidental material word can hide a conflict, and a quote naming a qualifier that the BoQ line omits is not penalised.
+- **`N-core` and `NC+E` are treated as the same cable notation** (a convention); the evidence flags it as `core_notation_differs`.
+- **Matching accuracy is measured on synthetic data only** (about 70 quote items on the committed packs; exact counts are in `docs/spikes/slice-5a-scores.md`). Two ground-truth items per pack are generator labelling artefacts, which the evaluation reports separately.
+- **Suggested rows whose both sides belong to superseded document versions can linger** until Phase 3 read paths filter to current versions.
+- **Closing-date comparison uses the UTC date of `closing_at`.**
+- **One worker means a long requirements job delays matching.**
 
 ## Slice 4 phase 4 (review screen)
 
