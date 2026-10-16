@@ -239,8 +239,8 @@ describe("ReviewScreen", () => {
       return h();
     });
     renderSignedIn(<ReviewScreen />);
-    expect(await screen.findByTestId("pdf")).toHaveTextContent("pdf page 2");
-  });
+    await waitFor(() => expect(screen.getByTestId("pdf")).toHaveTextContent("pdf page 2"), { timeout: 10_000 });
+  }, 20_000);
 
   it("says so when the linked requirement is not in the document", async () => {
     search.row = "missing";

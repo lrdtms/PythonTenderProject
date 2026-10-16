@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from app.modules.extraction import public as extraction
 from app.modules.jobs import public as jobs
 from app.modules.knowledge import public as knowledge
 from app.modules.pipeline import public as pipeline
+from app.modules.suppliers import public as suppliers
 from app.worker.runner import JobHandler, ProgressFn
 
 import_all_models()  # the worker never loads the API, so register every table here
@@ -152,6 +154,29 @@ def extract_requirements(
     return warnings
 
 
+def extract_quotation(
+    session: Session, ctx: OrgContext, job: jobs.ClaimedJob, progress: ProgressFn
+) -> list[dict[str, Any]]:
+    _guard(session, ctx, job.subject_id)
+    result = extraction.parse_quotation(_pages(session, ctx, job.subject_id))
+    warnings: list[dict[str, Any]] = [{"code": flag} for flag in result.header.flags]
+    warnings += result.warnings
+    rows = _cap([c.as_row() for c in result.items], warnings)
+    run = pipeline.run_for_job(session, ctx, job.id, "quotation")
+    pipeline.lock_runs(session, ctx, job.subject_id, "quotation")
+    filename = documents.get_version(session, ctx, job.subject_id).filename
+    stored = suppliers.store_quotation(
+        session, ctx, job.subject_id, run.id, result.header.as_row(), rows, Path(filename).stem
+    )
+    warnings += _replace_warning(stored.duplicates_of_reviewed)
+    pipeline.finish_run(
+        session, ctx, job.id, "quotation", warnings,
+        {"items": stored.inserted, "supplier_created": stored.supplier_created},
+    )  # fmt: skip
+    progress(1, 1)
+    return warnings
+
+
 def _starter(kind: str):
     def on_start(session: Session, ctx: OrgContext, job: jobs.ClaimedJob) -> None:
         requirements = kind == "requirements"
@@ -186,5 +211,8 @@ HANDLERS: dict[str, JobHandler] = {
         run=extract_requirements,
         on_failure=_failer("requirements"),
         on_start=_starter("requirements"),
+    ),
+    documents.EXTRACT_QUOTATION_JOB: JobHandler(
+        run=extract_quotation, on_failure=_failer("quotation"), on_start=_starter("quotation")
     ),
 }

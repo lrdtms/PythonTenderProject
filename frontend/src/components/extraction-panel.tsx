@@ -24,6 +24,10 @@ function countText(kind: string, counts: Record<string, unknown>): string | null
     const items = n("items");
     return items === null ? null : `${items} ${items === 1 ? "line" : "lines"}`;
   }
+  if (kind === "quotation") {
+    const items = n("items");
+    return items === null ? null : `${items} ${items === 1 ? "item" : "items"}`;
+  }
   const count = n("requirements");
   return count === null ? null : `${count} ${count === 1 ? "requirement" : "requirements"}`;
 }

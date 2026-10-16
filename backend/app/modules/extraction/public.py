@@ -5,12 +5,17 @@ from .numbers import is_ambiguous_separator, parse_decimal
 from .prefilter import PrefilterResult, prefilter
 from .prompts import FILTER_VERSION, PROMPT_VERSION, SCHEMA_VERSION
 from .provenance import FUZZY_MAX_QUOTE_CHARS, Location, attach_provenance, locate
+from .quotation import parse_quotation
 from .requirements import ExtractOutcome, InvalidOutput, extract_requirements, merge_requirements
 from .types import (
     BOQ_TEXT_LIMITS,
+    QUOTATION_TEXT_LIMITS,
     BoqCandidate,
     BoqResult,
     PageInput,
+    QuotationCandidate,
+    QuotationHeader,
+    QuotationResult,
     RequirementCandidate,
     Window,
     source_order,
@@ -22,6 +27,7 @@ __all__ = [
     "FUZZY_MAX_QUOTE_CHARS",
     "FILTER_VERSION",
     "PROMPT_VERSION",
+    "QUOTATION_TEXT_LIMITS",
     "SCHEMA_VERSION",
     "BoqCandidate",
     "BoqResult",
@@ -30,6 +36,9 @@ __all__ = [
     "Location",
     "PageInput",
     "PrefilterResult",
+    "QuotationCandidate",
+    "QuotationHeader",
+    "QuotationResult",
     "RequirementCandidate",
     "Window",
     "attach_provenance",
@@ -40,6 +49,7 @@ __all__ = [
     "merge_requirements",
     "parse_boq",
     "parse_decimal",
+    "parse_quotation",
     "prefilter",
     "source_order",
 ]

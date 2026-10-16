@@ -56,6 +56,18 @@ describe("status text", () => {
     expect(warningText("text")).toBe("Warning");
   });
 
+  it("describes quotation extraction", () => {
+    expect(kindLabel("quotation")).toBe("Quotation");
+    expect(warningText({ code: "NO_SUPPLIER_NAME" })).toMatch(/supplier name/i);
+    expect(warningText({ code: "NO_REFERENCE" })).toMatch(/reference/i);
+    expect(warningText({ code: "NO_QUOTE_DATE" })).toMatch(/quotation date/i);
+    expect(warningText({ code: "NO_VALIDITY" })).toMatch(/valid/i);
+    expect(warningText({ code: "NO_CURRENCY" })).toMatch(/currency/i);
+    expect(warningText({ code: "VAT_UNKNOWN" })).toMatch(/VAT/);
+    expect(warningText({ code: "QUOTE_NEEDS_MANUAL_ENTRY", pages: [1] })).toMatch(/scanned/i);
+    expect(warningText({ code: "NO_QUOTATION_FOUND" })).toMatch(/no quotation/i);
+  });
+
   it("words page lists and counts correctly in every case", () => {
     expect(warningText({ code: "OCR_FAILED" })).toBe("Some pages could not be read.");
     expect(warningText({ code: "OCR_FAILED", pages: [] })).toBe("Some pages could not be read.");

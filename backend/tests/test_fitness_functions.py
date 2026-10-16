@@ -147,7 +147,9 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     status_b = org_b.client.get(f"/api/v1/document-versions/{known['version_id']}/extraction")
     assert status_b.status_code == 200
     # Org A's extract attempt queued nothing: B's jobs are only the ones its own ingest queued.
-    assert all(k["job"]["status"] == "queued" for k in status_b.json()["kinds"])
+    kinds = {k["kind"]: k for k in status_b.json()["kinds"]}
+    assert all(k["job"]["status"] == "queued" for n, k in kinds.items() if n != "quotation")
+    assert kinds["quotation"]["job"] is None  # a non-quotation upload has no quotation job
     assert member_b.client.get("/api/v1/me").status_code == 200
     b_lines = org_b.client.get(f"/api/v1/document-versions/{known['version_id']}/boq-items").json()
     assert [(x["description"], x["review_status"]) for x in b_lines] == [
