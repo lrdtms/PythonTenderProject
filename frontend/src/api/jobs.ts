@@ -55,7 +55,7 @@ export const jobQueryOptions = (jobId: string, pollMs = JOB_POLL_MS) =>
 
 /** The job, polled. When it turns terminal the tender's documents are refreshed once, because the
  * version's processing_status (and its extraction jobs) change with it. */
-export function useJob(jobId: string, tenderId: string, pollMs?: number) {
+export function useJob(jobId: string, tenderId: string, pollMs?: number, versionStatus?: string) {
   const queryClient = useQueryClient();
   const query = useQuery(jobQueryOptions(jobId, pollMs));
   const status = query.data?.status;
@@ -67,6 +67,13 @@ export function useJob(jobId: string, tenderId: string, pollMs?: number) {
     }
     previous.current = status;
   }, [status, tenderId, queryClient]);
+  // Self-heal: the ingest job is over but the version row still says pending/processing (the job
+  // finished before this card's first poll, so no transition was seen). Refresh once per distinct
+  // (job status, version status) pair, so a server that keeps returning the stale value cannot loop.
+  const stale = isTerminalJob(status) && (versionStatus === "pending" || versionStatus === "processing");
+  useEffect(() => {
+    if (stale) void queryClient.invalidateQueries({ queryKey: ["documents", tenderId] }, { cancelRefetch: false });
+  }, [stale, status, versionStatus, tenderId, queryClient]);
   return query;
 }
 

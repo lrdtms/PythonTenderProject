@@ -7,10 +7,10 @@ import { isTerminalJob, jobErrorText, jobStatusLabel, jobTone, warningText } fro
 import { useCan } from "./auth-gate";
 import { StatusBadge } from "./status-badge";
 
-type Props = { jobId: string; tenderId: string; pollMs?: number; archived?: boolean };
+type Props = { jobId: string; tenderId: string; pollMs?: number; archived?: boolean; versionStatus?: string };
 
-export function JobProgress({ jobId, tenderId, pollMs, archived = false }: Props) {
-  const { data: job, error, isPending } = useJob(jobId, tenderId, pollMs);
+export function JobProgress({ jobId, tenderId, pollMs, archived = false, versionStatus }: Props) {
+  const { data: job, error, isPending } = useJob(jobId, tenderId, pollMs, versionStatus);
   const canRetry = useCan("upload_documents") && !archived;
   const retry = useRetryJob(tenderId);
 

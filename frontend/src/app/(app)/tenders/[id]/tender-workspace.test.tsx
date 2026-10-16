@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ids, makeDocument, makeJob, makeTender, makeVersion } from "@/test/fixtures";
@@ -74,5 +74,71 @@ describe("TenderWorkspace", () => {
     renderSignedIn(<TenderWorkspace />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/not found/i);
     expect(callsTo(fetchMock, "GET", `${TENDER}/documents`)).toHaveLength(0);
+  });
+
+  describe("version status that lags behind a finished ingest job", () => {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const docWith = (processing_status: "pending" | "processing" | "ready" | "failed") =>
+      makeDocument({ current_version: makeVersion({ processing_status }) });
+
+    it("refreshes the documents once when a failed job is already terminal but the version still says processing", async () => {
+      let docCalls = 0;
+      const fetchMock = mockApi({
+        [`GET ${TENDER}`]: () => respond(200, makeTender()),
+        [`GET ${TENDER}/documents`]: () => {
+          docCalls += 1;
+          return respond(200, [docWith(docCalls === 1 ? "processing" : "failed")]);
+        },
+        [`GET /api/v1/jobs/${ids.job}`]: () => respond(200, makeJob({ status: "failed", error_code: "FILE_CORRUPT" })),
+      });
+      renderSignedIn(<TenderWorkspace />);
+      await waitFor(() => expect(within(screen.getByRole("list", { name: /documents/i })).getAllByText("Failed").length).toBeGreaterThanOrEqual(2));
+      await wait(80);
+      expect(callsTo(fetchMock, "GET", `${TENDER}/documents`)).toHaveLength(2);
+    });
+
+    it("does the same for a succeeded job and a pending version", async () => {
+      let docCalls = 0;
+      const fetchMock = mockApi({
+        [`GET ${TENDER}`]: () => respond(200, makeTender()),
+        [`GET ${TENDER}/documents`]: () => {
+          docCalls += 1;
+          return respond(200, [docWith(docCalls === 1 ? "pending" : "ready")]);
+        },
+        [`GET /api/v1/jobs/${ids.job}`]: () => respond(200, makeJob({ status: "succeeded" })),
+      });
+      renderSignedIn(<TenderWorkspace />);
+      expect(await screen.findByText("Ready")).toBeInTheDocument();
+      await wait(80);
+      expect(callsTo(fetchMock, "GET", `${TENDER}/documents`)).toHaveLength(2);
+    });
+
+    it("never loops when the server keeps returning the stale version status", async () => {
+      const fetchMock = mockApi({
+        [`GET ${TENDER}`]: () => respond(200, makeTender()),
+        [`GET ${TENDER}/documents`]: () => respond(200, [docWith("processing")]),
+        [`GET /api/v1/jobs/${ids.job}`]: () => respond(200, makeJob({ status: "succeeded" })),
+      });
+      renderSignedIn(<TenderWorkspace />);
+      await screen.findByText("Done");
+      await wait(300);
+      expect(callsTo(fetchMock, "GET", `${TENDER}/documents`).length).toBeLessThanOrEqual(2);
+    });
+
+    it("causes no extra documents request when versions already match their finished jobs", async () => {
+      const fetchMock = mockApi({
+        [`GET ${TENDER}`]: () => respond(200, makeTender()),
+        [`GET ${TENDER}/documents`]: () => respond(200, [
+          docWith("ready"),
+          makeDocument({ id: ids.user, title: "B", current_version: makeVersion({ id: ids.run, document_id: ids.user, processing_status: "failed", job_id: ids.run }) }),
+        ]),
+        [`GET /api/v1/jobs/${ids.job}`]: () => respond(200, makeJob({ status: "succeeded" })),
+        [`GET /api/v1/jobs/${ids.run}`]: () => respond(200, makeJob({ id: ids.run, status: "failed", error_code: "FILE_CORRUPT" })),
+      });
+      renderSignedIn(<TenderWorkspace />);
+      await screen.findByText("Done");
+      await wait(150);
+      expect(callsTo(fetchMock, "GET", `${TENDER}/documents`)).toHaveLength(1);
+    });
   });
 });
