@@ -1,5 +1,4 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Query } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { isTerminalJob } from "@/lib/status-text";
@@ -16,7 +15,10 @@ export const MAX_POLL_FAILURES = 5;
 
 /** Polling rule shared by every polled query: stop on a terminal job, on a 4xx answer (the thing
  * is gone or forbidden; asking again changes nothing), and after MAX_POLL_FAILURES errors. A 5xx or network blip keeps polling. */
-export function shouldPoll(query: Query<Job, Error>, pollMs: number): number | false {
+export function shouldPoll(
+  query: { state: { data: { status: string } | undefined; error: unknown; errorUpdateCount: number } },
+  pollMs: number,
+): number | false {
   if (isTerminalJob(query.state.data?.status)) return false;
   const error = query.state.error;
   if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
