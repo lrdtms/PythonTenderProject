@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -19,6 +20,9 @@ from app.kernel import ProcessingFailed
 
 from .ocr import OcrFailed, OcrRunner
 
+# pdfminer (under pdfplumber) logs raw content-stream tokens, i.e. document text, at DEBUG.
+# Document text never reaches logs, whatever level the host configures.
+logging.getLogger("pdfminer").setLevel(logging.WARNING)
 MIN_EMBEDDED_CHARS = 20  # fewer characters than this and the page is treated as scanned
 LOW_CONFIDENCE = 60.0
 MIN_OCR_DPI = 100  # below this Tesseract output is not worth having

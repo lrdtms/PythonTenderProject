@@ -16,6 +16,7 @@ class JobDTO(BaseModel):
     subject_type: str
     subject_id: UUID
     status: str
+    payload: dict[str, Any]
     attempt_count: int
     progress_done: int
     progress_total: int

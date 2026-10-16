@@ -11,7 +11,7 @@ from .errors import (
     Unauthorized,
     ValidationFailed,
 )
-from .ports import StoragePort
+from .ports import LLMPort, LLMTimeout, LLMUnavailable, StoragePort, StructuredResult
 from .types import ROLE_PERMISSIONS, OrgContext, Permission, Role
 
 __all__ = [
@@ -19,6 +19,9 @@ __all__ = [
     "Conflict",
     "DomainError",
     "Forbidden",
+    "LLMPort",
+    "LLMTimeout",
+    "LLMUnavailable",
     "LimitExceeded",
     "NotFound",
     "OrgContext",
@@ -27,6 +30,7 @@ __all__ = [
     "RateLimited",
     "Role",
     "StoragePort",
+    "StructuredResult",
     "Unauthorized",
     "ValidationFailed",
 ]

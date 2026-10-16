@@ -15,7 +15,9 @@ SHARED = "switchgear"
 
 def ingest(actor, tender_id: str, pages: list[str], name: str) -> dict:
     body = upload(actor, tender_id, make_pdf(pages), name).json()
-    assert process_one(handlers.HANDLERS) is True
+    assert process_one(handlers.HANDLERS) is True  # the ingest job
+    while process_one(handlers.HANDLERS):  # the extraction jobs that ingest queued
+        pass
     return body
 
 

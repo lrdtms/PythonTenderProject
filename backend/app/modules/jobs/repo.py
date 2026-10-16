@@ -18,8 +18,20 @@ from .models import ACTIVE_STATUSES, Job
 class JobRepo(ScopedRepository[Job]):
     model = Job
 
-    def latest_for_subject(self, subject_id: UUID) -> Job | None:
-        rows = self.find(Job.subject_id == subject_id, order_by=desc(Job.created_at), limit=1)
+    def latest_for_subject(self, subject_id: UUID, job_type: str | None = None) -> Job | None:
+        where = [Job.subject_id == subject_id]
+        if job_type is not None:
+            where.append(Job.job_type == job_type)
+        rows = self.find(*where, order_by=desc(Job.created_at), limit=1)
+        return rows[0] if rows else None
+
+    def active(self, job_type: str, subject_id: UUID) -> Job | None:
+        rows = self.find(
+            Job.job_type == job_type,
+            Job.subject_id == subject_id,
+            Job.status.in_(ACTIVE_STATUSES),
+            limit=1,
+        )
         return rows[0] if rows else None
 
     def enqueue(

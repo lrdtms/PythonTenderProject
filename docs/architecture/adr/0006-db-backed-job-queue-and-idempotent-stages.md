@@ -24,7 +24,7 @@ Chosen option: **Option 1**.
 - **No duplicate jobs:** partial unique index on `(job_type, subject_id) WHERE status IN ('queued','running')`; enqueue is `INSERT ... ON CONFLICT DO NOTHING` and returns the existing job.
 - **Stages are separate job types**, each enqueuing the next in the same transaction that commits its output: `ingest` (parse/OCR, pages, chunks, embeddings) -> `extract_boq` -> `extract_requirements` (tender docs) or `extract_quotation` -> `match_suppliers`. A failure retries one stage, not the whole pipeline, and deterministic BoQ output exists even if the LLM is down.
 - **Idempotent outputs:** each stage replaces its own *unreviewed* output for the document version inside one transaction. Chunks: delete-and-insert per `document_version_id` with `UNIQUE (document_version_id, ordinal)`; `text_hash` is used to reuse embeddings, not as the uniqueness key (it would merge identical text on different pages). Candidates: rows with `review_status != 'unreviewed'` are never deleted or overwritten.
-- **Resumable LLM stage:** per-unit results go to `extraction_unit_results (document_version_id, unit_id, prompt_version) UNIQUE`, where a unit is an extraction section (about 1,200-1,500 tokens; see architecture.md section 5). A retry skips units already done, then runs the merge/de-dupe step.
+- **Resumable LLM stage (superseded for Slice 3, see the addendum at the end: not built; re-runs are idempotent through replace-unreviewed):** per-unit results go to `extraction_unit_results (document_version_id, unit_id, prompt_version) UNIQUE`, where a unit is an extraction section (about 1,200-1,500 tokens; see architecture.md section 5). A retry skips units already done, then runs the merge/de-dupe step.
 - **Leases and heartbeats:** lease 5 min, renewed after each page/unit; a reaper on worker start-up and every minute requeues expired leases.
 - **Retry policy:** transient errors (`LLM_UNAVAILABLE`, `LLM_TIMEOUT`, DB disconnect) back off 30 s / 2 min / 10 min up to `max_attempts = 3`; permanent errors (`FILE_CORRUPT`, `PDF_ENCRYPTED`, `UNSUPPORTED_TYPE`) fail immediately.
 - **Concurrency 1** (one worker, one job at a time) satisfies FR-60 and the "no OCR during generation" rule. The UI polls `GET /api/v1/jobs/{id}` every 2 s.
@@ -51,3 +51,10 @@ Chosen option: **Option 1**.
 
 ## Links / References
 - Base spec §4.1, §4.2, FR-15, FR-16; PRD FR-59, FR-60, FR-61; Kleppmann, *DDIA* ch. 11; PostgreSQL `SKIP LOCKED`
+
+## Addendum 2026-10-15 (Slice 3)
+
+- **Stage = job type.** Extraction runs as two job types, `extract_boq` and `extract_requirements`, enqueued by the ingest handler in the ingest transaction. The deterministic BoQ output is therefore committed even when the LLM is down.
+- **Run records.** `extraction_runs` (module `pipeline`) holds one row per (job, kind): status, warnings, counts, `prompt_version`, `filter_version`, `schema_version`, model. The current run per (version, kind) is the latest by `created_at`.
+- **Idempotency.** Re-running locks the version's run rows, deletes all `unreviewed` rows of that version and kind (from every earlier run), then inserts. Reviewed rows are never touched. A candidate that duplicates a reviewed row (BoQ: section/sheet + item number; requirements: normalised quote; corrected rows compare on `original_value`) is skipped with `DUPLICATE_OF_REVIEWED`. A rejected row suppresses re-extraction of the same item, deliberately.
+- **Not built.** `extraction_unit_results` (per-window resumability) is dropped for this slice: a window is a few seconds to a minute of work and the whole stage restarts on retry. F6 (kill mid-stage, resume without duplicates) is met by replace-unreviewed.

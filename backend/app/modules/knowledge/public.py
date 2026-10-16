@@ -4,12 +4,14 @@ from .ocr import OcrFailed, OcrRunner, TesseractOcr
 from .schemas import (
     HIGHLIGHT_END,
     HIGHLIGHT_START,
+    ExtractionPageDTO,
     IngestResult,
     PageDetailDTO,
     PageDTO,
     SearchHitDTO,
 )
 from .service import (
+    get_extraction_input,
     get_page,
     ingest_version,
     list_pages,
@@ -21,6 +23,7 @@ from .service import (
 __all__ = [
     "HIGHLIGHT_END",
     "HIGHLIGHT_START",
+    "ExtractionPageDTO",
     "IngestResult",
     "OcrFailed",
     "OcrRunner",
@@ -28,6 +31,7 @@ __all__ = [
     "PageDetailDTO",
     "SearchHitDTO",
     "TesseractOcr",
+    "get_extraction_input",
     "get_page",
     "ingest_version",
     "list_pages",

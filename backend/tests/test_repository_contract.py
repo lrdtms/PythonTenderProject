@@ -19,7 +19,10 @@ import app.modules
 from app.db.scoped import ScopedRepository
 from app.db.session import session_scope
 from app.kernel import NotFound, OrgContext, Role
+from app.modules.checklist import public as checklist
+from app.modules.estimating import public as estimating
 from app.modules.identity.models import Membership
+from app.modules.pipeline.models import ExtractionRun
 from app.worker import handlers
 from app.worker.runner import process_one
 from tests.conftest import Actor, add_member, make_pdf, make_tender, register, upload
@@ -55,6 +58,9 @@ EXERCISED = {
     "ChunkRepo",
     "JobRepo",
     "MembershipRepo",
+    "RunRepo",
+    "BoqRepo",
+    "RequirementRepo",
 }
 
 
@@ -77,6 +83,33 @@ def _seed(email: str, org: str, secret: str) -> Actor:
     r = upload(actor, tender, make_pdf([f"{secret} clause on page one"]), f"{secret}.pdf")
     assert r.status_code == 201, r.text
     assert process_one(handlers.HANDLERS) is True
+    # Drain the extraction jobs ingest queued, or the next seed's process_one would run them and
+    # their re-run would replace the rows seeded below.
+    while process_one(handlers.HANDLERS):
+        pass
+    body = r.json()
+    ctx = _ctx(actor)
+    with session_scope() as s:
+        for kind in ("boq", "requirements"):
+            run = ExtractionRun(
+                organisation_id=ctx.organisation_id,
+                document_version_id=UUID(body["version"]["id"]),
+                job_id=UUID(body["job_id"]),
+                kind=kind,
+            )
+            s.add(run)
+            s.flush()
+            if kind == "boq":
+                estimating.replace_unreviewed(
+                    s, ctx, run.document_version_id, run.id,
+                    [{"item_no": "1", "description": f"{secret} cable"}],
+                )  # fmt: skip
+            else:
+                checklist.replace_unreviewed(
+                    s, ctx, run.document_version_id, run.id,
+                    [{"description": f"{secret} rule", "requirement_type": "other",
+                      "mandatory_status": "mandatory", "evidence_quote": f"{secret} clause"}],
+                )  # fmt: skip
     add_member(actor, f"member-{email}", "estimator")
     return actor
 
@@ -135,6 +168,10 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         assert repos["PageRepo"].for_version(version_b) == []
         assert repos["PageRepo"].one(version_b, 1) is None
         assert repos["ChunkRepo"].search(tender_b, "Bravo", 50) == []
+        assert repos["BoqRepo"].for_version(version_b, 50, 0) == []
+        assert repos["RequirementRepo"].for_version(version_b, 50, 0) == []
+        assert repos["RunRepo"].current_for_version(version_b) == {}
+        assert repos["RunRepo"].for_job(job_subject_b, "boq") is None
         assert repos["JobRepo"].latest_for_subject(job_subject_b) is None
         members = repos["MembershipRepo"].list_with_users()
         assert {m.organisation_id for m, _ in members} == {ctx_c.organisation_id}

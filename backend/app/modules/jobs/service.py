@@ -40,8 +40,17 @@ def get_job(session: Session, ctx: OrgContext, job_id: UUID) -> JobDTO:
     return _dto(JobRepo(session, ctx).get(job_id))
 
 
-def latest_job_for_subject(session: Session, ctx: OrgContext, subject_id: UUID) -> JobDTO | None:
-    job = JobRepo(session, ctx).latest_for_subject(subject_id)
+def latest_job_for_subject(
+    session: Session, ctx: OrgContext, subject_id: UUID, job_type: str | None = None
+) -> JobDTO | None:
+    job = JobRepo(session, ctx).latest_for_subject(subject_id, job_type)
+    return _dto(job) if job else None
+
+
+def find_active_job(
+    session: Session, ctx: OrgContext, job_type: str, subject_id: UUID
+) -> JobDTO | None:
+    job = JobRepo(session, ctx).active(job_type, subject_id)
     return _dto(job) if job else None
 
 

@@ -28,6 +28,17 @@ class PageDetailDTO(PageDTO):
     tables: list[Any]
 
 
+class ExtractionPageDTO(BaseModel):
+    """Everything extraction reads about one page or sheet (internal, worker only)."""
+
+    page_number: int
+    label: str | None
+    text: str
+    text_source: str
+    status: str
+    tables: list[Any]
+
+
 class SearchHitDTO(BaseModel):
     """`snippet` is raw document text (untrusted, may contain `<`, `&` or markup) with each match
     wrapped in HIGHLIGHT_START/HIGHLIGHT_END. Clients must escape it and never render it as HTML."""
