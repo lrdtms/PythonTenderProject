@@ -81,6 +81,41 @@ def test_invalid_patches_are_rejected(body) -> None:
     assert _item(admin, vid, "1.1")["review_status"] == "unreviewed"  # nothing was written
 
 
+@pytest.mark.parametrize("field", ["description", "section", "item_no", "unit"])
+def test_a_nul_character_in_text_is_rejected(field) -> None:
+    admin, _, vid = boq_version()
+    item = _item(admin, vid, "1.1")
+    r = _patch(admin, item["id"], {field: "Cable\x00 4mm"})
+    assert r.status_code == 422, r.text
+    assert _item(admin, vid, "1.1")["review_status"] == "unreviewed"
+
+
+FLAG_ROWS = [
+    ["Item", "Description", "Unit", "Quantity", "Rate", "Amount"],
+    ["1.1", "Cable 4mm", "Metre", "1,500", "5", ""],
+    ["1.2", "Lamp", "each", "rate only", "", ""],
+]
+
+
+def test_clearing_a_rate_only_quantity_does_not_add_missing_quantity() -> None:
+    admin, _, vid = boq_version(rows=FLAG_ROWS)
+    item = _item(admin, vid, "1.2")
+    assert "rate_only" in item["flags"] and "missing_quantity" not in item["flags"]
+    _patch(admin, item["id"], {"quantity": "3"})
+    cleared = _patch(admin, item["id"], {"quantity": None}).json()
+    assert cleared["quantity"] is None and "missing_quantity" not in cleared["flags"]
+    assert "rate_only" in cleared["flags"]
+
+
+def test_correcting_the_quantity_drops_the_ambiguous_separator_flag() -> None:
+    admin, _, vid = boq_version(rows=FLAG_ROWS)
+    item = _item(admin, vid, "1.1")
+    assert "ambiguous_separator" in item["flags"]
+    fixed = _patch(admin, item["id"], {"quantity": "1.5"}).json()
+    assert Decimal(fixed["quantity"]) == Decimal("1.5")
+    assert "ambiguous_separator" not in fixed["flags"]
+
+
 def test_an_unchanged_value_is_a_no_op() -> None:
     admin, _, vid = boq_version()
     item = _item(admin, vid, "1.1")

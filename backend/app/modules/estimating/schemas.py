@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator, model_validator
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,13 @@ class BoqPatch(BaseModel):
     unit: Annotated[str, StringConstraints(max_length=30)] | None = None
     quantity: DecimalText | None = None
     rate: DecimalText | None = None
+
+    @field_validator("description", "section", "item_no", "unit")
+    @classmethod
+    def _no_nul(cls, value: str | None) -> str | None:
+        if value is not None and "\x00" in value:
+            raise ValueError("Text cannot contain NUL characters.")
+        return value
 
     @model_validator(mode="after")
     def _check(self) -> BoqPatch:

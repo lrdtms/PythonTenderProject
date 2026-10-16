@@ -37,6 +37,7 @@ def test_correcting_a_requirement_keeps_the_original(fake_llm) -> None:
         {"description": None},
         {},
         {"evidence_quote": "rewritten"},
+        {"description": "Tax\x00 clearance"},  # Postgres text cannot hold NUL
     ],
 )
 def test_invalid_requirement_patches_are_rejected(fake_llm, body) -> None:

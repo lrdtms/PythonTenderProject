@@ -18,6 +18,9 @@ from .models import BoqItem
 from .repo import BoqRepo
 from .schemas import BoqItemDTO, BoqPatch, ReplaceResult
 
+# a line with one of these flags has no quantity by design (same set as extraction's parser)
+NO_QUANTITY_EXPECTED = frozenset({"rate_only", "provisional_sum", "quantity_unparsed"})
+
 
 def _norm(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip().lower()
@@ -138,12 +141,14 @@ def _apply(row: BoqItem, patch: BoqPatch) -> dict[str, Any]:
     flags = list(row.flags)
     if "quantity" in changes:
         if row.quantity is None:
-            if "missing_quantity" not in flags:
+            if "missing_quantity" not in flags and not set(flags) & NO_QUANTITY_EXPECTED:
                 flags.append("missing_quantity")
         else:
             flags = [f for f in flags if f not in ("missing_quantity", "quantity_unparsed")]
     if "rate" in changes and row.rate is not None:
         flags = [f for f in flags if f != "rate_unparsed"]
+    if "quantity" in changes or "rate" in changes:
+        flags = [f for f in flags if f != "ambiguous_separator"]  # a person has read the figure
     row.flags = flags  # a new list, so the JSONB change is detected
     return changes
 

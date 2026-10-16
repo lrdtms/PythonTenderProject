@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator, model_validator
 
 from app.kernel.vocab import MANDATORY_STATUSES, REQUIREMENT_TYPES
 
@@ -52,6 +52,13 @@ class RequirementPatch(BaseModel):
     ) = None
     requirement_type: RequirementType | None = None
     mandatory_status: MandatoryStatus | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _no_nul(cls, value: str | None) -> str | None:
+        if value is not None and "\x00" in value:
+            raise ValueError("Text cannot contain NUL characters.")
+        return value
 
     @model_validator(mode="after")
     def _check(self) -> RequirementPatch:
