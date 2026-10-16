@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -100,3 +101,65 @@ class RequirementCandidate:
             "needs_review": self.needs_review,
             "source_order": source_order(self.page_number, self.quote_start),
         }  # fmt: skip
+
+
+# Column widths of quotation_items (migration 0005); the parser clips to these and flags
+# `truncated`.
+QUOTATION_TEXT_LIMITS: dict[str, int] = {
+    "sku": 100, "unit": 30, "raw_unit": 50, "raw_quantity": 50, "raw_price": 50,
+    "sheet": 200, "cell_range": 40,
+}  # fmt: skip
+
+
+@dataclass
+class QuotationHeader:
+    supplier_name: str | None = None
+    reference: str | None = None
+    quote_date: date | None = None
+    valid_until: date | None = None
+    currency: str | None = None
+    prices_include_vat: bool | None = None
+    flags: list[str] = field(default_factory=list)
+
+    def as_row(self) -> dict[str, Any]:
+        return {
+            "supplier_name": self.supplier_name, "reference": self.reference,
+            "quote_date": self.quote_date.isoformat() if self.quote_date else None,
+            "valid_until": self.valid_until.isoformat() if self.valid_until else None,
+            "currency": self.currency, "prices_include_vat": self.prices_include_vat,
+            "flags": list(self.flags),
+        }  # fmt: skip
+
+
+@dataclass
+class QuotationCandidate:
+    description: str
+    sku: str | None
+    unit: str | None
+    quantity: Decimal | None
+    unit_price: Decimal | None
+    raw_unit: str | None
+    raw_quantity: str | None
+    raw_price: str | None
+    flags: list[str]
+    page_number: int | None
+    sheet: str | None
+    cell_range: str | None
+    source_order: int = 0
+
+    def as_row(self) -> dict[str, Any]:
+        return {
+            "description": self.description, "sku": self.sku, "unit": self.unit,
+            "quantity": self.quantity, "unit_price": self.unit_price, "raw_unit": self.raw_unit,
+            "raw_quantity": self.raw_quantity, "raw_price": self.raw_price,
+            "flags": list(self.flags), "page_number": self.page_number, "sheet": self.sheet,
+            "cell_range": self.cell_range, "source_order": self.source_order,
+        }  # fmt: skip
+
+
+@dataclass
+class QuotationResult:
+    header: QuotationHeader = field(default_factory=QuotationHeader)
+    items: list[QuotationCandidate] = field(default_factory=list)
+    warnings: list[dict[str, Any]] = field(default_factory=list)
+    quote_pages: set[int] = field(default_factory=set)
