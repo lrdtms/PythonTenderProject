@@ -1,7 +1,7 @@
 """Public surface of the pure extraction core."""
 
 from .boq import parse_boq
-from .numbers import parse_decimal
+from .numbers import is_ambiguous_separator, parse_decimal
 from .prefilter import PrefilterResult, prefilter
 from .prompts import FILTER_VERSION, PROMPT_VERSION, SCHEMA_VERSION
 from .provenance import FUZZY_MAX_QUOTE_CHARS, Location, attach_provenance, locate
@@ -27,6 +27,7 @@ __all__ = [
     "attach_provenance",
     "canon_unit",
     "extract_requirements",
+    "is_ambiguous_separator",
     "locate",
     "merge_requirements",
     "parse_boq",

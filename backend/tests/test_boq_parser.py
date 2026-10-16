@@ -286,3 +286,30 @@ def test_a_page_gap_drops_the_carried_section() -> None:
     p5 = _page([["1.2", "Conduit", "m", "7", "", ""]], kind="table", number=5, label=None)
     items = extraction.parse_boq([p1, p5]).items
     assert [i.item_no for i in items] == ["1.1"]  # page 5 is not a continuation (existing rule)
+
+
+@pytest.mark.parametrize(
+    ("raw", "ambiguous"),
+    [
+        ("1,500", True),
+        ("12,500", True),
+        ("R 1,500", True),
+        ("1 500", False),
+        ("1,250,500", False),
+        ("1,25", False),
+        ("1.500,00", False),
+        ("1500", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_is_ambiguous_separator(raw, ambiguous) -> None:
+    assert extraction.is_ambiguous_separator(raw) is ambiguous
+
+
+def test_ambiguous_quantity_and_rate_are_flagged_but_still_parsed() -> None:
+    rows = [HEADER, ["1.1", "Cable", "m", "1,500", "2,500", ""], ["1.2", "Lamp", "no", "3", "", ""]]
+    items = {i.item_no: i for i in extraction.parse_boq([_page(rows)]).items}
+    assert items["1.1"].quantity == Decimal("1500") and items["1.1"].rate == Decimal("2500")
+    assert "ambiguous_separator" in items["1.1"].flags
+    assert "ambiguous_separator" not in items["1.2"].flags

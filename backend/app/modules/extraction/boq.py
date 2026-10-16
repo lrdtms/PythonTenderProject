@@ -6,7 +6,7 @@ import re
 from collections.abc import Sequence
 from decimal import Decimal
 
-from .numbers import parse_decimal
+from .numbers import is_ambiguous_separator, parse_decimal
 from .types import BOQ_TEXT_LIMITS, BoqCandidate, BoqResult, PageInput
 from .units import canon_unit
 
@@ -105,6 +105,8 @@ def _candidate(
     rate, _ = parse_decimal(raw_rate)
     if raw_rate and rate is None:
         flags.append("rate_unparsed")
+    if is_ambiguous_separator(raw_quantity) or is_ambiguous_separator(raw_rate):
+        flags.append("ambiguous_separator")
     sheet = cell_range = page_number = None
     if table.get("kind") == "sheet":
         sheet = page.label
