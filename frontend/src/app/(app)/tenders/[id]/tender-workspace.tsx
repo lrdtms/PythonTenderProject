@@ -74,6 +74,12 @@ export function TenderWorkspace() {
         <p className="mb-4 rounded border border-zinc-400 p-3 text-sm">This tender is archived and read-only.</p>
       ) : null}
 
+      <p className="mb-4 text-sm">
+        <Link href={`/tenders/${id}/checklist`} className="underline">
+          Requirements checklist
+        </Link>
+      </p>
+
       {!archived ? <UploadForm tenderId={id} /> : null}
 
       <h2 className="mb-2 text-lg font-medium">Documents</h2>
