@@ -26,7 +26,8 @@ log = logging.getLogger("documents")
 INGEST_JOB = "ingest_document"
 EXTRACT_BOQ_JOB = "extract_boq"
 EXTRACT_REQUIREMENTS_JOB = "extract_requirements"
-EXTRACTION_JOBS = (EXTRACT_BOQ_JOB, EXTRACT_REQUIREMENTS_JOB)
+EXTRACT_QUOTATION_JOB = "extract_quotation"
+EXTRACTION_JOBS = (EXTRACT_BOQ_JOB, EXTRACT_REQUIREMENTS_JOB, EXTRACT_QUOTATION_JOB)
 ALLOWED_EXTENSIONS = {"pdf", "xlsx", "csv", "docx"}
 
 

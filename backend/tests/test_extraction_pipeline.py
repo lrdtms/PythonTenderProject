@@ -143,11 +143,11 @@ def test_oversized_boq_cells_never_fail_the_boq_run(fake_llm) -> None:
     assert by_no["1.2"]["quantity"] == "10.0000"
 
 
-def test_quotations_are_not_extracted(fake_llm) -> None:
+def test_quotations_queue_only_the_quotation_extraction(fake_llm) -> None:
     admin, _, body = setup_version(boq_pdf(), "quote.pdf", "quotation")
     drain()
     with session_scope() as s:
-        assert set(s.scalars(select(Job.job_type))) == {"ingest_document"}
+        assert set(s.scalars(select(Job.job_type))) == {"ingest_document", "extract_quotation"}
 
 
 def test_ollama_down_keeps_boq_and_ingest_but_fails_the_requirements_run(fake_llm) -> None:

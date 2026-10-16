@@ -23,6 +23,7 @@ from app.modules.checklist import public as checklist
 from app.modules.estimating import public as estimating
 from app.modules.identity.models import Membership
 from app.modules.pipeline.models import ExtractionRun
+from app.modules.suppliers import public as suppliers
 from app.worker import handlers
 from app.worker.runner import process_one
 from tests.conftest import Actor, add_member, make_pdf, make_tender, register, upload
@@ -61,6 +62,9 @@ EXERCISED = {
     "RunRepo",
     "BoqRepo",
     "RequirementRepo",
+    "SupplierRepo",
+    "QuotationRepo",
+    "QuotationItemRepo",
 }
 
 
@@ -90,7 +94,7 @@ def _seed(email: str, org: str, secret: str) -> Actor:
     body = r.json()
     ctx = _ctx(actor)
     with session_scope() as s:
-        for kind in ("boq", "requirements"):
+        for kind in ("boq", "requirements", "quotation"):
             run = ExtractionRun(
                 organisation_id=ctx.organisation_id,
                 document_version_id=UUID(body["version"]["id"]),
@@ -103,6 +107,12 @@ def _seed(email: str, org: str, secret: str) -> Actor:
                 estimating.replace_unreviewed(
                     s, ctx, run.document_version_id, run.id,
                     [{"item_no": "1", "description": f"{secret} cable"}],
+                )  # fmt: skip
+            elif kind == "quotation":
+                suppliers.store_quotation(
+                    s, ctx, run.document_version_id, run.id,
+                    {"supplier_name": f"{secret} supplies"},
+                    [{"description": f"{secret} conduit", "source_order": 0}], "file",
                 )  # fmt: skip
             else:
                 checklist.replace_unreviewed(
@@ -177,6 +187,12 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         with pytest.raises(NotFound):
             repos["RequirementRepo"].version_id_of(b_ids["RequirementRepo"][0])
         assert repos["RequirementRepo"].fresh(b_ids["RequirementRepo"][0]) is None
+        assert repos["SupplierRepo"].by_key("bravo supplies") is None
+        assert repos["QuotationRepo"].for_version(version_b) is None
+        quotation_b = b_ids["QuotationRepo"][0]
+        assert repos["QuotationItemRepo"].for_quotation(quotation_b) == []
+        assert repos["QuotationItemRepo"].reviewed_or_pinned(quotation_b) == []
+        repos["QuotationItemRepo"].delete_replaceable(quotation_b, [])
         assert repos["RunRepo"].current_for_version(version_b) == {}
         assert repos["RunRepo"].for_job(job_subject_b, "boq") is None
         assert repos["JobRepo"].latest_for_subject(job_subject_b) is None
@@ -192,7 +208,7 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         repos["VersionRepo"].clear_current(document_b)
 
     with session_scope() as s:
-        for name in ("PageRepo", "ChunkRepo"):
+        for name in ("PageRepo", "ChunkRepo", "QuotationItemRepo"):
             model = REPOSITORIES[name].model
             assert s.scalars(select(model.id).where(model.organisation_id == org_b)).all()
         version = REPOSITORIES["VersionRepo"].model
