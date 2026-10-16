@@ -44,3 +44,23 @@ def test_lists_keep_document_order_when_a_reviewed_row_survives_a_rerun() -> Non
     after = boq_items(admin, vid)
     assert [i["item_no"] for i in after] == ordered  # not: the old reviewed row first
     assert after[1]["id"] == middle and len(after) == 3
+
+
+def test_source_order_increases_across_two_tables_on_one_page() -> None:
+    from tests.test_boq_parser import HEADER, _page
+
+    first = [HEADER, ["1.1", "A", "m", "1", "", ""], ["1.2", "B", "m", "2", "", ""]]
+    second = [HEADER, ["2.1", "C", "m", "3", "", ""]]
+    page = _page(first, kind="table")
+    page = extraction.PageInput(
+        page.page_number,
+        page.label,
+        page.text,
+        page.text_source,
+        page.status,
+        [*page.tables, {"kind": "table", "rows": second}],
+    )
+    items = extraction.parse_boq([page]).items
+    assert [i.item_no for i in items] == ["1.1", "1.2", "2.1"]
+    orders = [i.source_order for i in items]
+    assert orders == sorted(set(orders))

@@ -167,7 +167,7 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
             if hits >= 4:
                 scanned.append(page.page_number)
             continue
-        for table in page.tables:
+        for table_idx, table in enumerate(page.tables):
             rows = [list(r) for r in table.get("rows", [])]
             if not rows:
                 continue
@@ -215,7 +215,7 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                         table,
                         offset,
                         width,
-                        source_order(page.page_number, offset),
+                        source_order(page.page_number, table_idx * 10_000 + offset),
                     )
                 )
                 result.boq_pages.add(page.page_number)
