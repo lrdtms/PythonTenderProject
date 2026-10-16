@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 
 @dataclass(frozen=True)
@@ -37,3 +37,31 @@ class BoqItemDTO(BaseModel):
     reviewed_by: UUID | None = None
     reviewed_by_name: str | None = None
     reviewed_at: datetime | None = None
+
+
+DecimalText = Annotated[str, StringConstraints(pattern=r"^-?\d{1,14}(\.\d{1,4})?$")]
+
+
+class BoqPatch(BaseModel):
+    """The fields a reviewer may change. Absent means unchanged; null clears a nullable field.
+    Decimals are JSON strings, never numbers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    section: Annotated[str, StringConstraints(max_length=300)] | None = None
+    item_no: Annotated[str, StringConstraints(max_length=50)] | None = None
+    description: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+        | None
+    ) = None
+    unit: Annotated[str, StringConstraints(max_length=30)] | None = None
+    quantity: DecimalText | None = None
+    rate: DecimalText | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> BoqPatch:
+        if not self.model_fields_set:
+            raise ValueError("Send at least one field to change.")
+        if "description" in self.model_fields_set and self.description is None:
+            raise ValueError("The description cannot be cleared.")
+        return self

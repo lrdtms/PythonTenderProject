@@ -169,6 +169,9 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         assert repos["PageRepo"].one(version_b, 1) is None
         assert repos["ChunkRepo"].search(tender_b, "Bravo", 50) == []
         assert repos["BoqRepo"].for_version(version_b, 50, 0) == []
+        with pytest.raises(NotFound):
+            repos["BoqRepo"].version_id_of(b_ids["BoqRepo"][0])
+        assert repos["BoqRepo"].fresh(b_ids["BoqRepo"][0]) is None
         assert repos["RequirementRepo"].for_version(version_b, 50, 0) == []
         assert repos["RunRepo"].current_for_version(version_b) == {}
         assert repos["RunRepo"].for_job(job_subject_b, "boq") is None
