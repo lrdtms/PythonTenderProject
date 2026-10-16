@@ -19,6 +19,19 @@ class PageInput:
     tables: list[Any] = field(default_factory=list)
 
 
+SOURCE_STRIDE = 1_000_000
+SOURCE_UNLOCATED = 2_000_000_000  # below int32 max; sorts after every located item
+
+
+def source_order(page_number: int | None, position: int | None) -> int:
+    """Document-order sort key: page (or sheet) first, then the position inside it. Items whose
+    page is unknown (unverified evidence) sort last."""
+    if page_number is None:
+        return SOURCE_UNLOCATED
+    inside = max(0, min(position or 0, SOURCE_STRIDE - 1))
+    return min(page_number, 1999) * SOURCE_STRIDE + inside
+
+
 # Column widths of boq_items (migration 0003). The parser clips to these and flags `truncated`,
 # so one oversized cell can never fail the insert of a whole BoQ.
 BOQ_TEXT_LIMITS: dict[str, int] = {
@@ -41,6 +54,7 @@ class BoqCandidate:
     page_number: int | None
     sheet: str | None
     cell_range: str | None
+    source_order: int = 0
 
     def as_row(self) -> dict[str, Any]:
         return {
@@ -48,6 +62,7 @@ class BoqCandidate:
             "unit": self.unit, "quantity": self.quantity, "rate": self.rate,
             "raw_unit": self.raw_unit, "raw_quantity": self.raw_quantity, "flags": list(self.flags),
             "page_number": self.page_number, "sheet": self.sheet, "cell_range": self.cell_range,
+            "source_order": self.source_order,
         }  # fmt: skip
 
 
@@ -83,4 +98,5 @@ class RequirementCandidate:
             "page_number": self.page_number, "quote_start": self.quote_start,
             "quote_end": self.quote_end, "evidence_status": self.evidence_status,
             "needs_review": self.needs_review,
+            "source_order": source_order(self.page_number, self.quote_start),
         }  # fmt: skip

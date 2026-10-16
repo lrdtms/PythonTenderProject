@@ -20,7 +20,7 @@ class BoqRepo(ScopedRepository[BoqItem]):
         stmt = (
             self._select()
             .where(BoqItem.document_version_id == version_id)
-            .order_by(BoqItem.created_at, BoqItem.position)
+            .order_by(BoqItem.source_order, BoqItem.position, BoqItem.id)
             .limit(limit)
             .offset(offset)
         )

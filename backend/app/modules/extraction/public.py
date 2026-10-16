@@ -6,7 +6,15 @@ from .prefilter import PrefilterResult, prefilter
 from .prompts import FILTER_VERSION, PROMPT_VERSION, SCHEMA_VERSION
 from .provenance import FUZZY_MAX_QUOTE_CHARS, Location, attach_provenance, locate
 from .requirements import ExtractOutcome, InvalidOutput, extract_requirements, merge_requirements
-from .types import BOQ_TEXT_LIMITS, BoqCandidate, BoqResult, PageInput, RequirementCandidate, Window
+from .types import (
+    BOQ_TEXT_LIMITS,
+    BoqCandidate,
+    BoqResult,
+    PageInput,
+    RequirementCandidate,
+    Window,
+    source_order,
+)
 from .units import canon_unit
 
 __all__ = [
@@ -33,4 +41,5 @@ __all__ = [
     "parse_boq",
     "parse_decimal",
     "prefilter",
+    "source_order",
 ]

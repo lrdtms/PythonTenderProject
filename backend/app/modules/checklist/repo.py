@@ -20,7 +20,7 @@ class RequirementRepo(ScopedRepository[Requirement]):
         stmt = (
             self._select()
             .where(Requirement.document_version_id == version_id)
-            .order_by(Requirement.created_at, Requirement.position)
+            .order_by(Requirement.source_order, Requirement.position, Requirement.id)
             .limit(limit)
             .offset(offset)
         )

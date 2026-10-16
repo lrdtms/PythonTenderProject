@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from .numbers import is_ambiguous_separator, parse_decimal
-from .types import BOQ_TEXT_LIMITS, BoqCandidate, BoqResult, PageInput
+from .types import BOQ_TEXT_LIMITS, BoqCandidate, BoqResult, PageInput, source_order
 from .units import canon_unit
 
 HEADER_WORDS = {
@@ -75,6 +75,7 @@ def _candidate(
     table: dict,
     row_index: int,
     width: int,
+    order: int,
 ) -> BoqCandidate:
     description = _get(row, columns, "description")
     raw_unit = _get(row, columns, "unit") or None
@@ -127,6 +128,7 @@ def _candidate(
         page_number=page_number,
         sheet=sheet,
         cell_range=cell_range,
+        source_order=order,
     )
     _clip(cand)
     return cand
@@ -204,7 +206,18 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 if not has_figures:
                     section = description
                     continue
-                result.items.append(_candidate(row, columns, section, page, table, offset, width))
+                result.items.append(
+                    _candidate(
+                        row,
+                        columns,
+                        section,
+                        page,
+                        table,
+                        offset,
+                        width,
+                        source_order(page.page_number, offset),
+                    )
+                )
                 result.boq_pages.add(page.page_number)
             carried_section = section
     if scanned:

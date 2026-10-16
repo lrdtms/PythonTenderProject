@@ -47,6 +47,7 @@ def replace_unreviewed(
                 "run_id": run_id,
                 "document_version_id": version_id,
                 "position": len(rows),
+                "source_order": int(cand.get("source_order", 0)),
                 "description": cand["description"],
                 "requirement_type": cand["requirement_type"],
                 "mandatory_status": cand["mandatory_status"],
