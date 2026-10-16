@@ -4,12 +4,13 @@ A running list (plan section 5, working agreements) for the final documentation.
 
 ## Slice 3 (extraction) and Slice 4 phase 1 (review API)
 
-Fixed in Slice 4 phase 1: section carry-over, `source_order` list ordering, locked review writes, `ambiguous_separator` flag (the value is still read as thousands).
+Fixed in Slice 4 phase 1: BoQ section detection (a lone text cell with no figures is a heading in whichever column it sits, with a leading `SECTION:` stripped) and section carry-over across pages, including pages that repeat the same header row (a header with the same column mapping on the next page continues the open section; a different header, a page gap or a narrower table resets it); `source_order` list ordering; locked review writes; review writes refused on an archived tender (409 `tender_archived`); the `ambiguous_separator` flag (the value is still read as thousands; correcting the quantity or rate clears the flag); clearing a quantity no longer adds `missing_quantity` to a rate-only, provisional-sum or unparsed line; NUL characters in review patches are a 422.
+
+Review transitions: any review action (confirm, correct, reject) may be applied from any state, and none returns a row to `unreviewed` (see `docs/architecture/architecture.md` section 5).
 
 Slice 4 phase 1 notes (review API), deferred from code review:
 
-- **`_apply` re-adds `missing_quantity` even on rate-only or provisional lines**, and does not clear `ambiguous_separator` when the quantity or rate is corrected. Reviewers may see a stale flag; deal with it when the review UI shows flags.
-- **`BoqPatch` text fields are not stripped and `unit` is not canonicalised.** Clearing `item_no` drops the dedupe identity, so a re-run may add an unreviewed duplicate of that line. Deal with it when the BoQ editor lands.
+- **`BoqPatch` text fields are not stripped and `unit` is not canonicalised.** Deal with it when the BoQ editor lands. (Clearing `item_no` does not affect re-run dedupe: the dedupe key is read from `original_value`.)
 - **A lone `row_from` or `row_to` on page detail is not capped at 5000 rows** (only a full window is). Fine for the sizes seen so far; cap it before large sheets are uploaded.
 - **`source_order` saturates past 100 tables on one page**, and legacy rows (extracted before migration 0004) sort by position only until their version is re-extracted.
 - **Rows from several documents interleave in the tender-wide requirements list** (`GET /tenders/{id}/requirements`); the checklist page should group or filter by document.
