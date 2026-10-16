@@ -28,5 +28,6 @@ class RunRepo(ScopedRepository[ExtractionRun]):
         self.session.execute(
             self._select()
             .where(ExtractionRun.document_version_id == version_id, ExtractionRun.kind == kind)
+            .order_by(ExtractionRun.id)  # one lock order for every locker
             .with_for_update()
         ).all()

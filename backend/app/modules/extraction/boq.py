@@ -6,8 +6,8 @@ import re
 from collections.abc import Sequence
 from decimal import Decimal
 
-from .numbers import parse_decimal
-from .types import BOQ_TEXT_LIMITS, BoqCandidate, BoqResult, PageInput
+from .numbers import is_ambiguous_separator, parse_decimal
+from .types import BOQ_TEXT_LIMITS, BoqCandidate, BoqResult, PageInput, source_order
 from .units import canon_unit
 
 HEADER_WORDS = {
@@ -30,6 +30,7 @@ SUBTOTAL = re.compile(
 TOTAL_WORD = re.compile(r"^\s*total\b", re.I)
 RATE_ONLY = re.compile(r"\brate\s*only\b|^r/o$", re.I)
 PROVISIONAL = re.compile(r"\b(provisional\s+sum|prov\.?\s+sum|pc\s+sum)\b", re.I)
+SECTION_PREFIX = re.compile(r"^\s*section\s*:\s*", re.I)
 SCAN_FIELDS = ("item", "description", "unit", "quantity", "rate", "amount")
 
 
@@ -75,6 +76,7 @@ def _candidate(
     table: dict,
     row_index: int,
     width: int,
+    order: int,
 ) -> BoqCandidate:
     description = _get(row, columns, "description")
     raw_unit = _get(row, columns, "unit") or None
@@ -105,6 +107,8 @@ def _candidate(
     rate, _ = parse_decimal(raw_rate)
     if raw_rate and rate is None:
         flags.append("rate_unparsed")
+    if is_ambiguous_separator(raw_quantity) or is_ambiguous_separator(raw_rate):
+        flags.append("ambiguous_separator")
     sheet = cell_range = page_number = None
     if table.get("kind") == "sheet":
         sheet = page.label
@@ -125,6 +129,7 @@ def _candidate(
         page_number=page_number,
         sheet=sheet,
         cell_range=cell_range,
+        source_order=order,
     )
     _clip(cand)
     return cand
@@ -145,13 +150,14 @@ def _clip(cand: BoqCandidate) -> None:
 def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
     result = BoqResult()
     carried: tuple[dict[str, int], int] | None = None  # header columns and width, across pages
+    carried_section: str | None = None  # the open section heading, carried with the header
     last_boq_page: int | None = None  # page where the carried header was last seen or continued
     scanned: list[int] = []
     for page in pages:
         if carried is not None and (
             last_boq_page is None or page.page_number not in (last_boq_page, last_boq_page + 1)
         ):
-            carried = None  # a page gap (or a page without tables) ends the continuation
+            carried, carried_section = None, None  # a page gap ends the continuation
         if page.text_source == "ocr" and not page.tables:
             words = {w for w in re.findall(r"[a-z]+", page.text.lower())}
             hits = sum(
@@ -162,7 +168,7 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
             if hits >= 4:
                 scanned.append(page.page_number)
             continue
-        for table in page.tables:
+        for table_idx, table in enumerate(page.tables):
             rows = [list(r) for r in table.get("rows", [])]
             if not rows:
                 continue
@@ -171,26 +177,39 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 start, columns = found
                 width = max(columns.values()) + 1
                 width = max(width, max((len(rows[start]),), default=width))
+                repeated = (
+                    carried is not None
+                    and table.get("kind") != "sheet"
+                    and last_boq_page is not None
+                    and page.page_number == last_boq_page + 1
+                    and carried[0] == columns
+                )  # the header printed again at the top of the next page: a continuation
                 carried = (columns, width)
+                if not repeated:
+                    carried_section = None
                 last_boq_page = page.page_number
                 body_from = start + 1
             elif carried is not None and table.get("kind") != "sheet":
                 columns, width = carried
                 if max(len(r) for r in rows) < width:
-                    carried = None  # not a continuation of the BoQ
+                    carried, carried_section = None, None  # not a continuation of the BoQ
                     continue
                 last_boq_page = page.page_number
                 body_from = 0
             else:
                 continue
-            section: str | None = None
+            section: str | None = carried_section
             for offset, row in enumerate(rows[body_from:], start=body_from):
-                if not any(str(c or "").strip() for c in row):
+                filled = [str(c).strip() for c in row if str(c or "").strip()]
+                if not filled:
                     continue
                 description = _get(row, columns, "description")
                 has_figures = any(
                     _get(row, columns, f) for f in ("unit", "quantity", "rate", "amount")
                 )
+                lone = len(filled) == 1 and re.search(r"[^\W\d_]", filled[0])
+                if not description and lone and not has_figures:
+                    description = filled[0]  # a lone heading cell, whichever column holds it
                 if not description or SUBTOTAL.match(description):
                     continue
                 if TOTAL_WORD.match(description) and not (
@@ -198,10 +217,22 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 ):
                     continue  # an amount-only total row, not an item
                 if not has_figures:
-                    section = description
+                    section = SECTION_PREFIX.sub("", description).strip() or None
                     continue
-                result.items.append(_candidate(row, columns, section, page, table, offset, width))
+                result.items.append(
+                    _candidate(
+                        row,
+                        columns,
+                        section,
+                        page,
+                        table,
+                        offset,
+                        width,
+                        source_order(page.page_number, table_idx * 10_000 + offset),
+                    )
+                )
                 result.boq_pages.add(page.page_number)
+            carried_section = section
     if scanned:
         result.warnings.append({"code": "BOQ_NEEDS_MANUAL_ENTRY", "pages": scanned})
     return result

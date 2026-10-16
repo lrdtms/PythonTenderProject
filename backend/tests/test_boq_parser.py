@@ -228,7 +228,7 @@ def test_parser_meets_prd_targets_on_ground_truth(pack: str) -> None:
     gt, predicted = _load(pack)
     by_number = {_norm(i.item_no): (doc, i) for doc, i in predicted}
     total = len(gt["boq_items"])
-    found = unit_ok = qty_ok = desc_ok = source_ok = 0
+    found = unit_ok = qty_ok = desc_ok = source_ok = section_ok = 0
     for g in gt["boq_items"]:
         hit = by_number.get(_norm(g["item_number"]))
         if hit is None:
@@ -244,6 +244,7 @@ def test_parser_meets_prd_targets_on_ground_truth(pack: str) -> None:
             difflib.SequenceMatcher(None, _norm(p.description), _norm(g["description"])).ratio()
             >= 0.9
         )
+        section_ok += int(_norm(p.section) == _norm(g["section"]))  # printed upper-case
         src = g["source"]
         source_ok += int(
             (p.sheet == src["sheet"] and p.cell_range == src["cell_range"])
@@ -255,4 +256,104 @@ def test_parser_meets_prd_targets_on_ground_truth(pack: str) -> None:
     assert qty_ok / found >= 0.95, f"{pack}: quantity {qty_ok}/{found}"
     assert desc_ok / found >= 0.90, f"{pack}: description {desc_ok}/{found}"
     assert source_ok / found >= 0.95, f"{pack}: source {source_ok}/{found}"
+    assert section_ok / found >= 0.95, f"{pack}: section {section_ok}/{found}"
     assert len(predicted) <= total * 1.05, f"{pack}: {len(predicted)} predicted for {total}"
+
+
+def test_section_carries_across_a_continuation_page() -> None:
+    p1 = _page(
+        [HEADER, ["", "CABLES", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    p2 = _page([["1.2", "Conduit", "m", "7", "", ""]], kind="table", number=4, label=None)
+    items = extraction.parse_boq([p1, p2]).items
+    assert [(i.item_no, i.section) for i in items] == [("1.1", "CABLES"), ("1.2", "CABLES")]
+
+
+def test_a_page_gap_drops_the_carried_section() -> None:
+    p1 = _page(
+        [HEADER, ["", "CABLES", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    # the same header again, but two pages later: not a continuation, so the section resets
+    p5 = _page([HEADER, ["1.2", "Conduit", "m", "7", "", ""]], kind="table", number=5, label=None)
+    items = extraction.parse_boq([p1, p5]).items
+    assert [(i.item_no, i.section) for i in items] == [("1.1", "CABLES"), ("1.2", None)]
+
+
+def test_a_narrow_table_ends_the_continuation_and_its_section() -> None:
+    p3 = _page(
+        [HEADER, ["", "CABLES", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    narrow = {"kind": "table", "rows": [["a", "b"], ["c", "d"]]}
+    again = {"kind": "table", "rows": [HEADER, ["1.2", "Conduit", "m", "7", "", ""]]}
+    p4 = extraction.PageInput(4, None, "", "embedded", "ok", [narrow, again])
+    items = extraction.parse_boq([p3, p4]).items
+    assert [(i.item_no, i.section) for i in items] == [("1.1", "CABLES"), ("1.2", None)]
+
+
+def test_a_heading_in_the_item_column_opens_a_section() -> None:
+    rows = [
+        HEADER,
+        ["SECTION: Distribution Boards", "", "", "", "", ""],
+        ["1.1", "Board 63 A", "no", "2", "", ""],
+        ["Section:  Cables  "],  # a short sheet row, prefix in mixed case
+        ["2.1", "Cable 4mm", "m", "50", "", ""],
+        ["", "Lighting", "", "", "", ""],  # a description-only heading still works
+        ["3.1", "Lamp", "no", "4", "", ""],
+    ]
+    items = extraction.parse_boq([_page(rows)]).items
+    assert [(i.item_no, i.section) for i in items] == [
+        ("1.1", "Distribution Boards"),
+        ("2.1", "Cables"),
+        ("3.1", "Lighting"),
+    ]
+
+
+def test_a_repeated_header_on_the_next_page_keeps_the_section() -> None:
+    p3 = _page(
+        [HEADER, ["SECTION: CABLES", "", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    p4 = _page([HEADER, ["1.2", "Conduit", "m", "7", "", ""]], kind="table", number=4, label=None)
+    items = extraction.parse_boq([p3, p4]).items
+    assert [(i.item_no, i.section) for i in items] == [("1.1", "CABLES"), ("1.2", "CABLES")]
+
+
+def test_a_different_header_on_the_next_page_resets_the_section() -> None:
+    p3 = _page(
+        [HEADER, ["SECTION: CABLES", "", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    other = ["No.", "Description", "Qty", "Unit", "Rate", "Amount"]
+    p4 = _page([other, ["2.1", "Lamp", "4", "no", "", ""]], kind="table", number=4, label=None)
+    items = extraction.parse_boq([p3, p4]).items
+    assert [(i.item_no, i.section) for i in items] == [("1.1", "CABLES"), ("2.1", None)]
+
+
+@pytest.mark.parametrize(
+    ("raw", "ambiguous"),
+    [
+        ("1,500", True),
+        ("12,500", True),
+        ("R 1,500", True),
+        ("1 500", False),
+        ("1,250,500", False),
+        ("1,25", False),
+        ("1.500,00", False),
+        ("1500", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_is_ambiguous_separator(raw, ambiguous) -> None:
+    assert extraction.is_ambiguous_separator(raw) is ambiguous
+
+
+def test_ambiguous_quantity_and_rate_are_flagged_but_still_parsed() -> None:
+    rows = [HEADER, ["1.1", "Cable", "m", "1,500", "2,500", ""], ["1.2", "Lamp", "no", "3", "", ""]]
+    items = {i.item_no: i for i in extraction.parse_boq([_page(rows)]).items}
+    assert items["1.1"].quantity == Decimal("1500") and items["1.1"].rate == Decimal("2500")
+    assert "ambiguous_separator" in items["1.1"].flags
+    assert "ambiguous_separator" not in items["1.2"].flags

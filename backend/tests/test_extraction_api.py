@@ -91,3 +91,18 @@ def test_lists_are_paginated(fake_llm) -> None:
     assert len(admin.client.get(url, params={"limit": 2}).json()) == 2
     assert len(admin.client.get(url, params={"limit": 2, "offset": 2}).json()) == 1
     assert admin.client.get(url, params={"limit": 0}).status_code in (200, 422)
+
+
+def test_extract_conflicts_carry_distinct_codes() -> None:
+    admin, tid, vid, _ = _ready()
+    url = f"{API}/document-versions/{vid}/extract"
+    r = admin.client.post(url, json={"deep_scan": False})  # ingest has not run: still pending
+    assert (r.status_code, r.json()["error"]["code"]) == (409, "not_processed")
+    drain()
+    assert admin.client.post(url, json={"deep_scan": False}).status_code == 202
+    r = admin.client.post(url, json={"deep_scan": True})
+    assert (r.status_code, r.json()["error"]["code"]) == (409, "extraction_options_conflict")
+    drain()
+    assert admin.client.post(f"{API}/tenders/{tid}/archive").status_code == 200
+    r = admin.client.post(url, json={"deep_scan": False})
+    assert (r.status_code, r.json()["error"]["code"]) == (409, "tender_archived")
