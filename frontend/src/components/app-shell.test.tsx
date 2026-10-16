@@ -84,3 +84,28 @@ describe("AppShell sign out", () => {
     await expectSignedOut(client);
   });
 });
+
+describe("AppShell members link", () => {
+  async function renderWith(permissions: string[]) {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/me") return respond(200, { ...ME, permissions });
+      throw new Error(`unexpected request ${url}`);
+    });
+    renderWithClient(
+      <AuthGate>
+        <AppShell>content</AppShell>
+      </AuthGate>,
+    );
+    await screen.findByText("content");
+  }
+
+  it("shows Members only to someone who can manage members", async () => {
+    await renderWith(["read", "manage_members"]);
+    expect(screen.getByRole("link", { name: "Members" })).toHaveAttribute("href", "/members");
+  });
+
+  it("hides Members from everyone else", async () => {
+    await renderWith(["read"]);
+    expect(screen.queryByRole("link", { name: "Members" })).toBeNull();
+  });
+});
