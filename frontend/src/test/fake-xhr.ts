@@ -1,9 +1,13 @@
 type ProgressEvent = { lengthComputable: boolean; loaded: number; total: number };
 
+/** Fake XMLHttpRequest for upload tests. Call FakeXhr.reset() in beforeEach to clear instances. */
 export class FakeXhr {
   static instances: FakeXhr[] = [];
   static get last(): FakeXhr {
     return FakeXhr.instances[FakeXhr.instances.length - 1];
+  }
+  static reset() {
+    FakeXhr.instances = [];
   }
   headers: Record<string, string> = {};
   upload: { onprogress?: (e: ProgressEvent) => void } = {};

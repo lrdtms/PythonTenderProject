@@ -65,11 +65,40 @@ describe("global 401 handling", () => {
     stop();
   });
 
-  it("does not for other errors, and not when the failing query is /me itself", async () => {
+  it("does not re-check the session for a non-401 error", async () => {
     const { client, stop } = await withActiveMe();
     await client.fetchQuery({ queryKey: ["boom"], queryFn: () => get("/api/v1/boom"), retry: false }).catch(() => {});
     await new Promise((r) => setTimeout(r, 50));
     expect(meCalls()).toBe(1);
+    stop();
+  });
+
+  it("does not loop when the /me query itself answers 401", async () => {
+    let meRequests = 0;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/me") {
+        meRequests += 1;
+        return meRequests === 1 ? respond(200, ME) : respond(401, errorBody("unauthorized", "Sign in."));
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+    const { client, stop } = await withActiveMe();
+    await vi.waitFor(() => expect(client.getQueryState(["me"])?.status).toBe("success"));
+    await client.refetchQueries({ queryKey: ["me"] });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(meCalls()).toBe(2);
+    stop();
+  });
+
+  it("shares one re-check between several parallel 401s", async () => {
+    const { client, stop } = await withActiveMe();
+    await Promise.all(
+      ["a", "b", "c"].map((key) =>
+        client.fetchQuery({ queryKey: [key], queryFn: () => get("/api/v1/tenders"), retry: false }).catch(() => {}),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    expect(meCalls()).toBeLessThanOrEqual(2);
     stop();
   });
 });

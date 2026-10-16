@@ -2,6 +2,14 @@ import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "./errors";
 
+// Types the mutation meta, so a typo such as skipAuthChek fails typecheck.
+declare module "@tanstack/react-query" {
+  interface Register {
+    mutationMeta: { skipAuthCheck?: boolean };
+  }
+}
+
+// The "me" key is reserved for the session query: matching is by the first key element.
 function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && error.isUnauthorized;
 }
@@ -10,7 +18,8 @@ function isUnauthorized(error: unknown): boolean {
  * The mounted AuthGate observes ["me"], refetches, gets 401, clears the cache and redirects. */
 export function createQueryClient(): QueryClient {
   const recheckSession = () => {
-    void client.invalidateQueries({ queryKey: ["me"] });
+    // cancelRefetch: false, so parallel 401s share the /me fetch already running.
+    void client.invalidateQueries({ queryKey: ["me"] }, { cancelRefetch: false });
   };
   const client: QueryClient = new QueryClient({
     queryCache: new QueryCache({

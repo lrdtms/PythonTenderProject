@@ -55,4 +55,30 @@ describe("status text", () => {
     expect(warningText(null)).toBe("Warning");
     expect(warningText("text")).toBe("Warning");
   });
+
+  it("words page lists and counts correctly in every case", () => {
+    expect(warningText({ code: "OCR_FAILED" })).toBe("Some pages could not be read.");
+    expect(warningText({ code: "OCR_FAILED", pages: [] })).toBe("Some pages could not be read.");
+    expect(warningText({ code: "OCR_LOW_CONFIDENCE", pages: [3, 4] })).toBe(
+      "Pages 3, 4 were read with low confidence. Check the values from them.",
+    );
+    expect(warningText({ code: "OCR_LOW_CONFIDENCE", pages: [3] })).toBe(
+      "Page 3 was read with low confidence. Check the values from it.",
+    );
+    expect(warningText({ code: "BOQ_NEEDS_MANUAL_ENTRY", pages: [4] })).toBe(
+      "Page 4 looks like a scanned bill of quantities. Enter its lines manually.",
+    );
+    expect(warningText({ code: "BOQ_NEEDS_MANUAL_ENTRY", pages: [4, 5] })).toBe(
+      "Pages 4, 5 look like a scanned bill of quantities. Enter its lines manually.",
+    );
+    for (const count of [undefined, Number.NaN, Infinity, "2"]) {
+      expect(warningText({ code: "EVIDENCE_UNVERIFIED", count })).toBe(
+        "Some requirements could not be matched to the page text. Check them against the source.",
+      );
+      expect(warningText({ code: "DUPLICATE_OF_REVIEWED", count })).toBe(
+        "Some items matched ones you already reviewed and were kept as reviewed.",
+      );
+      expect(warningText({ code: "ROW_CAP_REACHED", count })).toBe("Some rows beyond the limit were not stored.");
+    }
+  });
 });

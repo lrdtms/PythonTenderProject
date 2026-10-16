@@ -71,26 +71,39 @@ const JOB_ERRORS: Record<string, string> = {
 };
 export const jobErrorText = (code: string | null): string => (code && JOB_ERRORS[code]) || GENERIC_FAILURE;
 
-function pagesText(pages: unknown): string {
-  const list = Array.isArray(pages) ? pages.filter((p): p is number => typeof p === "number") : [];
-  return list.length === 1 ? `Page ${list[0]}` : `Pages ${list.join(", ")}`;
+function pageList(pages: unknown): number[] {
+  return Array.isArray(pages) ? pages.filter((p): p is number => typeof p === "number") : [];
+}
+
+/** Subject and verb agreement for a page list; "Some pages" when there are none. */
+function pagesSubject(pages: unknown, one: string, many: string): string {
+  const list = pageList(pages);
+  if (list.length === 0) return `Some pages ${many}`;
+  return list.length === 1 ? `Page ${list[0]} ${one}` : `Pages ${list.join(", ")} ${many}`;
 }
 
 /** Warnings carry ids, page numbers and counts only (never document text). */
 export function warningText(w: unknown): string {
   if (typeof w !== "object" || w === null) return "Warning";
   const { code, pages, count } = w as { code?: unknown; pages?: unknown; count?: unknown };
-  const n = typeof count === "number" ? count : 0;
+  const n = typeof count === "number" && Number.isFinite(count) ? count : null;
   const plural = (word: string) => (n === 1 ? word : `${word}s`);
   switch (code) {
     case "OCR_FAILED":
-      return `${pagesText(pages)} could not be read.`;
+      return pagesSubject(pages, "could not be read.", "could not be read.");
     case "OCR_LOW_CONFIDENCE":
-      return `${pagesText(pages)} was read with low confidence. Check the values from it.`;
+      {
+      const single = pageList(pages).length === 1;
+      return pagesSubject(pages, "was read with low confidence.", "were read with low confidence.") +
+        (single ? " Check the values from it." : " Check the values from them.");
+    }
     case "OCR_UNAVAILABLE":
       return "Text recognition was not available for scanned pages.";
     case "BOQ_NEEDS_MANUAL_ENTRY":
-      return `${pagesText(pages)} look like a scanned bill of quantities. Enter its lines manually.`;
+      return (
+        pagesSubject(pages, "looks like a scanned bill of quantities.", "look like a scanned bill of quantities.") +
+        " Enter its lines manually."
+      );
     case "NO_BOQ_FOUND":
       return "No bill of quantities table was found.";
     case "FILTER_LOW_YIELD":
@@ -98,11 +111,11 @@ export function warningText(w: unknown): string {
     case "WINDOW_CAP_REACHED":
       return "The document is long, so only the first part was analysed. Try a deep scan or split it.";
     case "ROW_CAP_REACHED":
-      return `${n} ${plural("row")} beyond the limit were not stored.`;
+      return n === null ? "Some rows beyond the limit were not stored." : `${n} ${plural("row")} beyond the limit ${n === 1 ? "was" : "were"} not stored.`;
     case "EVIDENCE_UNVERIFIED":
-      return `${n} ${plural("requirement")} could not be matched to the page text. Check them against the source.`;
+      return n === null ? "Some requirements could not be matched to the page text. Check them against the source." : `${n} ${plural("requirement")} could not be matched to the page text. Check them against the source.`;
     case "DUPLICATE_OF_REVIEWED":
-      return `${n} ${plural("item")} matched ones you already reviewed and were kept as reviewed.`;
+      return n === null ? "Some items matched ones you already reviewed and were kept as reviewed." : `${n} ${plural("item")} matched ones you already reviewed and were kept as reviewed.`;
     case "WINDOW_TIMEOUT":
     case "WINDOW_INVALID_OUTPUT":
       return "Some sections could not be analysed. Run the extraction again.";

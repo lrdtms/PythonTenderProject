@@ -44,7 +44,8 @@ export function meWith(permissions: string[], role: "admin" | "estimator" | "pro
 type Handler = (init?: RequestInit) => Response | Promise<Response>;
 
 /** Route fetch by "METHOD /path" (query string ignored). Adds GET /api/v1/me unless given.
- * Throws on a request nobody expected, so a test cannot pass by accident. */
+ * Throws on a request nobody expected, so a test cannot pass by accident. It stubs the global
+ * fetch: each test file must call `afterEach(() => vi.unstubAllGlobals())`. */
 export function mockApi(routes: Record<string, Handler>, me: ReturnType<typeof meWith> = ME) {
   const all: Record<string, Handler> = { "GET /api/v1/me": () => respond(200, me), ...routes };
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
