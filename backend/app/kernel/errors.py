@@ -6,7 +6,11 @@ from __future__ import annotations
 class DomainError(Exception):
     code = "error"
 
-    def __init__(self, message: str = "", details: object | None = None):
+    def __init__(
+        self, message: str = "", details: object | None = None, *, code: str | None = None
+    ):
+        if code is not None:
+            self.code = code
         super().__init__(message or self.code)
         self.message = message or self.code
         self.details = details
