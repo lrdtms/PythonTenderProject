@@ -65,6 +65,8 @@ describe("TenderWorkspace", () => {
     });
     renderSignedIn(<TenderWorkspace />);
     expect(await screen.findByText(/archived.*read-only/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^file/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^upload/i })).not.toBeInTheDocument();
   });
 
   it("does not request the documents of a tender that was not found", async () => {

@@ -121,6 +121,58 @@ describe("UploadForm", () => {
   });
 });
 
+describe("UploadForm stale messages", () => {
+  async function failFirst() {
+    mockApi({}, WRITE);
+    renderSignedIn(<UploadForm tenderId={ids.tender} />);
+    await userEvent.upload(await screen.findByLabelText(/file/i), pdf());
+    await userEvent.click(screen.getByRole("button", { name: /upload/i }));
+    FakeXhr.last.respond(422, { error: { code: "validation_error", message: "The file content does not match its extension." } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("does not match");
+  }
+
+  it("clears an old server error when another file is chosen", async () => {
+    await failFirst();
+    await userEvent.upload(screen.getByLabelText(/file/i), pdf("other.pdf"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows only the validation message after a server error, and the old error never comes back", async () => {
+    await failFirst();
+    await userEvent.setup({ applyAccept: false }).upload(screen.getByLabelText(/file/i), new File(["x"], "virus.exe"));
+    await userEvent.click(screen.getByRole("button", { name: /upload/i }));
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent("Unsupported file type");
+    await userEvent.upload(screen.getByLabelText(/file/i), pdf("good.pdf"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hides the success message when another file is chosen", async () => {
+    mockApi({}, WRITE);
+    renderSignedIn(<UploadForm tenderId={ids.tender} />);
+    await userEvent.upload(await screen.findByLabelText(/file/i), pdf());
+    await userEvent.click(screen.getByRole("button", { name: /upload/i }));
+    FakeXhr.last.respond(201, result());
+    expect(await screen.findByText(/uploaded/i)).toBeInTheDocument();
+    await userEvent.upload(screen.getByLabelText(/file/i), pdf("next.pdf"));
+    expect(screen.queryByText(/uploaded/i)).not.toBeInTheDocument();
+  });
+
+  it("rejects an empty file and does not send a whitespace-only title", async () => {
+    mockApi({}, WRITE);
+    renderSignedIn(<UploadForm tenderId={ids.tender} />);
+    await userEvent.upload(await screen.findByLabelText(/file/i), pdf("empty.pdf", 0));
+    await userEvent.click(screen.getByRole("button", { name: /upload/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The file is empty.");
+    expect(FakeXhr.instances).toHaveLength(0);
+    await userEvent.upload(screen.getByLabelText(/file/i), pdf("ok.pdf"));
+    await userEvent.type(screen.getByLabelText(/title/i), "   ");
+    await userEvent.click(screen.getByRole("button", { name: /upload/i }));
+    expect((FakeXhr.last.body as FormData).has("title")).toBe(false);
+  });
+});
+
 describe("NewVersion", () => {
   it("uploads a new version of an existing document to its own endpoint", async () => {
     mockApi({}, WRITE);
@@ -139,5 +191,35 @@ describe("NewVersion", () => {
     await userEvent.setup({ applyAccept: false }).upload(await screen.findByLabelText(/new version/i), new File(["x"], "bad.txt"));
     expect(await screen.findByRole("alert")).toHaveTextContent(/unsupported file type/i);
     expect(FakeXhr.instances).toHaveLength(0);
+  });
+
+  it("shows a 422 from the server and lets the same file be chosen again", async () => {
+    mockApi({}, WRITE);
+    renderSignedIn(<NewVersion tenderId={ids.tender} documentId={ids.document} />);
+    const file = pdf("v2.pdf");
+    await userEvent.upload(await screen.findByLabelText(/new version/i), file);
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+    FakeXhr.last.respond(422, { error: { code: "validation_error", message: "The file content does not match its extension." } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("does not match");
+    await userEvent.upload(screen.getByLabelText(/new version/i), file);
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(2));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("clears a validation message when a valid file replaces the bad one, and shows progress", async () => {
+    mockApi({}, WRITE);
+    renderSignedIn(<NewVersion tenderId={ids.tender} documentId={ids.document} />);
+    await userEvent.setup({ applyAccept: false }).upload(await screen.findByLabelText(/new version/i), new File(["x"], "bad.txt"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/unsupported file type/i);
+    await userEvent.upload(screen.getByLabelText(/new version/i), pdf("v2.pdf"));
+    await waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    FakeXhr.last.progress(1, 4);
+    expect(await screen.findByRole("progressbar", { name: /upload/i })).toHaveAttribute("value", "0.25");
+    FakeXhr.last.respond(201, result());
+    expect(await screen.findByText(/uploaded/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    await userEvent.upload(screen.getByLabelText(/new version/i), pdf("v3.pdf"));
+    expect(screen.queryByText(/uploaded/i)).not.toBeInTheDocument();
   });
 });

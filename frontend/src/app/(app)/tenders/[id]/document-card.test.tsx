@@ -23,7 +23,7 @@ describe("DocumentCard write controls", () => {
   it("hides the new-version upload and Retry on an archived tender", async () => {
     mockApi({ [`GET ${JOB_URL}`]: failed }, WRITE);
     renderSignedIn(<ul><DocumentCard document={makeDocument()} tenderId={ids.tender} archived /></ul>);
-    expect(await screen.findByRole("alert")).toHaveTextContent(/./);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/file is damaged/i);
     expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/new version/i)).not.toBeInTheDocument();
   });

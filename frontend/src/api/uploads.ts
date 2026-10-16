@@ -5,6 +5,8 @@ import type { UploadResult } from "./types";
 
 type UploadInput = { file: File; kind?: string; title?: string; onProgress?: (fraction: number) => void };
 
+// Uploads are deliberately NOT aborted on unmount: the user most likely wants them to finish, and the
+// hook still refreshes the documents on success. A cancel feature would pass an AbortSignal to `upload`.
 function useUpload(path: string, tenderId: string) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 
 import { ApiError } from "@/api/errors";
 import { useUploadDocument } from "@/api/uploads";
@@ -24,6 +24,9 @@ export function UploadForm({ tenderId }: { tenderId: string }) {
   const [fraction, setFraction] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const kindId = useId();
+  const fileId = useId();
+  const hintId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
 
   if (!canUpload) return null;
@@ -33,11 +36,13 @@ export function UploadForm({ tenderId }: { tenderId: string }) {
     if (uploadDocument.isPending) return;
     setDone(false);
     if (!file) {
+      uploadDocument.reset();
       setProblem("Choose a file to upload.");
       return;
     }
     const invalid = validateFile(file);
     if (invalid) {
+      uploadDocument.reset(); // only one message at a time
       setProblem(invalid);
       return;
     }
@@ -62,8 +67,8 @@ export function UploadForm({ tenderId }: { tenderId: string }) {
     <form onSubmit={submit} className="mb-8 grid gap-4 rounded border border-zinc-300 p-4 sm:grid-cols-2 dark:border-zinc-700">
       <h2 className="text-lg font-medium sm:col-span-2">Upload a document</h2>
       <div className="flex flex-col gap-1">
-        <label htmlFor="doc-kind" className="text-sm font-medium">Document type</label>
-        <select id="doc-kind" value={kind} onChange={(e) => setKind(e.target.value)} className="rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
+        <label htmlFor={kindId} className="text-sm font-medium">Document type</label>
+        <select id={kindId} value={kind} onChange={(e) => setKind(e.target.value)} className="rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
           {KINDS.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
@@ -71,18 +76,22 @@ export function UploadForm({ tenderId }: { tenderId: string }) {
       </div>
       <Field label="Title (optional)" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
       <div className="flex flex-col gap-1 sm:col-span-2">
-        <label htmlFor="doc-file" className="text-sm font-medium">File</label>
+        <label htmlFor={fileId} className="text-sm font-medium">File</label>
         <input
           ref={fileInput}
-          id="doc-file"
+          id={fileId}
+          aria-describedby={hintId}
+          disabled={uploadDocument.isPending}
           type="file"
           accept={ACCEPT}
           onChange={(e) => {
             setFile(e.target.files?.[0] ?? null);
+            uploadDocument.reset();
             setProblem(null);
+            setDone(false);
           }}
         />
-        <p className="text-xs text-zinc-500">
+        <p id={hintId} className="text-xs text-zinc-500">
           PDF, XLSX, CSV or DOCX, up to {MAX_UPLOAD_MB} MB.{file ? ` Selected: ${file.name} (${formatBytes(file.size)}).` : ""}
         </p>
       </div>
