@@ -22,10 +22,15 @@ export type Source = {
 /** Rows shown either side of the cited range, so the grid has context without loading a whole sheet. */
 const CONTEXT_ROWS = 20;
 
-const Unavailable = () => (
-  <p role="status" className="text-sm text-zinc-600 dark:text-zinc-400">
-    Source not available for this row.
-  </p>
+const Unavailable = ({ quote }: { quote?: string | null }) => (
+  <div role="status" className="text-sm text-zinc-600 dark:text-zinc-400">
+    <p>Source not available for this row.</p>
+    {quote ? (
+      <p className="mt-1">
+        Quote (not located): <q>{quote}</q>
+      </p>
+    ) : null}
+  </div>
 );
 
 const OcrBadge = () => <StatusBadge tone="warning" label="Scanned page (OCR)" />;
@@ -34,7 +39,7 @@ function PageTextSource({ versionId, page, source, label }: { versionId: string;
   const detail = useQuery(pageDetailQueryOptions(versionId, page));
   if (detail.isPending) return <p role="status" className="text-sm text-zinc-500">Loading page text…</p>;
   if (detail.isError) return <Unavailable />;
-  const scanned = detail.data.text_source !== "native";
+  const scanned = detail.data.text_source === "ocr" || detail.data.ocr_confidence != null;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
@@ -61,7 +66,7 @@ function SheetSource({ versionId, source }: { versionId: string; source: Source 
   if (pages.isError || !page || detail.isError) return <Unavailable />;
   if (detail.isPending) return <p role="status" className="text-sm text-zinc-500">Loading sheet…</p>;
   const table = detail.data.tables.map(asSheetTable).find((t) => t !== null);
-  if (!table) return <Unavailable />;
+  if (!table || table.rows.length === 0) return <Unavailable />;
   return (
     <div className="space-y-2">
       <p className="text-sm">
@@ -80,9 +85,12 @@ type Props = { versionId: string; fileFormat: string; source: Source | null };
 export function SourceViewer({ versionId, fileFormat, source }: Props) {
   if (!source) return <Unavailable />;
   if (fileFormat === "xlsx" || fileFormat === "csv") {
-    return source.sheet || fileFormat === "csv" ? <SheetSource versionId={versionId} source={source} /> : <Unavailable />;
+    if (source.sheet || (fileFormat === "csv" && source.page === null)) return <SheetSource versionId={versionId} source={source} />;
+    // A requirement found in a sheet's text has a page but no cell range: show that page's text.
+    if (source.page !== null) return <PageTextSource versionId={versionId} page={source.page} source={source} />;
+    return <Unavailable quote={source.quote} />;
   }
-  if (source.page === null) return <Unavailable />;
+  if (source.page === null) return <Unavailable quote={source.quote} />;
   if (fileFormat === "pdf") {
     return (
       <div className="space-y-3">

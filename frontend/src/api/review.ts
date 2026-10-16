@@ -86,8 +86,13 @@ export type ReviewVars =
   | { action: "confirm" | "reject"; id: string }
   | { action: "correct"; id: string; patch: BoqPatch | RequirementPatch };
 
-/** One mutation for confirm, reject and correct. The cached list is updated at once and restored on
- * failure; a row that a re-run replaced resets the list so it reloads from offset 0. */
+function findRow(data: InfiniteData<Row[]> | undefined, id: string): Row | undefined {
+  return data?.pages.flat().find((row) => row.id === id);
+}
+
+/** One mutation for confirm, reject and correct. The row is updated in the cached list at once and
+ * only that row is restored on failure, so a failed write cannot undo another row's saved write.
+ * A row that a re-run replaced reloads the list from offset 0 (the rows stay mounted meanwhile). */
 export function useReviewMutation(kind: ReviewKind, versionId: string) {
   const client = useQueryClient();
   const key = listKey(kind, versionId);
@@ -96,22 +101,22 @@ export function useReviewMutation(kind: ReviewKind, versionId: string) {
       vars.action === "correct"
         ? patch<Row>(rowPath(kind, vars.id), vars.patch)
         : post<Row>(`${rowPath(kind, vars.id)}/${vars.action}`),
-    onMutate: async (vars) => {
-      await client.cancelQueries({ queryKey: key });
-      const previous = client.getQueryData<InfiniteData<Row[]>>(key);
+    onMutate: (vars) => {
+      const previousRow = findRow(client.getQueryData<InfiniteData<Row[]>>(key), vars.id);
       const status: ReviewStatus =
         vars.action === "confirm" ? "confirmed" : vars.action === "reject" ? "rejected" : "corrected";
       mapRows(client, key, (row) => (row.id === vars.id ? { ...row, review_status: status } : row));
-      return { previous };
+      return { previousRow };
     },
     onSuccess: (saved, vars) => {
       mapRows(client, key, (row) => (row.id === vars.id ? saved : row));
     },
     onError: (error, _vars, context) => {
       if (isReplaced(error)) {
-        void client.resetQueries({ queryKey: key });
-      } else if (context?.previous) {
-        client.setQueryData(key, context.previous);
+        void client.invalidateQueries({ queryKey: key });
+      } else if (context?.previousRow) {
+        const back = context.previousRow;
+        mapRows(client, key, (row) => (row.id === back.id ? back : row));
       }
     },
   });

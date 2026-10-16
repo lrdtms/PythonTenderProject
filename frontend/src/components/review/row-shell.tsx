@@ -9,8 +9,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { reviewStatusLabel, reviewTone, writeErrorText } from "@/lib/review-text";
 
-/** A keyboard command for the selected row; `nonce` makes repeating the same action fire again. */
-export type RowCommand = { action: "confirm" | "reject" | "edit"; nonce: number };
+/** A keyboard command addressed to one row. `nonce` makes repeating the same action fire again. */
+export type RowCommand = { action: "confirm" | "reject"; id: string; nonce: number };
 
 export type RowMeta = {
   id: string;
@@ -26,6 +26,9 @@ export type EditorApi = {
   error: string | null;
 };
 
+/** What the screen is told when a write found its row gone. */
+export type ReplacedInfo = { patch?: BoqPatch | RequirementPatch };
+
 type Props = {
   kind: ReviewKind;
   versionId: string;
@@ -33,7 +36,12 @@ type Props = {
   selected: boolean;
   onSelect: () => void;
   archived: boolean;
+  /** Keyboard confirm/reject; acted on only when `command.id` is this row. */
   command?: RowCommand;
+  /** Controlled editor state (the screen owns it so the `e` key can open it). */
+  editing?: boolean;
+  onEditingChange?: (open: boolean) => void;
+  onReplaced?: (info: ReplacedInfo) => void;
   summary: ReactNode;
   chips?: ReactNode;
   editor: (api: EditorApi) => ReactNode;
@@ -41,13 +49,16 @@ type Props = {
 
 const BUTTON = "rounded border px-2 py-1 text-sm disabled:opacity-50";
 
-export function RowShell({ kind, versionId, row, selected, onSelect, archived, command, summary, chips, editor }: Props) {
+export function RowShell({
+  kind, versionId, row, selected, onSelect, archived, command, editing: editingProp, onEditingChange, onReplaced, summary, chips, editor,
+}: Props) {
   const canReview = useCan("review_data") && !archived;
   const { mutate, isPending } = useReviewMutation(kind, versionId);
-  const [manualEdit, setManualEdit] = useState(false);
-  const [closedNonce, setClosedNonce] = useState(0);
+  const [localEditing, setLocalEditing] = useState(false);
   const [note, setNote] = useState<{ text: string; replaced: boolean } | null>(null);
   const handled = useRef(command?.nonce ?? 0);
+  const editing = editingProp ?? localEditing;
+  const setEditing = onEditingChange ?? setLocalEditing;
 
   // No synchronous setState here: the keyboard path calls this from an effect.
   const run = (vars: ReviewVars, after?: () => void) => {
@@ -56,26 +67,21 @@ export function RowShell({ kind, versionId, row, selected, onSelect, archived, c
         setNote(null);
         after?.();
       },
-      onError: (error) => setNote(writeErrorText(error)),
+      onError: (error) => {
+        const described = writeErrorText(error);
+        setNote(described);
+        if (described.replaced) onReplaced?.({ patch: vars.action === "correct" ? vars.patch : undefined });
+      },
     });
   };
 
   useEffect(() => {
     if (!command || command.nonce === handled.current) return;
     handled.current = command.nonce;
-    if (!selected || !canReview || isPending) return;
-    if (command.action !== "edit") run({ action: command.action, id: row.id });
+    if (command.id !== row.id || !canReview || isPending) return;
+    run({ action: command.action, id: row.id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [command]);
-
-  // The edit key opens the editor by derivation (no setState in an effect); closing records the
-  // command's nonce so the same command does not reopen it.
-  const keyEdit = command?.action === "edit" && command.nonce !== closedNonce && selected && canReview;
-  const editing = manualEdit || keyEdit;
-  const closeEditor = () => {
-    setManualEdit(false);
-    if (command) setClosedNonce(command.nonce);
-  };
 
   const reviewer =
     row.reviewed_by_name && row.reviewed_at
@@ -109,8 +115,8 @@ export function RowShell({ kind, versionId, row, selected, onSelect, archived, c
           {editor({
             saving: isPending,
             error: note && !note.replaced ? note.text : null,
-            cancel: closeEditor,
-            save: (patch) => run({ action: "correct", id: row.id, patch }, closeEditor),
+            cancel: () => setEditing(false),
+            save: (patch) => run({ action: "correct", id: row.id, patch }, () => setEditing(false)),
           })}
         </div>
       ) : canReview && !note?.replaced ? (
@@ -118,7 +124,7 @@ export function RowShell({ kind, versionId, row, selected, onSelect, archived, c
           <button type="button" disabled={isPending} onClick={() => run({ action: "confirm", id: row.id })} className={BUTTON}>
             Confirm
           </button>
-          <button type="button" disabled={isPending} onClick={() => setManualEdit(true)} className={BUTTON}>
+          <button type="button" disabled={isPending} onClick={() => setEditing(true)} className={BUTTON}>
             Edit
           </button>
           <button type="button" disabled={isPending} onClick={() => run({ action: "reject", id: row.id })} className={BUTTON}>

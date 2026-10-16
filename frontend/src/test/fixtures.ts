@@ -79,7 +79,7 @@ export function makeRequirement(over: Partial<Requirement> = {}): Requirement {
 
 export function makePage(over: Partial<PageSummary> = {}): PageSummary {
   return {
-    page_number: 1, label: null, status: "ok", text_source: "native", ocr_confidence: null,
+    page_number: 1, label: null, status: "ok", text_source: "embedded", ocr_confidence: null,
     char_count: 100, table_count: 0, ...over,
   };
 }

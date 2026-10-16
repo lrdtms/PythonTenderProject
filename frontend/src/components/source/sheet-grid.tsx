@@ -23,7 +23,7 @@ export function SheetGrid({ table, range }: Props) {
   const firstCited = useRef<HTMLTableRowElement>(null);
   const width = table.rows.reduce((w, r) => Math.max(w, r.length), 0);
   useEffect(() => {
-    firstCited.current?.scrollIntoView?.({ block: "center" });
+    firstCited.current?.scrollIntoView?.({ block: "nearest" });
   }, [range, table]);
 
   const lastRow = table.first_row + table.rows.length - 1;
@@ -58,10 +58,11 @@ export function SheetGrid({ table, range }: Props) {
                   return (
                     <td
                       key={c}
-                      aria-selected={cited || undefined}
+                      data-cited={cited || undefined}
                       className={`border border-zinc-200 px-2 py-1 dark:border-zinc-700 ${cited ? "bg-yellow-200 text-black outline outline-2 outline-yellow-600" : ""}`}
                     >
                       {cells[c] ?? ""}
+                      {cited && c + 1 === bounds?.firstCol ? <span className="sr-only"> (cited cells start here)</span> : null}
                     </td>
                   );
                 })}

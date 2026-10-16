@@ -91,7 +91,7 @@ describe("review rows", () => {
     await userEvent.clear(screen.getByLabelText("Quantity"));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(callsTo(fetchMock, "PATCH", "/api/v1/boq-items/b1")).toHaveLength(1));
-    const body = JSON.parse((callsTo(fetchMock, "PATCH", "/api/v1/boq-items/b1")[0][1] as RequirementInit).body as string);
+    const body = JSON.parse((callsTo(fetchMock, "PATCH", "/api/v1/boq-items/b1")[0][1] as RequestInit).body as string);
     expect(body).toEqual({ quantity: null });
   });
 
@@ -127,4 +127,3 @@ describe("review rows", () => {
   });
 });
 
-type RequirementInit = RequestInit;

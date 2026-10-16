@@ -35,6 +35,14 @@ Documented trade-offs (acceptable for now):
 
 Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md): synthetic data, one run per seed, scored before the final review fix wave, `pack09_xl` and `deep_scan` not run, only `qwen3:4b` measured.
 
+## Slice 4 phase 4 (review screen)
+
+- **Quote highlight is on the extracted text, not the PDF image.** The stored `quote_start`/`quote_end` index the page text after whitespace is collapsed and lower-cased (`provenance.py`), so the client maps them back onto the raw text; matching the quote inside the PDF.js text layer is not implemented. Fuzzy matches mark the nearest located span.
+- **After a BoQ re-run a reviewed row and its re-extracted twin both appear** (same item code, no visual link between them).
+- **"Run extraction again" on a quotation PDF** returns no jobs and shows no feedback (quotations are not extracted in this slice).
+- **Field-level 422 messages** are joined into one message at the top of the editor rather than shown beside each input.
+- **Tab counts show "200+"** while more pages exist; the real total needs a count endpoint.
+
 ## Slice 1 and Slice 2 (deferred review minors)
 
 - CHECK constraints on status and role columns.

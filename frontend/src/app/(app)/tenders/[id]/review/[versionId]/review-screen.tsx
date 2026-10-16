@@ -11,7 +11,7 @@ import { tenderQueryOptions } from "@/api/tenders";
 import { useCan } from "@/components/auth-gate";
 import { BoqRow } from "@/components/review/boq-row";
 import { RequirementRow } from "@/components/review/requirement-row";
-import type { RowCommand } from "@/components/review/row-shell";
+import type { ReplacedInfo, RowCommand } from "@/components/review/row-shell";
 import { SourceViewer, type Source } from "@/components/source/source-viewer";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -32,7 +32,10 @@ function NotFound({ tenderId }: { tenderId: string }) {
 
 /** Keyboard shortcuts must not fire while the user is typing. */
 function isTyping(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.closest("form") !== null)
+  );
 }
 
 export function ReviewScreen() {
@@ -44,10 +47,14 @@ export function ReviewScreen() {
   const requirements = useRequirements(versionId, valid && !!version.data);
   const boq = useBoqItems(versionId, valid && !!version.data);
 
-  const [tab, setTab] = useState<Tab>("requirements");
+  const [pickedTab, setTab] = useState<Tab | null>(null);
+  // Until the user picks a tab, open on whichever one has rows (requirements first).
+  const tab: Tab = pickedTab ?? (requirements.isSuccess && requirements.rows.length === 0 && boq.rows.length > 0 ? "boq" : "requirements");
   const [pane, setPane] = useState<Pane>("rows");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [command, setCommand] = useState<RowCommand | undefined>();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [replaced, setReplaced] = useState<string | null>(null);
 
   const list = tab === "requirements" ? requirements : boq;
   const rows = list.rows;
@@ -88,13 +95,14 @@ export function ReviewScreen() {
         return;
       }
       const action = ({ c: "confirm", r: "reject", e: "edit" } as const)[event.key as "c" | "r" | "e"];
-      if (!action || !canReview || archived || !selectedId) return;
+      if (!action || !canReview || archived || !selectedId || editingId) return;
       event.preventDefault();
-      setCommand((prev) => ({ action, nonce: (prev?.nonce ?? 0) + 1 }));
+      if (action === "edit") setEditingId(selectedId);
+      else setCommand((prev) => ({ action, id: selectedId, nonce: (prev?.nonce ?? 0) + 1 }));
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [rows, selectedId, canReview, archived]);
+  }, [rows, selectedId, canReview, archived, editingId]);
 
   if (!valid) return <NotFound tenderId={tenderId} />;
   if (version.isPending) return <p role="status" className="text-sm text-zinc-500">Loading document…</p>;
@@ -111,7 +119,17 @@ export function ReviewScreen() {
   }
   const v = version.data;
 
-  const tabButton = (value: Tab, label: string, count: number) => (
+  const onReplaced = ({ patch }: ReplacedInfo) => {
+    setEditingId(null);
+    const unsaved = patch
+      ? ` Your change was not saved: ${Object.entries(patch)
+          .map(([field, value]) => `${field} ${value === null ? "(cleared)" : String(value)}`)
+          .join(", ")}.`
+      : "";
+    setReplaced(`A row was replaced by a re-run, so the list was reloaded.${unsaved}`);
+  };
+  const countLabel = (n: number, more: boolean) => (more ? `${n}+` : String(n));
+  const tabButton = (value: Tab, label: string, count: string) => (
     <button
       type="button"
       role="tab"
@@ -141,6 +159,15 @@ export function ReviewScreen() {
         <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">You can read this review but not change it.</p>
       ) : null}
 
+      {replaced ? (
+        <p role="alert" className="mb-3 rounded border border-amber-500 p-3 text-sm">
+          {replaced}{" "}
+          <button type="button" onClick={() => setReplaced(null)} className="underline">
+            Dismiss
+          </button>
+        </p>
+      ) : null}
+
       <div className="mb-3 flex gap-2 lg:hidden" role="group" aria-label="Show">
         {(["rows", "source"] as const).map((p) => (
           <button
@@ -158,8 +185,8 @@ export function ReviewScreen() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className={pane === "rows" ? "" : "hidden lg:block"}>
           <div role="tablist" className="mb-3 flex gap-1 border-b border-zinc-300 dark:border-zinc-700">
-            {tabButton("requirements", "Requirements", requirements.rows.length)}
-            {tabButton("boq", "BoQ lines", boq.rows.length)}
+            {tabButton("requirements", "Requirements", countLabel(requirements.rows.length, requirements.hasNextPage))}
+            {tabButton("boq", "BoQ lines", countLabel(boq.rows.length, boq.hasNextPage))}
           </div>
           {list.isPending ? <p role="status" className="text-sm text-zinc-500">Loading rows…</p> : null}
           {list.isError ? (
@@ -190,6 +217,9 @@ export function ReviewScreen() {
                     }}
                     archived={archived}
                     command={command}
+                    editing={editingId === row.id}
+                    onEditingChange={(open) => setEditingId(open ? row.id : null)}
+                    onReplaced={onReplaced}
                   />
                 ))
               : boq.rows.map((row) => (
@@ -204,6 +234,9 @@ export function ReviewScreen() {
                     }}
                     archived={archived}
                     command={command}
+                    editing={editingId === row.id}
+                    onEditingChange={(open) => setEditingId(open ? row.id : null)}
+                    onReplaced={onReplaced}
                   />
                 ))}
           </ul>

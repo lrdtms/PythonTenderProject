@@ -58,13 +58,13 @@ describe("SheetGrid", () => {
     render(<SheetGrid table={table} range="A11:C11" />);
     expect(screen.getByRole("rowheader", { name: "10" })).toBeInTheDocument();
     expect(screen.getByRole("rowheader", { name: "12" })).toBeInTheDocument();
-    const selected = document.querySelectorAll("td[aria-selected]");
-    expect([...selected].map((c) => c.textContent)).toEqual(["e", "f", "g"]);
+    const selected = document.querySelectorAll("td[data-cited]");
+    expect([...selected].map((c) => c.textContent?.replace(" (cited cells start here)", ""))).toEqual(["e", "f", "g"]);
   });
 
   it("highlights nothing for an invalid range", () => {
     render(<SheetGrid table={table} range="nonsense" />);
-    expect(document.querySelectorAll("td[aria-selected]")).toHaveLength(0);
+    expect(document.querySelectorAll("td[data-cited]")).toHaveLength(0);
   });
 });
 
@@ -97,10 +97,38 @@ describe("SourceViewer", () => {
     expect(await screen.findByText("Scanned page (OCR)")).toBeInTheDocument();
   });
 
+  it("does not flag a natively extracted page as scanned", async () => {
+    mockApi({ [`GET /api/v1/document-versions/${V}/pages/1`]: () => respond(200, makePageDetail()) });
+    renderViewer("pdf", { ...base, page: 1 });
+    await screen.findByText("Extracted text");
+    expect(screen.queryByText("Scanned page (OCR)")).toBeNull();
+  });
+
+  it("shows the quote when an unverified requirement has no page", () => {
+    renderViewer("pdf", { ...base, quote: "pay within 30 days" });
+    expect(screen.getByRole("status")).toHaveTextContent("Source not available");
+    expect(screen.getByText("pay within 30 days")).toBeInTheDocument();
+  });
+
+  it("shows the page text for a requirement in a spreadsheet", async () => {
+    mockApi({ [`GET /api/v1/document-versions/${V}/pages/3`]: () => respond(200, makePageDetail({ page_number: 3, text: "Sheet note" })) });
+    renderViewer("xlsx", { ...base, page: 3 });
+    expect(await screen.findByText("Sheet note")).toBeInTheDocument();
+  });
+
   it("labels a DOCX source as text only", async () => {
     mockApi({ [`GET /api/v1/document-versions/${V}/pages/1`]: () => respond(200, makePageDetail()) });
     renderViewer("docx", { ...base, page: 1 });
     expect(await screen.findByText(/Text only/)).toBeInTheDocument();
+  });
+
+  it("says the source is not available when the row window has no rows", async () => {
+    mockApi({
+      [`GET /api/v1/document-versions/${V}/pages`]: () => respond(200, [makePage({ label: "BoQ" })]),
+      [`GET /api/v1/document-versions/${V}/pages/1`]: () => respond(200, makePageDetail({ tables: [{ kind: "sheet", first_row: 500, rows: [] }] })),
+    });
+    renderViewer("xlsx", { ...base, sheet: "BoQ", cellRange: "A500:B500" });
+    expect(await screen.findByText("Source not available for this row.")).toBeInTheDocument();
   });
 
   it("maps a sheet to its page and highlights the cell range", async () => {
@@ -111,7 +139,7 @@ describe("SourceViewer", () => {
     });
     renderViewer("xlsx", { ...base, sheet: "BoQ", cellRange: "A6:B6" });
     const grid = await screen.findByRole("table");
-    expect([...document.querySelectorAll("td[aria-selected]")].map((c) => c.textContent)).toEqual(["z", "w"]);
+    expect([...document.querySelectorAll("td[data-cited]")].map((c) => c.textContent?.replace(" (cited cells start here)", ""))).toEqual(["z", "w"]);
     expect(within(grid).getByRole("rowheader", { name: "6" })).toBeInTheDocument();
     const detailCall = fetchMock.mock.calls.find(([u]) => String(u).includes("/pages/2"));
     expect(String(detailCall?.[0])).toMatch(/row_from=1&row_to=26/);

@@ -16,6 +16,10 @@ describe("review-text", () => {
   it("passes other messages through", () => {
     expect(writeErrorText(new ApiError(422, "validation_error", "Bad value"))).toEqual({ text: "Bad value", replaced: false });
   });
+  it("uses 422 detail messages", () => {
+    const e = new ApiError(422, "validation_error", "The request is not valid.", [{ field: "quantity", message: "Quantity is too large." }]);
+    expect(writeErrorText(e).text).toBe("Quantity is too large.");
+  });
   it("labels", () => {
     expect(reviewStatusLabel("corrected")).toBe("Corrected");
     expect(flagLabel("missing_quantity")).toBe("Quantity missing");

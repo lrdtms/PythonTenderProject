@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { validateDecimal } from "@/lib/decimal";
 import { flagLabel } from "@/lib/review-text";
 
-import { type EditorApi, RowShell, type RowCommand } from "./row-shell";
+import { type EditorApi, type ReplacedInfo, RowShell, type RowCommand } from "./row-shell";
 
 type Props = {
   row: BoqItem;
@@ -16,6 +16,9 @@ type Props = {
   onSelect: () => void;
   archived?: boolean;
   command?: RowCommand;
+  editing?: boolean;
+  onEditingChange?: (open: boolean) => void;
+  onReplaced?: (info: ReplacedInfo) => void;
 };
 
 const dash = (v: string | null | undefined) => (v === null || v === undefined || v === "" ? "-" : v);
@@ -24,6 +27,8 @@ const plain = (v: string | null) => (v === null ? "" : v.includes(".") ? v.repla
 
 function BoqEditor({ row, save, cancel, saving, error }: { row: BoqItem } & EditorApi) {
   const [description, setDescription] = useState(row.description);
+  const [section, setSection] = useState(row.section ?? "");
+  const [itemNo, setItemNo] = useState(row.item_no ?? "");
   const [unit, setUnit] = useState(row.unit ?? "");
   const [quantity, setQuantity] = useState(plain(row.quantity));
   const [rate, setRate] = useState(plain(row.rate));
@@ -34,6 +39,8 @@ function BoqEditor({ row, save, cancel, saving, error }: { row: BoqItem } & Edit
   const submit = () => {
     const patch: BoqPatch = {};
     if (description.trim() !== row.description) patch.description = description.trim();
+    if (section !== (row.section ?? "")) patch.section = section === "" ? null : section;
+    if (itemNo !== (row.item_no ?? "")) patch.item_no = itemNo === "" ? null : itemNo;
     if (unit !== (row.unit ?? "")) patch.unit = unit === "" ? null : unit;
     if (quantity.trim() !== plain(row.quantity)) patch.quantity = quantity.trim() === "" ? null : quantity.trim();
     if (rate.trim() !== plain(row.rate)) patch.rate = rate.trim() === "" ? null : rate.trim();
@@ -53,6 +60,16 @@ function BoqEditor({ row, save, cancel, saving, error }: { row: BoqItem } & Edit
         <span className="font-medium">Description</span>
         <input value={description} maxLength={2000} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded border bg-transparent p-2" />
       </label>
+      <div className="flex flex-wrap gap-3">
+        <label>
+          <span className="block font-medium">Item no</span>
+          <input value={itemNo} maxLength={50} onChange={(e) => setItemNo(e.target.value)} className="w-24 rounded border bg-transparent p-1" />
+        </label>
+        <label className="grow">
+          <span className="block font-medium">Section</span>
+          <input value={section} maxLength={300} onChange={(e) => setSection(e.target.value)} className="w-full rounded border bg-transparent p-1" />
+        </label>
+      </div>
       <div className="flex flex-wrap gap-3">
         <label>
           <span className="block font-medium">Unit</span>
@@ -83,10 +100,16 @@ function BoqEditor({ row, save, cancel, saving, error }: { row: BoqItem } & Edit
   );
 }
 
-export function BoqRow({ row, versionId, selected, onSelect, archived = false, command }: Props) {
-  const original = row.review_status === "corrected" ? (row.original_value as Record<string, string | null>) : null;
+export function BoqRow({ row, versionId, selected, onSelect, archived = false, command, editing, onEditingChange, onReplaced }: Props) {
+  // Only fields the reviewer changed (corrected_value) can differ from the AI's reading. The parser
+  // stores "10" where the column holds "10.0000", so compare numerically-normalised text.
+  const original = (row.original_value ?? {}) as Record<string, string | null | undefined>;
+  const changedKeys = row.review_status === "corrected" && row.corrected_value ? Object.keys(row.corrected_value) : [];
+  const norm = (v: string | null | undefined) => plain(v ?? null);
   const was = (field: "quantity" | "rate" | "unit") =>
-    original && field in original && original[field] !== row[field] ? ` (was ${dash(original[field])})` : "";
+    changedKeys.includes(field) && norm(original[field]) !== norm(row[field]) ? ` (was ${dash(norm(original[field]))})` : "";
+  const originalDescription =
+    changedKeys.includes("description") && original.description && original.description !== row.description ? original.description : null;
   return (
     <RowShell
       kind="boq-item"
@@ -96,6 +119,9 @@ export function BoqRow({ row, versionId, selected, onSelect, archived = false, c
       onSelect={onSelect}
       archived={archived}
       command={command}
+      editing={editing}
+      onEditingChange={onEditingChange}
+      onReplaced={onReplaced}
       chips={row.flags.map((f) => (
         <StatusBadge key={f} tone="warning" label={flagLabel(f)} />
       ))}
@@ -105,6 +131,7 @@ export function BoqRow({ row, versionId, selected, onSelect, archived = false, c
             {row.item_no ? <span className="mr-2 font-mono text-xs">{row.item_no}</span> : null}
             {row.description}
           </p>
+          {originalDescription ? <p className="mt-1 text-xs text-zinc-500">Originally: {originalDescription}</p> : null}
           <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
             Qty {dash(plain(row.quantity))}
             {was("quantity")} · Unit {dash(row.unit)}

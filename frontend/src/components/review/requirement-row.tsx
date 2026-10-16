@@ -6,7 +6,7 @@ import type { Requirement, RequirementPatch } from "@/api/types";
 import { StatusBadge } from "@/components/status-badge";
 import { MANDATORY_STATUSES, REQUIREMENT_TYPES, mandatoryLabel, requirementTypeLabel } from "@/lib/review-text";
 
-import { type EditorApi, RowShell, type RowCommand } from "./row-shell";
+import { type EditorApi, type ReplacedInfo, RowShell, type RowCommand } from "./row-shell";
 
 type Props = {
   row: Requirement;
@@ -15,6 +15,9 @@ type Props = {
   onSelect: () => void;
   archived?: boolean;
   command?: RowCommand;
+  editing?: boolean;
+  onEditingChange?: (open: boolean) => void;
+  onReplaced?: (info: ReplacedInfo) => void;
 };
 
 function RequirementEditor({ row, save, cancel, saving, error }: { row: Requirement } & EditorApi) {
@@ -92,7 +95,7 @@ function RequirementEditor({ row, save, cancel, saving, error }: { row: Requirem
   );
 }
 
-export function RequirementRow({ row, versionId, selected, onSelect, archived = false, command }: Props) {
+export function RequirementRow({ row, versionId, selected, onSelect, archived = false, command, editing, onEditingChange, onReplaced }: Props) {
   const original = row.review_status === "corrected" ? (row.original_value as { description?: string }) : null;
   return (
     <RowShell
@@ -103,6 +106,9 @@ export function RequirementRow({ row, versionId, selected, onSelect, archived = 
       onSelect={onSelect}
       archived={archived}
       command={command}
+      editing={editing}
+      onEditingChange={onEditingChange}
+      onReplaced={onReplaced}
       chips={
         <>
           <StatusBadge tone="neutral" label={requirementTypeLabel(row.requirement_type)} />

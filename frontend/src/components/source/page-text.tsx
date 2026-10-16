@@ -2,17 +2,17 @@
 
 import { useEffect, useRef } from "react";
 
-import { splitSpan } from "@/lib/source-span";
+import { splitQuoteSpan } from "@/lib/source-span";
 
 type Props = { text: string; start: number | null; end: number | null; quote?: string | null };
 
-/** The page's extracted text with the stored quote span marked. Everything is a text node, so
+/** The page's extracted text with the stored quote span marked (offsets are into the squashed text, see splitQuoteSpan). Everything is a text node, so
  * document content can never become markup. Bad offsets show the text unmarked. */
 export function PageText({ text, start, end, quote }: Props) {
   const markRef = useRef<HTMLElement>(null);
-  const span = splitSpan(text, start, end);
+  const span = splitQuoteSpan(text, start, end);
   useEffect(() => {
-    markRef.current?.scrollIntoView?.({ block: "center" });
+    markRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [span?.mark, start, end]);
 
   return (

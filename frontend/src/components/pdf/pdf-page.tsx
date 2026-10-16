@@ -69,8 +69,10 @@ export function PdfPage({ url, pageNumber, scale = 1.25, onDocument }: Props) {
   const key = `${url}
 ${pageNumber}
 ${scale}`;
+  // A page past the end is not drawn as the last page: the row cites a page this file lacks.
+  const beyondEnd = !!pdf && pageNumber > pdf.numPages;
   useEffect(() => {
-    if (!pdf) return;
+    if (!pdf || beyondEnd) return;
     let cancelled = false;
     let renderTask: RenderTask | undefined;
     (async () => {
@@ -97,11 +99,11 @@ ${scale}`;
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pdf, pageNumber, scale, key]);
+  }, [pdf, pageNumber, scale, key, beyondEnd]);
 
   const documentFailed = failure && failure.url === url ? failure.message : null;
   const outcome = shown && shown.key === key ? shown : null;
-  const error = documentFailed ?? (outcome && "error" in outcome ? outcome.error : null);
+  const error = documentFailed ?? (beyondEnd ? `This document has no page ${pageNumber}.` : null) ?? (outcome && "error" in outcome ? outcome.error : null);
   const ready = outcome && "shown" in outcome && pdf ? { shown: outcome.shown, numPages: pdf.numPages } : null;
   const state = error ? ({ status: "error", message: error } as const) : ready ? ({ status: "ready", ...ready } as const) : ({ status: "loading" } as const);
 
