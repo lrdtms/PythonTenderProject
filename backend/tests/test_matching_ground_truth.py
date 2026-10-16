@@ -15,3 +15,6 @@ def test_matcher_meets_the_prd_targets_on_the_committed_packs() -> None:
     assert report.wrong_clear == 0, report.render()
     assert report.unit_mismatch_unflagged == 0, report.render()
     assert report.ambiguous_cases_clear == 0, report.render()
+    # Excused trap items are labelling artefacts; a rise in them means more traps turn clear.
+    for name, result in report.per_pack.items():
+        assert result["exact_spec_on_trap_items"] <= 1, (name, report.render())

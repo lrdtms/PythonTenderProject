@@ -227,6 +227,16 @@ class _Prepared:
     codes: frozenset[str]
     spec_pairs: frozenset[tuple[str, str]]
     quals: dict[str, frozenset[str]]
+    core_notation: frozenset[str]  # which spellings were used: "word" (3-core), "plus" (3C+E)
+
+
+def _core_notation(low: str) -> frozenset[str]:
+    out = set()
+    if _CORES.search(low):
+        out.add("plus")
+    if _CORE_WORD.search(low):
+        out.add("word")
+    return frozenset(out)
 
 
 def _prepare(description: str, sku: str | None = None) -> _Prepared:
@@ -235,7 +245,14 @@ def _prepare(description: str, sku: str | None = None) -> _Prepared:
     if sku and sku.strip():
         codes = codes | _codes(sku) | {sku.strip().lower()}
     pairs = frozenset((k, v) for k, vs in specs.items() for v in vs)
-    return _Prepared(specs, _tokens(description), codes, pairs, qualifier_tokens(description))
+    return _Prepared(
+        specs,
+        _tokens(description),
+        codes,
+        pairs,
+        qualifier_tokens(description),
+        _core_notation(_normalise(description)),
+    )
 
 
 @dataclass(frozen=True)
@@ -249,6 +266,7 @@ class _Scored:
     unit_score: float
     code_hit: bool
     unit_neutral: float  # the score if the unit matched: the margin must not rest on units alone
+    core_notation_differs: bool = False
 
     @property
     def conflict(self) -> bool:
@@ -313,6 +331,12 @@ def _score_pair(
         unit_score,
         code_hit,
         total(1.0),
+        bool(
+            "core" in spec_detail["matched"]
+            and boq_p.core_notation
+            and quote_p.core_notation
+            and boq_p.core_notation != quote_p.core_notation
+        ),
     )
 
 
@@ -327,6 +351,8 @@ def _evidence(
         warnings.append("spec_multi_value")
     if s.unit_mismatch:
         warnings.append("unit_mismatch")
+    if s.core_notation_differs:
+        warnings.append("core_notation_differs")
     if shared:
         warnings.append("quote_shared")
     if closing and quote.valid_until and quote.valid_until < closing:
