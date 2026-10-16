@@ -6,9 +6,11 @@ import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { documentKindLabel, processingStatusLabel, processingTone } from "@/lib/status-text";
 
+import { NewVersion } from "./new-version";
+
 type Props = { document: DocumentItem; tenderId: string; archived: boolean };
 
-export function DocumentCard({ document, tenderId }: Props) {
+export function DocumentCard({ document, tenderId, archived }: Props) {
   const version = document.current_version;
   return (
     <li className="space-y-3 py-4">
@@ -25,7 +27,8 @@ export function DocumentCard({ document, tenderId }: Props) {
           <StatusBadge tone={processingTone(version.processing_status)} label={processingStatusLabel(version.processing_status)} />
         ) : null}
       </div>
-      {version?.job_id ? <JobProgress jobId={version.job_id} tenderId={tenderId} /> : null}
+      {version?.job_id ? <JobProgress jobId={version.job_id} tenderId={tenderId} archived={archived} /> : null}
+      {!archived && version ? <NewVersion tenderId={tenderId} documentId={document.id} /> : null}
     </li>
   );
 }

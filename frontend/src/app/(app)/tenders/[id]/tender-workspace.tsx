@@ -12,6 +12,7 @@ import { formatDateTime } from "@/lib/format";
 import { tenderStatusLabel, tenderTone } from "@/lib/status-text";
 
 import { DocumentCard } from "./document-card";
+import { UploadForm } from "./upload-form";
 
 export function TenderWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -55,6 +56,8 @@ export function TenderWorkspace() {
       {archived ? (
         <p className="mb-4 rounded border border-zinc-400 p-3 text-sm">This tender is archived and read-only.</p>
       ) : null}
+
+      {!archived ? <UploadForm tenderId={id} /> : null}
 
       <h2 className="mb-2 text-lg font-medium">Documents</h2>
       {documents.isPending ? <p role="status" className="text-sm text-zinc-500">Loading documents…</p> : null}
