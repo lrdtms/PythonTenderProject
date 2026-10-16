@@ -51,7 +51,7 @@ describe("PdfPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not display/i);
   });
 
-  it("loads with credentials, clamps an out-of-range page to the last page and renders it", async () => {
+  it("loads the same-origin URL with default credentials, clamps an out-of-range page to the last page and renders it", async () => {
     const { doc, render: renderPage, viewport } = fakeDocument(3);
     getDocument.mockReturnValue({ promise: Promise.resolve(doc), destroy: vi.fn() });
     render(<PdfPage url={URL_} pageNumber={99} />);
@@ -59,9 +59,9 @@ describe("PdfPage", () => {
     expect(screen.getByTestId("pdf-canvas")).toHaveClass("invisible");
 
     expect(await screen.findByText("Page 3 of 3")).toBeInTheDocument();
-    expect(getDocument).toHaveBeenCalledWith(
-      expect.objectContaining({ url: URL_, withCredentials: true }),
-    );
+    // Exact params: no `withCredentials`. The file is same-origin, so pdf.js's default
+    // (fetch credentials "same-origin") already sends the session cookie.
+    expect(getDocument).toHaveBeenCalledWith({ url: URL_ });
     expect(doc.getPage).toHaveBeenCalledWith(3);
     const canvas = screen.getByTestId("pdf-canvas");
     expect(renderPage).toHaveBeenCalledWith({ canvas, viewport });

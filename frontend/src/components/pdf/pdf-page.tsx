@@ -48,7 +48,7 @@ export function PdfPage({ url, pageNumber, scale = 1.25 }: Props) {
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
         ).toString();
-        const task = pdfjs.getDocument({ url, withCredentials: true });
+        const task = pdfjs.getDocument({ url });
         loadingTask = task;
         const pdf = await task.promise;
         if (cancelled) return;
