@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { REVIEW_PAGE_SIZE } from "@/api/review";
-import { ids, makeDocument, makeRequirement, makeTender } from "@/test/fixtures";
+import { ids, makeDocument, makeRequirement, makeTender, makeVersion } from "@/test/fixtures";
 import { callsTo, meWith, mockApi, renderSignedIn, respond } from "@/test/render";
 
 vi.mock("next/navigation", () => ({
@@ -41,7 +41,7 @@ describe("ChecklistView", () => {
     expect(screen.getByRole("heading", { name: /Meeting \(1\)/ })).toBeInTheDocument();
     const group = heading.closest("section") as HTMLElement;
     expect(within(group).getByText(/Tender pack/)).toBeInTheDocument();
-    expect(within(group).getByRole("link", { name: "Open in review" })).toHaveAttribute(
+    expect(within(group).getByRole("link", { name: /Open in review: Hold a tax certificate/ })).toHaveAttribute(
       "href",
       `/tenders/${ids.tender}/review/${ids.version}?row=q1`,
     );
@@ -89,7 +89,7 @@ describe("ChecklistView", () => {
     renderSignedIn(<ChecklistView />);
     const more = await screen.findByRole("button", { name: "Load more" });
     await userEvent.selectOptions(screen.getByLabelText("Mandatory status"), "conditional");
-    expect(screen.getByText(/loaded requirements only/)).toBeInTheDocument();
+    expect(screen.getByText(/Load more to check the rest/)).toBeInTheDocument();
     fetchMock.mockImplementationOnce(async () => respond(200, []));
     await userEvent.click(more);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Load more" })).toBeNull());
@@ -100,5 +100,35 @@ describe("ChecklistView", () => {
     mockApi(routes({ [`GET /api/v1/tenders/${ids.tender}`]: () => respond(404, { error: { code: "not_found", message: "no" } }) }), me);
     renderSignedIn(<ChecklistView />);
     expect(await screen.findByText("This tender was not found.")).toBeInTheDocument();
+  });
+
+  it("restarts from offset 0 and drops loaded pages when a filter changes after Load more", async () => {
+    const full = Array.from({ length: REVIEW_PAGE_SIZE }, (_, i) => makeRequirement({ id: `r${i}`, description: `Req ${i}`, requirement_type: "pricing" }));
+    const fetchMock = mockApi(routes({ [`GET ${LIST}`]: () => respond(200, full) }), me);
+    renderSignedIn(<ChecklistView />);
+    const more = await screen.findByRole("button", { name: "Load more" });
+    fetchMock.mockImplementationOnce(async () => respond(200, [makeRequirement({ id: "page2", description: "Page two row", requirement_type: "pricing" })]));
+    await userEvent.click(more);
+    expect(await screen.findByText("Page two row")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Review status"), "confirmed");
+    await waitFor(() => expect(screen.queryByText("Page two row")).toBeNull());
+    expect(String(callsTo(fetchMock, "GET", LIST).at(-1)?.[0])).toMatch(/offset=0/);
+  });
+
+  it("says no documents have been uploaded, and that none has finished processing", async () => {
+    mockApi(routes({ [`GET ${LIST}`]: () => respond(200, []), [`GET /api/v1/tenders/${ids.tender}/documents`]: () => respond(200, []) }), me);
+    const first = renderSignedIn(<ChecklistView />);
+    expect(await screen.findByText(/No documents have been uploaded yet/)).toBeInTheDocument();
+    first.unmount();
+    vi.unstubAllGlobals();
+    mockApi(
+      routes({
+        [`GET ${LIST}`]: () => respond(200, []),
+        [`GET /api/v1/tenders/${ids.tender}/documents`]: () => respond(200, [makeDocument({ current_version: makeVersion({ processing_status: "processing" }) })]),
+      }),
+      me,
+    );
+    renderSignedIn(<ChecklistView />);
+    expect(await screen.findByText(/No document has finished processing yet/)).toBeInTheDocument();
   });
 });

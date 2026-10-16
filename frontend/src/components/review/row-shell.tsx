@@ -90,6 +90,7 @@ export function RowShell({
 
   return (
     <li
+      id={`row-${row.id}`}
       aria-current={selected ? "true" : undefined}
       className={`rounded border p-3 ${selected ? "border-blue-600 ring-1 ring-blue-600" : "border-zinc-300 dark:border-zinc-700"}`}
     >

@@ -71,7 +71,11 @@ export function ChecklistView() {
     );
   }
 
-  const noProcessed = documents.data && !documents.data.some((d) => d.current_version);
+  const noDocuments = !!documents.data && documents.data.length === 0;
+  const nothingReady =
+    !!documents.data &&
+    documents.data.length > 0 &&
+    !documents.data.some((d) => d.current_version?.processing_status === "ready" || d.current_version?.processing_status === "ready_with_warnings");
   const filtered = !!(reviewStatus || requirementType || mandatory);
 
   const row = (r: Requirement) => (
@@ -87,7 +91,11 @@ export function ChecklistView() {
         {titles.get(r.document_version_id) ?? "Document"}
         {r.page_number ? ` · page ${r.page_number}` : ""}
         {" · "}
-        <Link href={`/tenders/${id}/review/${r.document_version_id}?row=${r.id}`} className="underline">
+        <Link
+          href={`/tenders/${id}/review/${r.document_version_id}?row=${r.id}`}
+          aria-label={`Open in review: ${r.description.slice(0, 60)}`}
+          className="underline"
+        >
           Open in review
         </Link>
       </p>
@@ -150,11 +158,13 @@ export function ChecklistView() {
       ) : null}
       {list.isSuccess && list.rows.length === 0 ? (
         <p className="text-sm">
-          {noProcessed
+          {noDocuments
             ? "No documents have been uploaded yet."
-            : filtered
-              ? "No requirements match these filters."
-              : "No requirements have been extracted yet."}{" "}
+            : nothingReady
+              ? "No document has finished processing yet."
+              : filtered
+                ? "No requirements match these filters."
+                : "No requirements have been extracted yet."}{" "}
           <Link href={`/tenders/${id}`} className="underline">
             Go to the tender page
           </Link>
@@ -164,14 +174,14 @@ export function ChecklistView() {
       {list.isSuccess && list.rows.length > 0 && visible.length === 0 ? (
         <p className="text-sm">
           No loaded requirements match the mandatory status filter.
-          {list.hasNextPage ? " More may be on the next page." : ""}
+          {list.hasNextPage ? " Load more to check the rest." : ""}
         </p>
       ) : null}
 
       {groups.map((g) => (
         <section key={g.type} aria-labelledby={`group-${g.type}`} className="mb-6">
           <h2 id={`group-${g.type}`} className="mb-2 text-lg font-medium">
-            {requirementTypeLabel(g.type)} ({g.rows.length})
+            {requirementTypeLabel(g.type)} ({g.rows.length}{list.hasNextPage ? "+" : ""})
           </h2>
           <ul className="space-y-2">{g.rows.map(row)}</ul>
         </section>
@@ -179,7 +189,7 @@ export function ChecklistView() {
 
       {list.hasNextPage ? (
         <div>
-          {mandatory ? (
+          {mandatory && visible.length > 0 ? (
             <p className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">
               The mandatory status filter applies to loaded requirements only; load more to see the rest.
             </p>

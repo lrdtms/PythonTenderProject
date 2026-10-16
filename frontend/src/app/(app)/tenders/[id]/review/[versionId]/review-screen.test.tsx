@@ -16,6 +16,8 @@ vi.mock("@/components/pdf/pdf-page", () => ({
 }));
 
 import { REVIEW_PAGE_SIZE } from "@/api/review";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { AuthGate } from "@/components/auth-gate";
 
 import { ReviewScreen } from "./review-screen";
 
@@ -205,5 +207,45 @@ describe("ReviewScreen", () => {
     mockApi(routes(), estimator);
     renderSignedIn(<ReviewScreen />);
     expect(await screen.findByTestId("pdf")).toHaveTextContent("pdf page 2");
+  });
+
+  it("follows a new ?row= link after the user has picked another row", async () => {
+    search.row = "q1";
+    mockApi(routes(), estimator);
+    const view = renderSignedIn(<ReviewScreen />);
+    expect(await screen.findByTestId("pdf")).toHaveTextContent("pdf page 1");
+    await userEvent.click(screen.getByText("Second requirement"));
+    await waitFor(() => expect(screen.getByTestId("pdf")).toHaveTextContent("pdf page 2"));
+    search.row = "q2";
+    view.rerender(<QueryClientProvider client={view.client}><AuthGate><ReviewScreen /></AuthGate></QueryClientProvider>);
+    search.row = "q1";
+    view.rerender(<QueryClientProvider client={view.client}><AuthGate><ReviewScreen /></AuthGate></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByTestId("pdf")).toHaveTextContent("pdf page 1"));
+  });
+
+  it("keeps loading pages until a linked requirement past the first page turns up", async () => {
+    search.row = "far";
+    const first = Array.from({ length: REVIEW_PAGE_SIZE }, (_, i) => makeRequirement({ id: `n${i}`, description: `Req ${i}` }));
+    const fetchMock = mockApi(routes({ [`GET /api/v1/document-versions/${V}/requirements`]: () => respond(200, first) }), estimator);
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const path = url.split("?")[0];
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET" && path === `/api/v1/document-versions/${V}/requirements`) {
+        return respond(200, url.includes("offset=200") ? [makeRequirement({ id: "far", description: "Far away", page_number: 2 })] : first);
+      }
+      const all = routes() as Record<string, () => Response | Promise<Response>>;
+      const h = all[`${method} ${path}`] ?? (method === "GET" && path === "/api/v1/me" ? () => respond(200, estimator) : undefined);
+      if (!h) throw new Error(`unexpected ${method} ${url}`);
+      return h();
+    });
+    renderSignedIn(<ReviewScreen />);
+    expect(await screen.findByTestId("pdf")).toHaveTextContent("pdf page 2");
+  });
+
+  it("says so when the linked requirement is not in the document", async () => {
+    search.row = "missing";
+    mockApi(routes(), estimator);
+    renderSignedIn(<ReviewScreen />);
+    expect(await screen.findByText(/linked requirement is no longer in this document/)).toBeInTheDocument();
   });
 });

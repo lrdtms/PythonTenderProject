@@ -47,19 +47,47 @@ export function ReviewScreen() {
   const requirements = useRequirements(versionId, valid && !!version.data);
   const boq = useBoqItems(versionId, valid && !!version.data);
 
-  // The checklist links here with ?row=<requirement id>: that row starts selected.
+  // The checklist links here with ?row=<requirement id>. User picks are remembered per link, so a
+  // new link (same screen, kept alive by Next) is not shadowed by an earlier pick.
   const linkedRow = useSearchParams().get("row");
-  const [pickedTab, setTab] = useState<Tab | null>(null);
-  // Until the user picks a tab, open on whichever one has rows (requirements first).
-  const tab: Tab = pickedTab ?? (linkedRow ? "requirements" : requirements.isSuccess && requirements.rows.length === 0 && boq.rows.length > 0 ? "boq" : "requirements");
-  const [pane, setPane] = useState<Pane>("rows");
-  const [pickedId, setSelectedId] = useState<string | null>(null);
-  const selectedId = pickedId ?? (linkedRow && requirements.rows.some((r) => r.id === linkedRow) ? linkedRow : null);
+  const linkedFound = !!linkedRow && requirements.rows.some((r) => r.id === linkedRow);
+  const [tabPick, setTab] = useState<Tab | null>(null);
+  const [panePick, setPane] = useState<Pane | null>(null);
+  const [idPick, setSelectedId] = useState<string | null | undefined>(undefined);
+  // A different link means a fresh start: forget picks made for the previous one (adjusting state
+  // during render, as React recommends, so there is no frame showing the old selection).
+  const [seenLink, setSeenLink] = useState(linkedRow);
+  if (seenLink !== linkedRow) {
+    setSeenLink(linkedRow);
+    setTab(null);
+    setPane(null);
+    setSelectedId(undefined);
+  }
+  // Until the user picks a tab, open on the linked requirement's tab, else on whichever has rows.
+  const tab: Tab =
+    tabPick ??
+    (linkedFound ? "requirements" : requirements.isSuccess && requirements.rows.length === 0 && boq.rows.length > 0 ? "boq" : "requirements");
+  const pane: Pane = panePick ?? (linkedFound ? "source" : "rows");
+  const selectedId = idPick !== undefined ? idPick : linkedFound ? linkedRow : null;
+  const linkedMissing =
+    !!linkedRow && requirements.isSuccess && !linkedFound && !requirements.hasNextPage && !requirements.isFetching;
+
+  // A linked requirement past the first page: keep loading pages until it turns up or they run out.
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = requirements;
+  useEffect(() => {
+    if (linkedRow && !linkedFound && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [linkedRow, linkedFound, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Bring the linked row into view on first resolve (no-op while its pane is hidden).
+  useEffect(() => {
+    if (linkedFound) document.getElementById(`row-${linkedRow}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [linkedFound, linkedRow]);
+
+  const list = tab === "requirements" ? requirements : boq;
   const [command, setCommand] = useState<RowCommand | undefined>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [replaced, setReplaced] = useState<string | null>(null);
 
-  const list = tab === "requirements" ? requirements : boq;
   const rows = list.rows;
   const archived = tender.data?.status === "archived";
   const selected = rows.find((r) => r.id === selectedId) ?? null;
@@ -162,6 +190,11 @@ export function ReviewScreen() {
         <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">You can read this review but not change it.</p>
       ) : null}
 
+      {linkedMissing ? (
+        <p role="status" className="mb-3 rounded border border-zinc-400 p-3 text-sm">
+          The linked requirement is no longer in this document.
+        </p>
+      ) : null}
       {replaced ? (
         <p role="alert" className="mb-3 rounded border border-amber-500 p-3 text-sm">
           {replaced}{" "}
