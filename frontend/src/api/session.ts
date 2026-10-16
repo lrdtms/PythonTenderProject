@@ -20,6 +20,7 @@ function startSession(queryClient: QueryClient, me: Me) {
 export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation({
+    meta: { skipAuthCheck: true },
     mutationFn: (input: LoginInput) => post<Me>("/api/v1/auth/login", input),
     onSuccess: (me) => startSession(queryClient, me),
   });
@@ -28,6 +29,7 @@ export function useLogin() {
 export function useRegister() {
   const queryClient = useQueryClient();
   return useMutation({
+    meta: { skipAuthCheck: true },
     mutationFn: (input: RegisterInput) => post<Me>("/api/v1/auth/register", input),
     onSuccess: (me) => startSession(queryClient, me),
   });
@@ -36,6 +38,7 @@ export function useRegister() {
 export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({
+    meta: { skipAuthCheck: true },
     mutationFn: async () => {
       try {
         await post<void>("/api/v1/auth/logout");
