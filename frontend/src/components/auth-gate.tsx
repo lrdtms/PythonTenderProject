@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 
@@ -24,12 +24,17 @@ export function useCan(permission: string): boolean {
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: me, error, isPending, refetch } = useQuery(meQueryOptions);
   const unauthorized = error instanceof ApiError && error.isUnauthorized;
 
   useEffect(() => {
-    if (unauthorized) router.replace("/login");
-  }, [unauthorized, router]);
+    if (!unauthorized) return;
+    // TanStack keeps `data` after a failed refetch: drop the stale `me` (and every tenant row) so
+    // /login does not see a "signed-in" user and bounce straight back here.
+    queryClient.clear();
+    router.replace("/login");
+  }, [unauthorized, queryClient, router]);
 
   if (isPending || unauthorized) {
     return <p role="status" className="p-8 text-sm text-zinc-500">Loading…</p>;

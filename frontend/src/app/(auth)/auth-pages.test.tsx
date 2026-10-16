@@ -2,7 +2,8 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ME, errorBody, renderWithClient, respond } from "@/test/render";
+import { meQueryOptions } from "@/api/session";
+import { ME, createTestClient, errorBody, renderWithClient, respond } from "@/test/render";
 
 import LoginPage from "./login/page";
 import RegisterPage from "./register/page";
@@ -84,9 +85,44 @@ describe("login page", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/tenders"));
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
   });
+
+  it("shows the form, and does not bounce to /tenders, when the cached me is stale after a 401", async () => {
+    const client = await clientWithStaleMe();
+    renderWithClient(<LoginPage />, client);
+    expect(await screen.findByLabelText(/email/i)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
 });
 
+/** A client whose `me` still holds data from before the session ended but whose last fetch was a 401. */
+async function clientWithStaleMe() {
+  signedOut(() => undefined);
+  const client = createTestClient();
+  client.setQueryData(["me"], ME);
+  await client.prefetchQuery({ ...meQueryOptions, staleTime: 0 });
+  const state = client.getQueryState(["me"])!;
+  expect(state.status).toBe("error");
+  expect(state.data).toEqual(ME);
+  return client;
+}
+
 describe("register page", () => {
+  it("sends an already signed-in user straight to /tenders", async () => {
+    fetchMock.mockResolvedValue(respond(200, ME));
+    renderWithClient(<RegisterPage />);
+    expect(screen.queryByLabelText(/organisation/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/tenders"));
+    expect(screen.queryByLabelText(/organisation/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the form, and does not bounce to /tenders, when the cached me is stale after a 401", async () => {
+    const client = await clientWithStaleMe();
+    renderWithClient(<RegisterPage />, client);
+    expect(await screen.findByLabelText(/organisation/i)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it("creates the account, then goes to /tenders", async () => {
     signedOut((url) => (url === "/api/v1/auth/register" ? respond(201, ME) : undefined));
     renderWithClient(<RegisterPage />);

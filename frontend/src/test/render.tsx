@@ -23,9 +23,13 @@ export function errorBody(code: string, message: string) {
   return { error: { code, message } };
 }
 
-export function renderWithClient(ui: ReactElement) {
-  const client = new QueryClient({
+export function createTestClient(): QueryClient {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+/** Render inside a QueryClientProvider. Pass `client` to seed the cache before the first render. */
+export function renderWithClient(ui: ReactElement, client: QueryClient = createTestClient()) {
   return { client, ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>) };
 }

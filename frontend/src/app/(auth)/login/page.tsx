@@ -12,13 +12,15 @@ import { Field } from "@/components/field";
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
-  const { data: me, isPending } = useQuery(meQueryOptions);
+  const { data: me, status } = useQuery(meQueryOptions);
+  // Only a successful /me counts: after a 401, TanStack still holds the stale `me` as `data`.
+  const signedIn = status === "success" && me !== undefined;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    if (me) router.replace("/tenders");
-  }, [me, router]);
+    if (signedIn) router.replace("/tenders");
+  }, [signedIn, router]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -26,7 +28,7 @@ export default function LoginPage() {
     login.mutate({ email, password });
   }
 
-  if (isPending || me) {
+  if (status === "pending" || signedIn) {
     return <p role="status" className="text-sm text-zinc-500">Loading…</p>;
   }
 

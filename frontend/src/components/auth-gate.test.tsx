@@ -74,4 +74,19 @@ describe("AuthGate", () => {
     await client.invalidateQueries({ queryKey: ["me"] });
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
   });
+
+  it("clears the whole cache (stale me included) before redirecting when a refetch returns 401", async () => {
+    fetchMock.mockResolvedValueOnce(respond(200, ME));
+    const { client } = renderWithClient(<AuthGate><Who /></AuthGate>);
+    expect(await screen.findByText("Esta Mator|true|false")).toBeInTheDocument();
+    client.setQueryData(["tenders", "dummy"], { secret: "tenant row" });
+    const cachedAtRedirect: unknown[] = [];
+    replace.mockImplementation(() => cachedAtRedirect.push(client.getQueryData(["tenders", "dummy"])));
+    fetchMock.mockResolvedValue(respond(401, errorBody("unauthorized", "Sign in.")));
+    await client.invalidateQueries({ queryKey: ["me"] });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+    expect(cachedAtRedirect[0]).toBeUndefined(); // cleared before the redirect, not after
+    expect(client.getQueryData(["tenders", "dummy"])).toBeUndefined();
+    expect(client.getQueryData(["me"])).toBeUndefined();
+  });
 });
