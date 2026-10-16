@@ -30,6 +30,7 @@ SUBTOTAL = re.compile(
 TOTAL_WORD = re.compile(r"^\s*total\b", re.I)
 RATE_ONLY = re.compile(r"\brate\s*only\b|^r/o$", re.I)
 PROVISIONAL = re.compile(r"\b(provisional\s+sum|prov\.?\s+sum|pc\s+sum)\b", re.I)
+SECTION_PREFIX = re.compile(r"^\s*section\s*:\s*", re.I)
 SCAN_FIELDS = ("item", "description", "unit", "quantity", "rate", "amount")
 
 
@@ -176,8 +177,16 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 start, columns = found
                 width = max(columns.values()) + 1
                 width = max(width, max((len(rows[start]),), default=width))
+                repeated = (
+                    carried is not None
+                    and table.get("kind") != "sheet"
+                    and last_boq_page is not None
+                    and page.page_number == last_boq_page + 1
+                    and carried[0] == columns
+                )  # the header printed again at the top of the next page: a continuation
                 carried = (columns, width)
-                carried_section = None
+                if not repeated:
+                    carried_section = None
                 last_boq_page = page.page_number
                 body_from = start + 1
             elif carried is not None and table.get("kind") != "sheet":
@@ -191,12 +200,16 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 continue
             section: str | None = carried_section
             for offset, row in enumerate(rows[body_from:], start=body_from):
-                if not any(str(c or "").strip() for c in row):
+                filled = [str(c).strip() for c in row if str(c or "").strip()]
+                if not filled:
                     continue
                 description = _get(row, columns, "description")
                 has_figures = any(
                     _get(row, columns, f) for f in ("unit", "quantity", "rate", "amount")
                 )
+                lone = len(filled) == 1 and re.search(r"[^\W\d_]", filled[0])
+                if not description and lone and not has_figures:
+                    description = filled[0]  # a lone heading cell, whichever column holds it
                 if not description or SUBTOTAL.match(description):
                     continue
                 if TOTAL_WORD.match(description) and not (
@@ -204,7 +217,7 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 ):
                     continue  # an amount-only total row, not an item
                 if not has_figures:
-                    section = description
+                    section = SECTION_PREFIX.sub("", description).strip() or None
                     continue
                 result.items.append(
                     _candidate(
