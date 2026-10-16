@@ -28,10 +28,11 @@ export function DocumentCard({ document, tenderId, archived }: Props) {
           <StatusBadge tone={processingTone(version.processing_status)} label={processingStatusLabel(version.processing_status)} />
         ) : null}
       </div>
-      {version?.job_id ? <JobProgress jobId={version.job_id} tenderId={tenderId} archived={archived} versionStatus={version.processing_status} /> : null}
+      {version?.job_id ? <JobProgress key={version.job_id} jobId={version.job_id} tenderId={tenderId} archived={archived} versionStatus={version.processing_status} /> : null}
       {!archived && version ? <NewVersion tenderId={tenderId} documentId={document.id} /> : null}
       {version ? (
         <ExtractionPanel
+          key={version.id}
           versionId={version.id}
           ready={version.processing_status === "ready" || version.processing_status === "ready_with_warnings"}
           archived={archived}

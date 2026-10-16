@@ -9,6 +9,7 @@ import { tendersQueryOptions, useArchiveTender, useCreateTender } from "@/api/te
 import type { Tender, TenderCreate } from "@/api/types";
 import { useCan } from "@/components/auth-gate";
 import { Field } from "@/components/field";
+import { StaleNote } from "@/components/stale-note";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { tenderStatusLabel, tenderTone } from "@/lib/status-text";
@@ -80,11 +81,18 @@ function ArchiveControl({ tender }: { tender: Tender }) {
           type="button"
           disabled={archive.isPending}
           onClick={() => archive.mutate(tender.id, { onSettled: () => setConfirming(false) })}
+          aria-label={`Confirm archive of ${tender.title}`}
           className="rounded border border-red-600 px-3 py-1 text-sm text-red-700 disabled:opacity-50 dark:text-red-300"
         >
           Confirm archive
         </button>
-        <button type="button" disabled={archive.isPending} onClick={() => setConfirming(false)} className="text-sm underline">
+        <button
+          type="button"
+          disabled={archive.isPending}
+          onClick={() => setConfirming(false)}
+          aria-label={`Cancel archiving ${tender.title}`}
+          className="text-sm underline"
+        >
           Cancel
         </button>
       </span>
@@ -92,7 +100,12 @@ function ArchiveControl({ tender }: { tender: Tender }) {
   }
   return (
     <span>
-      <button type="button" onClick={() => setConfirming(true)} className="rounded border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        aria-label={`Archive ${tender.title}`}
+        className="rounded border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700"
+      >
         Archive
       </button>
       {archive.error ? (
@@ -126,6 +139,7 @@ export function TendersView() {
           </button>
         </div>
       ) : null}
+      {error && data ? <StaleNote message="Could not refresh the list." onCheckAgain={() => void refetch()} /> : null}
       {data && data.length === 0 ? <p className="text-zinc-600 dark:text-zinc-400">No tenders yet.</p> : null}
       {data && data.length > 0 ? (
         <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">

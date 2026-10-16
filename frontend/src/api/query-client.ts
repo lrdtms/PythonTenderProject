@@ -38,7 +38,9 @@ export function createQueryClient(): QueryClient {
         staleTime: 30_000,
         refetchOnWindowFocus: false,
         retry: (count, error) =>
-          !(error instanceof ApiError && error.status >= 400 && error.status < 500) && count < 2,
+          // Other 4xx answers will not change on retry; 408 and 429 are transient.
+          !(error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) &&
+          count < 2,
       },
     },
   });

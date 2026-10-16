@@ -87,12 +87,12 @@ describe("TendersView", () => {
       WRITE,
     );
     renderSignedIn(<TendersView />);
-    await userEvent.click(await screen.findByRole("button", { name: /^archive$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Archive Hall wiring" }));
     expect(callsTo(fetchMock, "POST", `/api/v1/tenders/${ids.tender}/archive`)).toHaveLength(0);
-    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    expect(screen.getByRole("button", { name: /^archive$/i })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /^archive$/i }));
-    await userEvent.click(screen.getByRole("button", { name: /confirm archive/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel archiving Hall wiring" }));
+    expect(screen.getByRole("button", { name: "Archive Hall wiring" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Archive Hall wiring" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm archive of Hall wiring" }));
     await waitFor(() => expect(callsTo(fetchMock, "POST", `/api/v1/tenders/${ids.tender}/archive`)).toHaveLength(1));
   });
 
@@ -112,5 +112,24 @@ describe("TendersView", () => {
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("include_archived=true"))).toBe(true),
     );
+  });
+
+  it("keeps the list and says it may be out of date when a refresh fails", async () => {
+    let n = 0;
+    let healthy = false;
+    mockApi({
+      "GET /api/v1/tenders": () => {
+        n += 1;
+        return n === 1 || healthy ? respond(200, [makeTender()]) : respond(500, errorBody("server_error", "Boom"));
+      },
+    });
+    const { client } = renderSignedIn(<TendersView />);
+    await screen.findByText("Hall wiring");
+    await client.refetchQueries({ queryKey: ["tenders"] });
+    expect(await screen.findByText("Could not refresh the list.")).toBeInTheDocument();
+    expect(screen.getByText("Hall wiring")).toBeInTheDocument();
+    healthy = true;
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(screen.queryByText("Could not refresh the list.")).not.toBeInTheDocument());
   });
 });

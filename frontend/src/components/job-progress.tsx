@@ -5,12 +5,13 @@ import { useJob, useRetryJob } from "@/api/jobs";
 import { isTerminalJob, jobErrorText, jobStatusLabel, jobTone, warningText } from "@/lib/status-text";
 
 import { useCan } from "./auth-gate";
+import { StaleNote } from "./stale-note";
 import { StatusBadge } from "./status-badge";
 
 type Props = { jobId: string; tenderId: string; pollMs?: number; archived?: boolean; versionStatus?: string };
 
 export function JobProgress({ jobId, tenderId, pollMs, archived = false, versionStatus }: Props) {
-  const { data: job, error, isPending } = useJob(jobId, tenderId, pollMs, versionStatus);
+  const { data: job, error, isPending, refetch } = useJob(jobId, tenderId, pollMs, versionStatus);
   const canRetry = useCan("upload_documents") && !archived;
   const retry = useRetryJob(tenderId);
 
@@ -25,6 +26,7 @@ export function JobProgress({ jobId, tenderId, pollMs, archived = false, version
   const active = !isTerminalJob(job.status);
   return (
     <div className="space-y-2 text-sm">
+      {error ? <StaleNote message="Could not refresh the status." onCheckAgain={() => void refetch()} /> : null}
       <StatusBadge tone={jobTone(job.status)} label={jobStatusLabel(job.status)} />
       {active ? (
         <progress

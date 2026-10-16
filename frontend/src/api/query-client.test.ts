@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ME, errorBody, respond } from "@/test/render";
 
 import { get, post } from "./client";
+import { ApiError } from "./errors";
 import { createQueryClient } from "./query-client";
 import { meQueryOptions } from "./session";
 
@@ -78,7 +79,10 @@ describe("global 401 handling", () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === "/api/v1/me") {
         meRequests += 1;
-        return meRequests === 1 ? respond(200, ME) : respond(401, errorBody("unauthorized", "Sign in."));
+        // Answers 200 again after 4 calls, so with the guard removed the endless loop ends and the
+        // assertion below fails fast instead of starving the test timeout.
+        if (meRequests === 1 || meRequests > 4) return respond(200, ME);
+        return respond(401, errorBody("unauthorized", "Sign in."));
       }
       throw new Error(`unexpected ${url}`);
     });
@@ -100,5 +104,14 @@ describe("global 401 handling", () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(meCalls()).toBeLessThanOrEqual(2);
     stop();
+  });
+
+  it("retries transient 408/429 and server errors, never other 4xx", () => {
+    const retry = createQueryClient().getDefaultOptions().queries?.retry as (count: number, error: unknown) => boolean;
+    expect(retry(0, new ApiError(429, "rate", "slow down"))).toBe(true);
+    expect(retry(0, new ApiError(408, "timeout", "timeout"))).toBe(true);
+    expect(retry(0, new ApiError(503, "down", "down"))).toBe(true);
+    expect(retry(0, new ApiError(404, "nf", "nf"))).toBe(false);
+    expect(retry(2, new ApiError(503, "down", "down"))).toBe(false);
   });
 });

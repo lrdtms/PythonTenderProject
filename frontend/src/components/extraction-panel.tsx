@@ -9,6 +9,7 @@ import type { KindStatus } from "@/api/types";
 import { jobErrorText, jobStatusLabel, jobTone, kindLabel, warningText } from "@/lib/status-text";
 
 import { useCan } from "./auth-gate";
+import { StaleNote } from "./stale-note";
 import { StatusBadge } from "./status-badge";
 
 const REFUSALS: Record<string, string> = {
@@ -75,6 +76,7 @@ export function ExtractionPanel({ versionId, ready, archived = false, pollMs }: 
   return (
     <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
       <h3 className="text-sm font-semibold">Extraction</h3>
+      {status.error ? <StaleNote message="Could not refresh the status." onCheckAgain={() => void status.refetch()} /> : null}
       {kinds.length === 0 ? <p className="py-2 text-sm text-zinc-600 dark:text-zinc-400">Extraction has not run yet.</p> : null}
       {kinds.length > 0 ? (
         <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">

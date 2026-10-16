@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { documentsQueryOptions } from "@/api/documents";
 import { ApiError } from "@/api/errors";
 import { tenderQueryOptions } from "@/api/tenders";
+import { StaleNote } from "@/components/stale-note";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { tenderStatusLabel, tenderTone } from "@/lib/status-text";
@@ -14,19 +15,35 @@ import { tenderStatusLabel, tenderTone } from "@/lib/status-text";
 import { DocumentCard } from "./document-card";
 import { UploadForm } from "./upload-form";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function NotFound() {
+  return (
+    <div role="alert">
+      <p className="mb-2">This tender was not found.</p>
+      <Link href="/tenders" className="underline">
+        Back to tenders
+      </Link>
+    </div>
+  );
+}
+
 export function TenderWorkspace() {
   const { id } = useParams<{ id: string }>();
-  const tender = useQuery(tenderQueryOptions(id));
-  const documents = useQuery({ ...documentsQueryOptions(id), enabled: !!tender.data });
+  const validId = typeof id === "string" && UUID.test(id);
+  const tender = useQuery({ ...tenderQueryOptions(id), enabled: validId });
+  const documents = useQuery({ ...documentsQueryOptions(id), enabled: validId && !!tender.data });
 
+  if (!validId) return <NotFound />;
   if (tender.isPending) return <p role="status" className="text-sm text-zinc-500">Loading tender…</p>;
   if (!tender.data) {
-    const notFound = tender.error instanceof ApiError && tender.error.isNotFound;
+    if (tender.error instanceof ApiError && tender.error.isNotFound) return <NotFound />;
     return (
       <div role="alert">
-        <p className="mb-2">
-          {notFound ? "This tender was not found." : tender.error instanceof ApiError ? tender.error.message : "Could not load the tender."}
-        </p>
+        <p className="mb-2">{tender.error instanceof ApiError ? tender.error.message : "Could not load the tender."}</p>
+        <button type="button" onClick={() => void tender.refetch()} className="mr-3 rounded border px-3 py-1 text-sm">
+          Try again
+        </button>
         <Link href="/tenders" className="underline">
           Back to tenders
         </Link>
@@ -65,6 +82,9 @@ export function TenderWorkspace() {
         <p role="alert" className="text-sm text-red-600">
           {documents.error instanceof ApiError ? documents.error.message : "Could not load the documents."}
         </p>
+      ) : null}
+      {documents.error && documents.data ? (
+        <StaleNote message="Could not refresh the documents." onCheckAgain={() => void documents.refetch()} />
       ) : null}
       {documents.data && documents.data.length === 0 ? (
         <p className="text-zinc-600 dark:text-zinc-400">No documents yet.</p>

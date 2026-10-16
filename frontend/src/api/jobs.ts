@@ -33,13 +33,14 @@ function consecutiveFailures(query: PollQuery<unknown>): number {
   return errorUpdateCount - base.errors;
 }
 
-/** Polling rule shared by every polled query: stop when isDone(data), on a 4xx answer (the thing is
- * gone or forbidden; asking again changes nothing), and after MAX_POLL_FAILURES consecutive errors.
+/** Polling rule shared by every polled query: stop when isDone(data), on a 4xx answer other than 408/429 (the
+ * thing is gone or forbidden; asking again changes nothing), and after MAX_POLL_FAILURES consecutive errors.
  * A 5xx or network blip keeps polling, and a success resets the failure count. */
 export function shouldPoll<T>(query: PollQuery<T>, pollMs: number, isDone: (data: T | undefined) => boolean): number | false {
   if (isDone(query.state.data)) return false;
   const error = query.state.error;
-  if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+  // 408 and 429 are transient: keep polling (counted as failures like a 5xx).
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) return false;
   if (consecutiveFailures(query) >= MAX_POLL_FAILURES) return false;
   return pollMs;
 }
@@ -61,10 +62,13 @@ export function useJob(jobId: string, tenderId: string, pollMs?: number, version
   const status = query.data?.status;
   const previous = useRef<string | undefined>(undefined);
   useEffect(() => {
-    // Only a real running -> finished transition refreshes the documents, not mounting a finished job.
-    if (previous.current !== undefined && !isTerminalJob(previous.current) && isTerminalJob(status)) {
-      void queryClient.invalidateQueries({ queryKey: ["documents", tenderId] }, { cancelRefetch: false });
-    }
+    // Only a real change refreshes the documents, not mounting a finished job: running -> finished,
+    // and waiting -> running (the version turns "processing" then, which also clears a stale "failed"
+    // after a retry). Default invalidation cancels an in-flight fetch that may have read old data.
+    const before = previous.current;
+    const finished = before !== undefined && !isTerminalJob(before) && isTerminalJob(status);
+    const started = before === "queued" && status === "running";
+    if (finished || started) void queryClient.invalidateQueries({ queryKey: ["documents", tenderId] });
     previous.current = status;
   }, [status, tenderId, queryClient]);
   // Self-heal: the ingest job is over but the version row still says pending/processing (the job
@@ -72,7 +76,7 @@ export function useJob(jobId: string, tenderId: string, pollMs?: number, version
   // (job status, version status) pair, so a server that keeps returning the stale value cannot loop.
   const stale = isTerminalJob(status) && (versionStatus === "pending" || versionStatus === "processing");
   useEffect(() => {
-    if (stale) void queryClient.invalidateQueries({ queryKey: ["documents", tenderId] }, { cancelRefetch: false });
+    if (stale) void queryClient.invalidateQueries({ queryKey: ["documents", tenderId] });
   }, [stale, status, versionStatus, tenderId, queryClient]);
   return query;
 }

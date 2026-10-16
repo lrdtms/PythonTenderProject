@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ids, makeDocument, makeJob, makeTender, makeVersion } from "@/test/fixtures";
@@ -6,11 +7,15 @@ import { callsTo, errorBody, mockApi, renderSignedIn, respond } from "@/test/ren
 
 import { TenderWorkspace } from "./tender-workspace";
 
+const route = vi.hoisted(() => ({ id: "00000000-0000-4000-8000-000000000001" }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
-  useParams: () => ({ id: "00000000-0000-4000-8000-000000000001" }),
+  useParams: () => ({ id: route.id }),
 }));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  route.id = "00000000-0000-4000-8000-000000000001";
+});
 
 const TENDER = `/api/v1/tenders/${ids.tender}`;
 
@@ -140,5 +145,43 @@ describe("TenderWorkspace", () => {
       await wait(150);
       expect(callsTo(fetchMock, "GET", `${TENDER}/documents`)).toHaveLength(1);
     });
+  });
+
+  it("treats a malformed tender id as not found without calling the API", async () => {
+    route.id = "not-a-uuid";
+    const fetchMock = mockApi({});
+    renderSignedIn(<TenderWorkspace />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("This tender was not found.");
+    expect(fetchMock.mock.calls.every(([url]) => url === "/api/v1/me")).toBe(true);
+  });
+
+  it("offers Try again when the tender fails to load for a reason other than not found", async () => {
+    let n = 0;
+    mockApi({
+      [`GET ${TENDER}`]: () => {
+        n += 1;
+        return n === 1 ? respond(500, errorBody("server_error", "The server had a problem.")) : respond(200, makeTender());
+      },
+      [`GET ${TENDER}/documents`]: () => respond(200, []),
+    });
+    renderSignedIn(<TenderWorkspace />);
+    await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Hall wiring" })).toBeInTheDocument();
+  });
+
+  it("keeps the documents and says they may be out of date when a refresh fails", async () => {
+    let n = 0;
+    mockApi({
+      [`GET ${TENDER}`]: () => respond(200, makeTender()),
+      [`GET ${TENDER}/documents`]: () => {
+        n += 1;
+        return n === 1 ? respond(200, [makeDocument({ current_version: null })]) : respond(500, errorBody("server_error", "Boom"));
+      },
+    });
+    const { client } = renderSignedIn(<TenderWorkspace />);
+    await screen.findByText("Tender pack");
+    await client.refetchQueries({ queryKey: ["documents", ids.tender] });
+    expect(await screen.findByText("Could not refresh the documents.")).toBeInTheDocument();
+    expect(screen.getByText("Tender pack")).toBeInTheDocument();
   });
 });

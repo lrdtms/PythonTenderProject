@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { documentsQueryOptions } from "@/api/documents";
-import { ids, makeJob } from "@/test/fixtures";
-import { callsTo, errorBody, meWith, mockApi, renderSignedIn, respond } from "@/test/render";
+import { ids, makeDocument, makeJob, makeVersion } from "@/test/fixtures";
+import { callsTo, createTestClient, errorBody, meWith, mockApi, renderSignedIn, respond } from "@/test/render";
 
 import { JobProgress } from "./job-progress";
 
@@ -15,6 +15,11 @@ afterEach(() => vi.unstubAllGlobals());
 const JOB_URL = `/api/v1/jobs/${ids.job}`;
 const DOCS_URL = `/api/v1/tenders/${ids.tender}/documents`;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function VersionStatus() {
+  const { data } = useQuery(documentsQueryOptions(ids.tender));
+  return <span data-testid="version-status">{data?.[0]?.current_version?.processing_status ?? "none"}</span>;
+}
 
 function DocumentsObserver() {
   useQuery(documentsQueryOptions(ids.tender));
@@ -144,9 +149,9 @@ describe("JobProgress", () => {
   it("gives up after repeated server errors", async () => {
     const fetchMock = mockApi({ [`GET ${JOB_URL}`]: () => respond(500, errorBody("server_error", "Boom")) });
     renderSignedIn(<JobProgress jobId={ids.job} tenderId={ids.tender} pollMs={10} />);
-    await wait(400);
+    await waitFor(() => expect(callsTo(fetchMock, "GET", JOB_URL).length).toBeGreaterThanOrEqual(5));
+    await wait(100);
     const n = callsTo(fetchMock, "GET", JOB_URL).length;
-    expect(n).toBeGreaterThanOrEqual(5);
     expect(n).toBeLessThanOrEqual(7);
     await wait(100);
     expect(callsTo(fetchMock, "GET", JOB_URL)).toHaveLength(n);
@@ -173,5 +178,80 @@ describe("JobProgress", () => {
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));
     await screen.findByText("Waiting");
     expect(screen.queryByText("This tender is archived.")).not.toBeInTheDocument();
+  });
+
+  it("refreshes the documents even when a documents fetch is already in flight (it must not join the stale one)", async () => {
+    let jobCalls = 0;
+    let docCalls = 0;
+    mockApi({
+      [`GET ${JOB_URL}`]: () => {
+        jobCalls += 1;
+        return respond(200, jobCalls < 2 ? makeJob({ status: "running", progress_total: 2 }) : makeJob({ status: "succeeded" }));
+      },
+      [`GET ${DOCS_URL}`]: async () => {
+        docCalls += 1;
+        if (docCalls === 1) {
+          await wait(200); // read the database before the version was updated
+          return respond(200, [makeDocument({ current_version: makeVersion({ processing_status: "processing" }) })]);
+        }
+        return respond(200, [makeDocument({ current_version: makeVersion({ processing_status: "ready" }) })]);
+      },
+    });
+    // Cached data makes the first documents request a refetch, which is the one that can be cancelled.
+    const client = createTestClient();
+    client.setQueryData(["documents", ids.tender], [makeDocument({ current_version: makeVersion({ processing_status: "processing" }) })]);
+    renderSignedIn(
+      <>
+        <VersionStatus />
+        <JobProgress jobId={ids.job} tenderId={ids.tender} pollMs={20} />
+      </>,
+      client,
+    );
+    expect(await screen.findByText("Done")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("version-status")).toHaveTextContent("ready"), { timeout: 2000 });
+  });
+
+  it("refreshes the documents once when the job moves from waiting to running (the version becomes processing)", async () => {
+    let jobCalls = 0;
+    const fetchMock = mockApi({
+      [`GET ${JOB_URL}`]: () => {
+        jobCalls += 1;
+        return respond(200, jobCalls < 2 ? makeJob({ status: "queued" }) : makeJob({ status: "running", progress_total: 3 }));
+      },
+      [`GET ${DOCS_URL}`]: () => respond(200, []),
+    });
+    renderSignedIn(
+      <>
+        <DocumentsObserver />
+        <JobProgress jobId={ids.job} tenderId={ids.tender} pollMs={20} />
+      </>,
+    );
+    await screen.findByRole("progressbar");
+    await wait(150);
+    expect(callsTo(fetchMock, "GET", DOCS_URL)).toHaveLength(2);
+  });
+
+  it("says the status may be out of date when polling gives up, and recovers on Check again", async () => {
+    let healthy = false;
+    let calls = 0;
+    const fetchMock = mockApi({
+      [`GET ${JOB_URL}`]: () => {
+        calls += 1;
+        if (healthy) return respond(200, makeJob({ status: "succeeded" }));
+        if (calls === 1) return respond(200, makeJob({ status: "running", progress_total: 2 }));
+        return respond(500, errorBody("server_error", "Boom"));
+      },
+      [`GET ${DOCS_URL}`]: () => respond(200, []),
+    });
+    renderSignedIn(<JobProgress jobId={ids.job} tenderId={ids.tender} pollMs={10} />);
+    expect(await screen.findByText("Could not refresh the status.", undefined, { timeout: 3000 })).toBeInTheDocument();
+    await wait(100);
+    const n = callsTo(fetchMock, "GET", JOB_URL).length;
+    await wait(100);
+    expect(callsTo(fetchMock, "GET", JOB_URL)).toHaveLength(n); // gave up
+    healthy = true;
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText("Done")).toBeInTheDocument();
+    expect(screen.queryByText("Could not refresh the status.")).not.toBeInTheDocument();
   });
 });

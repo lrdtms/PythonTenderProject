@@ -158,4 +158,24 @@ describe("ExtractionPanel", () => {
     expect(callsTo(fetchMock, "GET", STATUS)).toHaveLength(settled);
     expect(settled).toBeLessThanOrEqual(3);
   });
+
+  it("says the status may be out of date when polling gives up, and recovers on Check again", async () => {
+    let healthy = false;
+    let n = 0;
+    mockApi({
+      [`GET ${STATUS}`]: () => {
+        n += 1;
+        if (healthy) return respond(200, makeExtraction([makeKind("boq", { status: "succeeded" }, { status: "succeeded", counts: { items: 3 } })]));
+        return n === 1
+          ? respond(200, makeExtraction([makeKind("boq", { status: "running", progress_total: 2 }, null)]))
+          : respond(500, errorBody("server_error", "Boom"));
+      },
+    });
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={10} />);
+    expect(await screen.findByText("Could not refresh the status.", undefined, { timeout: 3000 })).toBeInTheDocument();
+    healthy = true;
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText("3 lines")).toBeInTheDocument();
+    expect(screen.queryByText("Could not refresh the status.")).not.toBeInTheDocument();
+  });
 });

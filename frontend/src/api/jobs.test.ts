@@ -87,4 +87,15 @@ describe("shouldPoll", () => {
     q.fail();
     expect(shouldPoll(q.query, 50, isDone)).toBe(false);
   });
+
+  it("keeps polling through 408 and 429 (transient), counting them as failures", () => {
+    for (const status of [408, 429]) {
+      const q = fakeQuery();
+      q.succeed();
+      q.fail(new ApiError(status, "transient", "later"));
+      expect(shouldPoll(q.query, 50, isDone)).toBe(50);
+      for (let i = 0; i < MAX_POLL_FAILURES; i++) q.fail(new ApiError(status, "transient", "later"));
+      expect(shouldPoll(q.query, 50, isDone)).toBe(false);
+    }
+  });
 });
