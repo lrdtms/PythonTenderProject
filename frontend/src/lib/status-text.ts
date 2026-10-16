@@ -31,7 +31,11 @@ const KIND_LABELS: Record<string, string> = {
   quotation: "Quotation",
   other: "Other",
 };
-const EXTRACTION_LABELS: Record<string, string> = { boq: "Bill of quantities", requirements: "Requirements" };
+const EXTRACTION_LABELS: Record<string, string> = {
+  boq: "Bill of quantities",
+  requirements: "Requirements",
+  quotation: "Quotation",
+};
 
 export const jobStatusLabel = (s: string): string => JOB_LABELS[s] ?? "Unknown status";
 export const processingStatusLabel = (s: string): string => PROCESSING_LABELS[s] ?? "Unknown status";
@@ -116,6 +120,25 @@ export function warningText(w: unknown): string {
       return n === null ? "Some requirements could not be matched to the page text. Check them against the source." : `${n} ${plural("requirement")} could not be matched to the page text. Check them against the source.`;
     case "DUPLICATE_OF_REVIEWED":
       return n === null ? "Some items matched ones you already reviewed and were kept as reviewed." : `${n} ${plural("item")} matched ones you already reviewed and were kept as reviewed.`;
+    case "NO_SUPPLIER_NAME":
+      return "The supplier name could not be read, so the file name was used. Rename the supplier.";
+    case "NO_REFERENCE":
+      return "The quotation reference could not be read.";
+    case "NO_QUOTE_DATE":
+      return "The quotation date could not be read.";
+    case "NO_VALIDITY":
+      return "The quotation's validity date could not be read. Check it is still valid.";
+    case "NO_CURRENCY":
+      return "The currency could not be read. Check the prices before using them.";
+    case "VAT_UNKNOWN":
+      return "The quotation does not say whether prices include VAT.";
+    case "QUOTE_NEEDS_MANUAL_ENTRY":
+      return (
+        pagesSubject(pages, "looks like a scanned quotation.", "look like a scanned quotation.") +
+        " Its items cannot be read automatically yet."
+      );
+    case "NO_QUOTATION_FOUND":
+      return "No quotation table was found in this document.";
     case "WINDOW_TIMEOUT":
     case "WINDOW_INVALID_OUTPUT":
       return "Some sections could not be analysed. Run the extraction again.";

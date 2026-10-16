@@ -40,6 +40,16 @@ describe("ExtractionPanel", () => {
     expect(screen.getByText(/2 requirements could not be matched/i)).toBeInTheDocument();
   });
 
+  it("shows a quotation kind with its item count", async () => {
+    mockApi({
+      [`GET ${STATUS}`]: () =>
+        respond(200, makeExtraction([makeKind("quotation", { status: "succeeded" }, { status: "succeeded", counts: { items: 15 } })])),
+    });
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready />);
+    expect(await screen.findByText("15 items")).toBeInTheDocument();
+    expect(screen.getByText("Quotation")).toBeInTheDocument();
+  });
+
   it("polls while a job is active and stops when all are done", async () => {
     let n = 0;
     const fetchMock = mockApi({

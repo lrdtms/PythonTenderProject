@@ -43,7 +43,7 @@ export function makeRun(over: Partial<Run> = {}): Run {
   };
 }
 
-export function makeKind(kind: "boq" | "requirements", job: Partial<Job> | null, run: Partial<Run> | null): KindStatus {
+export function makeKind(kind: "boq" | "requirements" | "quotation", job: Partial<Job> | null, run: Partial<Run> | null): KindStatus {
   return {
     kind,
     job: job ? makeJob({ job_type: kind === "boq" ? "extract_boq" : "extract_requirements", ...job }) : null,

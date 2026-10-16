@@ -35,6 +35,13 @@ Documented trade-offs (acceptable for now):
 
 Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md): synthetic data, one run per seed, scored before the final review fix wave, `pack09_xl` and `deep_scan` not run, only `qwen3:4b` measured.
 
+## Slice 5a (suppliers and quotations)
+
+- **Scanned quotations need manual entry, which is not yet possible.** They get a `QUOTE_NEEDS_MANUAL_ENTRY` warning and no items.
+- **One quotation per document.** A document holding several quotations is read as one.
+- **A re-run fills only empty header fields** and never undoes a supplier switch made by a user.
+- **Prices in other currencies are shown but not converted.**
+
 ## Slice 4 phase 4 (review screen)
 
 - **Quote highlight is on the extracted text, not the PDF image.** The stored `quote_start`/`quote_end` index the page text after whitespace is collapsed and lower-cased (`provenance.py`), so the client maps them back onto the raw text; matching the quote inside the PDF.js text layer is not implemented. Fuzzy matches mark the nearest located span.
