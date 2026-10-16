@@ -97,7 +97,8 @@ def test_ingest_enqueues_extraction_and_results_are_stored(fake_llm) -> None:
     drain()
     with session_scope() as s:
         types = set(s.scalars(select(Job.job_type)))
-    assert types == {"ingest_document", "extract_boq", "extract_requirements"}
+    # extract_boq also queues the tender-level matching job
+    assert types == {"ingest_document", "extract_boq", "extract_requirements", "match_suppliers"}
     runs = {r["kind"]: r["run"] for r in extraction(admin, vid)["kinds"]}
     assert runs["requirements"]["status"] == "succeeded"
     assert runs["requirements"]["prompt_version"] == "v3"
@@ -147,7 +148,11 @@ def test_quotations_queue_only_the_quotation_extraction(fake_llm) -> None:
     admin, _, body = setup_version(boq_pdf(), "quote.pdf", "quotation")
     drain()
     with session_scope() as s:
-        assert set(s.scalars(select(Job.job_type))) == {"ingest_document", "extract_quotation"}
+        assert set(s.scalars(select(Job.job_type))) == {
+            "ingest_document",
+            "extract_quotation",
+            "match_suppliers",
+        }
 
 
 def test_ollama_down_keeps_boq_and_ingest_but_fails_the_requirements_run(fake_llm) -> None:

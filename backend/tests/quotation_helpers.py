@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy import select
@@ -19,6 +19,7 @@ from app.kernel import OrgContext, Role
 from app.modules.estimating.models import BoqItem
 from app.modules.pipeline.models import ExtractionRun
 from app.modules.suppliers.models import QuotationItem
+from app.modules.suppliers.public import store_quotation
 from tests.conftest import make_tender, make_xlsx, register, upload
 from tests.review_helpers import boq_version
 
@@ -32,6 +33,9 @@ class QuotationContext:
     versions: list[UUID]
     runs: list[UUID]
     boq_item_id: UUID | None
+    tender_id: UUID | None = None
+    supplier_ids: list[UUID] = field(default_factory=list)
+    quotation_ids: list[UUID] = field(default_factory=list)
 
     @property
     def version_id(self) -> UUID:
@@ -52,7 +56,9 @@ class QuotationContext:
 
 
 @contextmanager
-def quotation_context(versions: int = 1, with_boq: bool = False) -> Iterator[QuotationContext]:
+def quotation_context(
+    versions: int = 1, with_boq: bool = False, quotation_rows: list[dict] | None = None
+) -> Iterator[QuotationContext]:
     actor = register("store@example.com")
     if with_boq:
         actor, tender_id, _ = boq_version(actor)  # drains: BoQ ingest and extraction run now
@@ -79,4 +85,13 @@ def quotation_context(versions: int = 1, with_boq: bool = False) -> Iterator[Quo
         boq_item_id = session.scalar(
             select(BoqItem.id).where(BoqItem.organisation_id == ctx.organisation_id)
         )
-        yield QuotationContext(session, ctx, version_ids, run_ids, boq_item_id)
+        qc = QuotationContext(session, ctx, version_ids, run_ids, boq_item_id, UUID(tender_id))
+        if quotation_rows is not None:  # real items without the worker; one supplier per version
+            for n, (version_id, run_id) in enumerate(zip(version_ids, run_ids, strict=True)):
+                stored = store_quotation(
+                    session, ctx, version_id, run_id, {"supplier_name": f"Supplier {n}"},
+                    quotation_rows, f"quote{n}",
+                )  # fmt: skip
+                qc.supplier_ids.append(stored.supplier_id)
+                qc.quotation_ids.append(stored.quotation_id)
+        yield qc

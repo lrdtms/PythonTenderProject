@@ -13,3 +13,10 @@ class StoreResult:
     supplier_id: UUID
     quotation_id: UUID
     supplier_created: bool
+
+
+@dataclass(frozen=True)
+class MatchResult:
+    suggested: int
+    kept_decided: int
+    removed_suggested: int

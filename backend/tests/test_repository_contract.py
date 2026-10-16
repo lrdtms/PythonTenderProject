@@ -21,9 +21,12 @@ from app.db.session import session_scope
 from app.kernel import NotFound, OrgContext, Role
 from app.modules.checklist import public as checklist
 from app.modules.estimating import public as estimating
+from app.modules.estimating.models import BoqItem
 from app.modules.identity.models import Membership
 from app.modules.pipeline.models import ExtractionRun
 from app.modules.suppliers import public as suppliers
+from app.modules.suppliers.models import MatchSuggestion, QuotationItem
+from app.modules.suppliers.models import Supplier as suppliers_model
 from app.worker import handlers
 from app.worker.runner import process_one
 from tests.conftest import Actor, add_member, make_pdf, make_tender, register, upload
@@ -65,6 +68,7 @@ EXERCISED = {
     "SupplierRepo",
     "QuotationRepo",
     "QuotationItemRepo",
+    "MatchRepo",
 }
 
 
@@ -114,6 +118,17 @@ def _seed(email: str, org: str, secret: str) -> Actor:
                     {"supplier_name": f"{secret} supplies"},
                     [{"description": f"{secret} conduit", "source_order": 0}], "file",
                 )  # fmt: skip
+                s.flush()
+                s.add(MatchSuggestion(
+                    organisation_id=ctx.organisation_id,
+                    boq_item_id=s.scalars(select(BoqItem.id).where(
+                        BoqItem.organisation_id == ctx.organisation_id)).first(),
+                    quotation_item_id=s.scalars(select(QuotationItem.id).where(
+                        QuotationItem.organisation_id == ctx.organisation_id)).first(),
+                    supplier_id=s.scalars(select(suppliers_model.id).where(
+                        suppliers_model.organisation_id == ctx.organisation_id)).first(),
+                    score=0.9, classification="clear", evidence={},
+                ))  # fmt: skip
             else:
                 checklist.replace_unreviewed(
                     s, ctx, run.document_version_id, run.id,
@@ -193,6 +208,14 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         assert repos["QuotationItemRepo"].for_quotation(quotation_b) == []
         assert repos["QuotationItemRepo"].reviewed_or_pinned(quotation_b) == []
         repos["QuotationItemRepo"].delete_replaceable(quotation_b, [])
+        match_b = b_ids["MatchRepo"][0]
+        boq_b, quote_b = b_ids["BoqRepo"], b_ids["QuotationItemRepo"]
+        assert repos["MatchRepo"].for_items(boq_b, quote_b) == []
+        assert repos["MatchRepo"].decided_boq_item_ids() == set()
+        assert repos["MatchRepo"].delete_suggested([match_b]) == 0
+        assert repos["QuotationItemRepo"].for_versions([version_b]) == []
+        assert repos["BoqRepo"].protected(version_b, boq_b) == []
+        repos["MatchRepo"].lock_tender(UUID(int=1))
         assert repos["RunRepo"].current_for_version(version_b) == {}
         assert repos["RunRepo"].for_job(job_subject_b, "boq") is None
         assert repos["JobRepo"].latest_for_subject(job_subject_b) is None
@@ -208,7 +231,7 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         repos["VersionRepo"].clear_current(document_b)
 
     with session_scope() as s:
-        for name in ("PageRepo", "ChunkRepo", "QuotationItemRepo"):
+        for name in ("PageRepo", "ChunkRepo", "QuotationItemRepo", "MatchRepo"):
             model = REPOSITORIES[name].model
             assert s.scalars(select(model.id).where(model.organisation_id == org_b)).all()
         version = REPOSITORIES["VersionRepo"].model

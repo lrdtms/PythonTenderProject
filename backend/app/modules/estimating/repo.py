@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -32,12 +32,19 @@ class BoqRepo(ScopedRepository[BoqItem]):
             BoqItem.document_version_id == version_id, BoqItem.review_status != "unreviewed"
         )
 
-    def delete_unreviewed(self, version_id: UUID) -> None:
-        self.session.execute(
-            self._delete().where(
-                BoqItem.document_version_id == version_id, BoqItem.review_status == "unreviewed"
-            )
+    def protected(self, version_id: UUID, ids: Collection[UUID]) -> Sequence[BoqItem]:
+        """Lines of the version whose id is in `ids` (kept by a re-run, e.g. decided matches)."""
+        if not ids:
+            return []
+        return self.find(BoqItem.document_version_id == version_id, BoqItem.id.in_(ids))
+
+    def delete_unreviewed(self, version_id: UUID, keep_ids: Collection[UUID] = ()) -> None:
+        stmt = self._delete().where(
+            BoqItem.document_version_id == version_id, BoqItem.review_status == "unreviewed"
         )
+        if keep_ids:
+            stmt = stmt.where(BoqItem.id.not_in(keep_ids))
+        self.session.execute(stmt)
 
     def insert_many(self, rows: Sequence[Mapping[str, Any]]) -> None:
         if rows:

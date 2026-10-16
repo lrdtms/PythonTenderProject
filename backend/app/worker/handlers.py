@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import date
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -22,6 +23,7 @@ from app.modules.jobs import public as jobs
 from app.modules.knowledge import public as knowledge
 from app.modules.pipeline import public as pipeline
 from app.modules.suppliers import public as suppliers
+from app.modules.tenders import public as tenders
 from app.worker.runner import JobHandler, ProgressFn
 
 import_all_models()  # the worker never loads the API, so register every table here
@@ -83,6 +85,14 @@ def _replace_warning(duplicates: int) -> list[dict[str, Any]]:
     return [{"code": "DUPLICATE_OF_REVIEWED", "count": duplicates}] if duplicates else []
 
 
+def _enqueue_matching(session: Session, ctx: OrgContext, version_id: UUID) -> None:
+    """Queue the tender's matching in the transaction that changed its inputs. `enqueue` returns
+    the active job when one exists, so a burst of uploads yields one job. Known limit: a job that
+    is already running does not see data written after it started; the next trigger does."""
+    tender_id = documents.processing_info(session, ctx, version_id).tender_id
+    jobs.enqueue(session, ctx, documents.MATCH_SUPPLIERS_JOB, "tender", tender_id, {})
+
+
 def extract_boq(
     session: Session, ctx: OrgContext, job: jobs.ClaimedJob, progress: ProgressFn
 ) -> list[dict[str, Any]]:
@@ -92,12 +102,16 @@ def extract_boq(
     rows = _cap([c.as_row() for c in result.items], warnings)
     run = pipeline.run_for_job(session, ctx, job.id, "boq")
     pipeline.lock_runs(session, ctx, job.subject_id, "boq")
-    stored = estimating.replace_unreviewed(session, ctx, job.subject_id, run.id, rows)
+    stored = estimating.replace_unreviewed(
+        session, ctx, job.subject_id, run.id, rows,
+        protected_ids=suppliers.decided_boq_item_ids(session, ctx),
+    )  # fmt: skip
     warnings += _replace_warning(stored.duplicates_of_reviewed)
     pipeline.finish_run(
         session, ctx, job.id, "boq", warnings,
         {"items": stored.inserted, "pages_with_boq": len(result.boq_pages)},
     )  # fmt: skip
+    _enqueue_matching(session, ctx, job.subject_id)
     progress(1, 1)
     return warnings
 
@@ -173,8 +187,48 @@ def extract_quotation(
         session, ctx, job.id, "quotation", warnings,
         {"items": stored.inserted, "supplier_created": stored.supplier_created},
     )  # fmt: skip
+    _enqueue_matching(session, ctx, job.subject_id)
     progress(1, 1)
     return warnings
+
+
+def _tender_inputs(
+    session: Session, ctx: OrgContext, tender_id: UUID
+) -> tuple[list[suppliers.BoqInput], list[UUID], date | None]:
+    """The current BoQ lines, current quotation versions and closing date of a tender."""
+    boq_lines: list[suppliers.BoqInput] = []
+    quote_versions: list[UUID] = []
+    for d in documents.list_documents(session, ctx, tender_id):
+        v = d.current_version
+        if v is None:
+            continue
+        if d.kind == "quotation":
+            quote_versions.append(v.id)
+        elif d.kind in ("boq", "tender_document"):
+            offset = 0
+            while True:
+                page = estimating.list_boq_items(session, ctx, v.id, 1000, offset)
+                boq_lines += [
+                    suppliers.BoqInput(i.id, i.item_no, i.description, i.unit)
+                    for i in page
+                    if i.review_status != "rejected"
+                ]
+                if len(page) < 1000:
+                    break
+                offset += 1000
+    tender = tenders.get_tender(session, ctx, tender_id)
+    return boq_lines, quote_versions, tender.closing_at.date() if tender.closing_at else None
+
+
+def match_suppliers(
+    session: Session, ctx: OrgContext, job: jobs.ClaimedJob, progress: ProgressFn
+) -> list[dict[str, Any]]:
+    if tenders.get_tender(session, ctx, job.subject_id).status == "archived":
+        raise ProcessingFailed("TENDER_ARCHIVED", "The tender is archived.")
+    boq_lines, quote_versions, closing = _tender_inputs(session, ctx, job.subject_id)
+    suppliers.match_tender(session, ctx, job.subject_id, boq_lines, quote_versions, closing)
+    progress(1, 1)
+    return []
 
 
 def _starter(kind: str):
@@ -201,6 +255,7 @@ def _failer(kind: str):
 
 
 HANDLERS: dict[str, JobHandler] = {
+    documents.MATCH_SUPPLIERS_JOB: JobHandler(run=match_suppliers),
     documents.INGEST_JOB: JobHandler(
         run=ingest_document, on_failure=ingest_failed, on_start=ingest_started
     ),

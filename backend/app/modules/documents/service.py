@@ -27,6 +27,7 @@ INGEST_JOB = "ingest_document"
 EXTRACT_BOQ_JOB = "extract_boq"
 EXTRACT_REQUIREMENTS_JOB = "extract_requirements"
 EXTRACT_QUOTATION_JOB = "extract_quotation"
+MATCH_SUPPLIERS_JOB = "match_suppliers"  # tender-level: the subject is the tender
 EXTRACTION_JOBS = (EXTRACT_BOQ_JOB, EXTRACT_REQUIREMENTS_JOB, EXTRACT_QUOTATION_JOB)
 ALLOWED_EXTENSIONS = {"pdf", "xlsx", "csv", "docx"}
 
@@ -245,6 +246,9 @@ def ensure_job_retry_allowed(
 ) -> None:
     """Re-processing a document re-writes its pages: not allowed on an archived tender."""
     ctx.require(Permission.UPLOAD_DOCUMENTS)
+    if job_type == MATCH_SUPPLIERS_JOB:  # the subject is the tender itself
+        _ensure_tender_open(session, ctx, subject_id)
+        return
     if job_type != INGEST_JOB and job_type not in EXTRACTION_JOBS:
         return
     found = VersionRepo(session, ctx).find(DocumentVersion.id == subject_id, limit=1)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
@@ -43,10 +43,15 @@ def replace_unreviewed(
     version_id: UUID,
     run_id: UUID,
     cands: Sequence[Mapping[str, Any]],
+    protected_ids: Collection[UUID] = (),
 ) -> ReplaceResult:
+    """Replace the unreviewed lines. Lines in `protected_ids` (a decided match refers to them)
+    count as reviewed: they are kept, and a new candidate with their key is a duplicate."""
     repo = BoqRepo(session, ctx)
     seen: set[tuple[str, str]] = set()
-    for row in repo.reviewed(version_id):
+    kept = {r.id: r for r in repo.reviewed(version_id)}
+    kept.update({r.id: r for r in repo.protected(version_id, protected_ids)})
+    for row in kept.values():
         original = row.original_value or {}
         key = _key(
             original.get("section", row.section),
@@ -55,7 +60,7 @@ def replace_unreviewed(
         )
         if key:
             seen.add(key)
-    repo.delete_unreviewed(version_id)
+    repo.delete_unreviewed(version_id, set(kept))
     rows: list[dict[str, Any]] = []
     skipped = 0
     for cand in cands:

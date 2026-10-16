@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.kernel import OrgContext
 
+from . import matching
 from .models import Quotation, Supplier
-from .repo import QuotationItemRepo, QuotationRepo, SupplierRepo
-from .schemas import StoreResult
+from .repo import MatchRepo, QuotationItemRepo, QuotationRepo, SupplierRepo
+from .schemas import MatchResult, StoreResult
 
 _SUFFIXES = re.compile(r"\b(pty|proprietary|ltd|limited|cc|inc|co|company|\(pty\))\b\.?", re.I)
 
@@ -147,3 +148,47 @@ def store_quotation(
         })  # fmt: skip
     items.insert_many(new_rows)
     return StoreResult(len(new_rows), skipped, supplier_id, quotation.id, created)
+
+
+def match_tender(
+    session: Session,
+    ctx: OrgContext,
+    tender_id: UUID,
+    boq_lines: Sequence[matching.BoqLine],
+    quote_version_ids: Sequence[UUID],
+    closing_date: date | None,
+) -> MatchResult:
+    """Replace the undecided suggestions of the given BoQ lines and quotation versions.
+
+    Decided matches (confirmed or rejected) are kept; a decided pair is not suggested again, and a
+    BoQ line already confirmed for a supplier gets no further suggestion for that supplier."""
+    matches = MatchRepo(session, ctx)
+    matches.lock_tender(tender_id)
+    pairs = QuotationItemRepo(session, ctx).for_versions(quote_version_ids)
+    quote_lines = [
+        matching.QuoteLine(
+            i.id, q.supplier_id, q.id, i.description, i.sku, i.unit, i.unit_price, q.valid_until
+        )
+        for i, q in pairs
+    ]
+    existing = matches.for_items({b.id for b in boq_lines}, {q.id for q in quote_lines})
+    decided = [m for m in existing if m.status != "suggested"]
+    removed = matches.delete_suggested([m.id for m in existing if m.status == "suggested"])
+    decided_pairs = {(m.boq_item_id, m.quotation_item_id) for m in decided}
+    confirmed_slots = {(m.boq_item_id, m.supplier_id) for m in decided if m.status == "confirmed"}
+    rows: list[dict[str, Any]] = []
+    for s in matching.suggest(boq_lines, quote_lines, closing_date):
+        if (s.boq_id, s.quote_id) in decided_pairs or (s.boq_id, s.supplier_id) in confirmed_slots:
+            continue
+        rows.append({
+            "boq_item_id": s.boq_id, "quotation_item_id": s.quote_id,
+            "supplier_id": s.supplier_id, "score": s.score,
+            "classification": s.classification, "evidence": s.evidence,
+        })  # fmt: skip
+    matches.insert_many(rows)
+    return MatchResult(suggested=len(rows), kept_decided=len(decided), removed_suggested=removed)
+
+
+def decided_boq_item_ids(session: Session, ctx: OrgContext) -> set[UUID]:
+    """BoQ lines that a person has confirmed or rejected a match for."""
+    return MatchRepo(session, ctx).decided_boq_item_ids()
