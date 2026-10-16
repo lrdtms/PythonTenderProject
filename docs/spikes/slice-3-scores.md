@@ -2,6 +2,8 @@
 
 Date: 2026-10-15. Manual run of `scripts/score_slice3.py` against the Docker stack (api, worker, db, caddy) with host Ollama on CPU, then `python -m harness score`. Synthetic, templated data only.
 
+**Code version scored:** commit `8e82700`. The final review fix wave (commits `befa491`..`58fa9ab`: BoQ insert guard that clips text and rejects overflowing numbers, hard window-size cap, bounded fuzzy provenance for long quotes, whole-word requirement merge, defensive Ollama token-count parsing) landed after these runs and was verified by tests only. It can change results slightly (window boundaries and merges); re-run the gate (`scripts/score_slice3.py`, about 50 minutes for the three runs) before quoting these numbers as final.
+
 - Model: `qwen3:4b` (Ollama on the host, worker reaches it through `LLM_BASE_URL=http://host.docker.internal:11434`).
 - Versions recorded in the runs: prompt `v3`, pre-filter `pf-1`.
 - Scored: requirements and BoQ only (quotations are not extracted in Slice 3, so supplier matching is `n/a`).
