@@ -11,6 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from app.modules.suppliers import matching as m
+from app.modules.suppliers.matching_config import MatchConfig
 
 SUP_A, SUP_B = uuid4(), uuid4()
 
@@ -43,6 +44,75 @@ def test_spec_tokens_cores_and_cross_section_with_unicode_and_spacing() -> None:
     t = m.spec_tokens("3C+E 2.5mm² PVC/PVC copper cable")
     assert t["core"] == {"3c+e"} and t["mm2"] == {"2.5"}
     assert m.spec_tokens("3 c + e 2,5 mm2")["mm2"] == {"2.5"}
+
+
+def test_n_core_is_the_same_core_kind_as_nc_plus_e() -> None:
+    for text in ("4-core 1.5 mm2 cable", "4 core 1.5 mm2 cable", "4Core cable"):
+        assert m.spec_tokens(text)["core"] == {"4c+e"}
+    assert m.spec_tokens("4C+E cable")["core"] == m.spec_tokens("4-core cable")["core"]
+    assert m.spec_tokens("multicore cable") == {}
+
+
+def test_core_count_separates_otherwise_identical_cables() -> None:
+    line = boq("4-core 1.5 mm2 PVC insulated copper cable, installed in conduit", unit="m")
+    right = quote("4C+E 1.5 mm2 PVC/PVC copper cable, for conduit installation", unit="m")
+    wrong = quote("2C+E 1.5 mm2 PVC/PVC copper cable, for conduit installation", unit="m")
+    out = m.suggest([line], [wrong, right])
+    top = max(out, key=lambda s: s.score)
+    assert top.quote_id == right.id
+    assert all(s.classification != "clear" for s in out if s.quote_id == wrong.id)
+
+
+def test_qualifier_words_that_exclude_each_other_conflict() -> None:
+    line = boq("Single switched socket outlet, 16 A")
+    q = quote("Double switched socket outlet, 16 A")
+    assert all(s.classification != "clear" for s in m.suggest([line], [q]))  # usually dropped
+    out = m.suggest([line], [q], config=MatchConfig(ambiguous_min=0.0))
+    assert out and "spec_conflict" in out[0].evidence["warnings"]
+    assert "gang" in out[0].evidence["spec"]["conflicts"]
+    [steel] = m.suggest(
+        [boq("PVC conduit, 20 mm, surface mounted", unit="m")],
+        [quote("Steel conduit, 20 mm, surface mounted", unit="m")],
+        config=MatchConfig(ambiguous_min=0.0),
+    )
+    assert steel.classification == "ambiguous" and "material" in steel.evidence["spec"]["conflicts"]
+    [flush] = m.suggest(
+        [boq("LED panel, 18 W, recessed")],
+        [quote("LED panel, 18 W, surface")],
+        config=MatchConfig(ambiguous_min=0.0),
+    )
+    assert "mounting" in flush.evidence["spec"]["conflicts"]
+
+
+def test_a_qualifier_on_one_side_only_is_not_a_conflict() -> None:
+    line = boq("Conduit, 20 mm, surface mounted", unit="m")
+    [s] = m.suggest([line], [quote("PVC conduit, 20 mm, surface mounted", unit="m")])
+    assert s.evidence["spec"]["conflicts"] == [] and s.classification == "clear"
+    # one side naming two materials still matches when they share one
+    [t] = m.suggest(
+        [boq("PVC insulated copper cable, 2.5 mm2", unit="m")],
+        [quote("Copper cable PVC insulated, 2.5 mm2", unit="m")],
+    )
+    assert t.evidence["spec"]["conflicts"] == []
+
+
+def test_a_quote_that_fits_two_boq_lines_equally_is_not_clear_for_either() -> None:
+    a = boq("Socket outlet, 16 A", item_no="1")
+    b = boq("Socket outlet, 16 A", item_no="2")
+    out = m.suggest([a, b], [quote("Socket outlet, 16 A")])
+    assert len(out) == 2 and all(s.classification == "ambiguous" for s in out)
+    assert all("quote_shared" in s.evidence["warnings"] for s in out)
+
+
+def test_a_quote_belongs_to_its_better_boq_line_only() -> None:
+    better = boq("Single switched socket outlet, 16 A", item_no="1")
+    worse = boq("Switched socket outlet, 16 A, with weatherproof cover", item_no="2")
+    q = quote("Single switched socket outlet, 16 A")
+    out = {s.boq_id: s for s in m.suggest([better, worse], [q])}
+    assert out[better.id].classification == "clear"
+    assert out[worse.id].classification == "ambiguous"
+    assert "quote_shared" in out[worse.id].evidence["warnings"]
+    assert "quote_shared" not in out[better.id].evidence["warnings"]
 
 
 def test_spec_tokens_pole_and_empty() -> None:
@@ -98,6 +168,17 @@ def test_unit_mismatch_forces_ambiguous_and_is_flagged() -> None:
     line = boq("3C+E 2.5 mm2 PVC/PVC copper cable", unit="m")
     [s] = m.suggest([line], [quote("3C+E 2.5 mm2 PVC/PVC copper cable", unit="roll")])
     assert s.classification == "ambiguous" and "unit_mismatch" in s.evidence["warnings"]
+
+
+def test_a_rival_that_differs_only_by_unit_still_blocks_a_clear_match() -> None:
+    line = boq("3C+E 2.5 mm2 PVC/PVC copper cable", unit="m")
+    by_metre = quote("3C+E 2.5 mm2 PVC/PVC copper cable [SKU-1]", unit="m")
+    by_roll = quote("3C+E 2.5 mm2 PVC/PVC copper cable [SKU-2]", unit="roll")
+    out = m.suggest([line], [by_metre, by_roll])
+    assert {s.quote_id for s in out} == {by_metre.id, by_roll.id}
+    assert all(s.classification == "ambiguous" for s in out)
+    alone = m.suggest([line], [by_metre])
+    assert [s.classification for s in alone] == ["clear"]
 
 
 def test_two_near_identical_candidates_from_one_supplier_are_both_ambiguous() -> None:

@@ -52,6 +52,7 @@ class Suggestion:
 
 _VALUE_UNIT = re.compile(r"(\d+(?:[.,]\d+)?)\s*(ka|kv|kw|kva|mm2|mm|hz|va|a|v|w)(?![a-z0-9])")
 _CORES = re.compile(r"(\d+)\s*c\s*\+\s*e(?![a-z0-9])")
+_CORE_WORD = re.compile(r"(?<![a-z0-9])(\d+)[\s-]*core(?![a-z0-9])")  # "4-core" == "4C+E"
 _IP = re.compile(r"(?<![a-z0-9])ip\s?(\d{2})(?![a-z0-9])")
 _STRUCT = {
     "pole": re.compile(r"(\d+)[\s-]*pole"),
@@ -70,7 +71,7 @@ def spec_tokens(text: str) -> dict[str, frozenset[str]]:
     kinds: dict[str, set[str]] = defaultdict(set)
     for number, unit in _VALUE_UNIT.findall(low):
         kinds[unit].add(_norm_number(number))
-    for n in _CORES.findall(low):
+    for n in (*_CORES.findall(low), *_CORE_WORD.findall(low)):
         kinds["core"].add(f"{n}c+e")
     for n in _IP.findall(low):
         kinds["ip"].add(n)
@@ -80,7 +81,7 @@ def spec_tokens(text: str) -> dict[str, frozenset[str]]:
     return {k: frozenset(v) for k, v in kinds.items()}
 
 
-_SPEC_SPANS = (_VALUE_UNIT, _CORES, _IP, *_STRUCT.values())
+_SPEC_SPANS = (_VALUE_UNIT, _CORES, _CORE_WORD, _IP, *_STRUCT.values())
 
 
 def _normalise(text: str) -> str:
@@ -94,10 +95,43 @@ def _strip_specs(low: str) -> str:
     return low
 
 
+# Words that exclude each other within one attribute of a product. They never add to the spec
+# score; they only veto: one side says `single`, the other `double`, so it is not that item.
+_QUALIFIERS: dict[str, dict[str, str]] = {
+    "gang": {"single": "single", "double": "double", "triple": "triple"},
+    "material": {
+        "steel": "steel",
+        "pvc": "pvc",
+        "aluminium": "aluminium",
+        "aluminum": "aluminium",
+        "copper": "copper",
+        "brass": "brass",
+    },
+    "mounting": {"surface": "surface", "flush": "flush", "recessed": "flush"},
+    "placement": {"indoor": "indoor", "outdoor": "outdoor"},
+}
+
+
+def qualifier_tokens(text: str) -> dict[str, frozenset[str]]:
+    words = set(_WORD.findall(_normalise(text)))
+    found: dict[str, frozenset[str]] = {}
+    for kind, vocabulary in _QUALIFIERS.items():
+        values = frozenset(vocabulary[w] for w in words if w in vocabulary)
+        if values:
+            found[kind] = values
+    return found
+
+
+def _qualifier_conflicts(a: dict[str, frozenset[str]], b: dict[str, frozenset[str]]) -> list[str]:
+    return [k for k in sorted(set(a) & set(b)) if not a[k] & b[k]]
+
+
 def _compare_specs(
-    a: dict[str, frozenset[str]], b: dict[str, frozenset[str]]
+    a: dict[str, frozenset[str]],
+    b: dict[str, frozenset[str]],
+    qual_conflicts: Sequence[str] = (),
 ) -> tuple[float | None, dict[str, Any]]:
-    if not a and not b:
+    if not a and not b and not qual_conflicts:
         return None, {
             "matched": [],
             "conflicts": [],
@@ -105,7 +139,7 @@ def _compare_specs(
             "boq_only": [],
             "quote_only": [],
         }
-    matched, conflicts, multi, boq_only, quote_only = [], [], [], [], []
+    matched, conflicts, multi, boq_only, quote_only = [], list(qual_conflicts), [], [], []
     for kind in sorted(set(a) | set(b)):
         if kind in a and kind in b:
             if a[kind] & b[kind]:
@@ -192,6 +226,7 @@ class _Prepared:
     tokens: frozenset[str]
     codes: frozenset[str]
     spec_pairs: frozenset[tuple[str, str]]
+    quals: dict[str, frozenset[str]]
 
 
 def _prepare(description: str, sku: str | None = None) -> _Prepared:
@@ -200,7 +235,7 @@ def _prepare(description: str, sku: str | None = None) -> _Prepared:
     if sku and sku.strip():
         codes = codes | _codes(sku) | {sku.strip().lower()}
     pairs = frozenset((k, v) for k, vs in specs.items() for v in vs)
-    return _Prepared(specs, _tokens(description), codes, pairs)
+    return _Prepared(specs, _tokens(description), codes, pairs, qualifier_tokens(description))
 
 
 @dataclass(frozen=True)
@@ -213,6 +248,7 @@ class _Scored:
     unit_state: str
     unit_score: float
     code_hit: bool
+    unit_neutral: float  # the score if the unit matched: the margin must not rest on units alone
 
     @property
     def conflict(self) -> bool:
@@ -243,28 +279,46 @@ def _known_unit(raw: str | None) -> str | None:
 def _score_pair(
     boq: BoqLine, boq_p: _Prepared, quote: QuoteLine, quote_p: _Prepared, cfg: MatchConfig
 ) -> _Scored:
-    spec_score, spec_detail = _compare_specs(boq_p.specs, quote_p.specs)
+    spec_score, spec_detail = _compare_specs(
+        boq_p.specs, quote_p.specs, _qualifier_conflicts(boq_p.quals, quote_p.quals)
+    )
     text_score = _text_similarity(boq_p.tokens, quote_p.tokens)
     state = _unit_state(boq.unit, quote.unit)
     unit_score = {"equal": 1.0, "mismatch": 0.0, "unknown": 0.5}[state]
-    if spec_score is None:
-        score = (
-            (cfg.w_text * text_score + cfg.w_unit * unit_score)
-            / (cfg.w_text + cfg.w_unit)
-            * cfg.no_spec_factor
-        )
-    else:
-        score = cfg.w_spec * spec_score + cfg.w_text * text_score + cfg.w_unit * unit_score
     code_hit = bool(boq_p.codes & quote_p.codes)
-    if code_hit:
-        score += cfg.code_bonus
-    if spec_detail["conflicts"]:
-        score -= cfg.conflict_penalty
-    score = max(0.0, min(1.0, score))
-    return _Scored(quote, score, text_score, spec_score, spec_detail, state, unit_score, code_hit)
+    conflict = bool(spec_detail["conflicts"])
+
+    def total(unit_part: float) -> float:
+        if spec_score is None:
+            raw = (
+                (cfg.w_text * text_score + cfg.w_unit * unit_part)
+                / (cfg.w_text + cfg.w_unit)
+                * cfg.no_spec_factor
+            )
+        else:
+            raw = cfg.w_spec * spec_score + cfg.w_text * text_score + cfg.w_unit * unit_part
+        if code_hit:
+            raw += cfg.code_bonus
+        if conflict:
+            raw -= cfg.conflict_penalty
+        return max(0.0, min(1.0, raw))
+
+    return _Scored(
+        quote,
+        total(unit_score),
+        text_score,
+        spec_score,
+        spec_detail,
+        state,
+        unit_score,
+        code_hit,
+        total(1.0),
+    )
 
 
-def _evidence(boq: BoqLine, s: _Scored, rank: int, closing: date | None) -> dict[str, Any]:
+def _evidence(
+    boq: BoqLine, s: _Scored, rank: int, closing: date | None, shared: bool = False
+) -> dict[str, Any]:
     quote = s.quote
     warnings = []
     if s.conflict:
@@ -273,6 +327,8 @@ def _evidence(boq: BoqLine, s: _Scored, rank: int, closing: date | None) -> dict
         warnings.append("spec_multi_value")
     if s.unit_mismatch:
         warnings.append("unit_mismatch")
+    if shared:
+        warnings.append("quote_shared")
     if closing and quote.valid_until and quote.valid_until < closing:
         warnings.append("quote_expires_before_closing")
     return {
@@ -347,9 +403,11 @@ def suggest(
         qs = sorted(by_supplier[supplier_id], key=lambda q: str(q.id))
         prepared = [_prepare(q.description, q.sku) for q in qs]
         suppliers.append((supplier_id, qs, prepared, _build_index(prepared)))
+    groups: list[tuple[BoqLine, UUID, list[_Scored]]] = []
+    fits: dict[UUID, list[tuple[UUID, float]]] = defaultdict(list)  # quote -> (boq id, neutral)
     for line in boq:
         line_p = _prepare(line.description)
-        if not line_p.tokens and not line_p.specs:
+        if not line_p.tokens and not line_p.specs and not line_p.quals:
             continue
         for supplier_id, qs, prepared, index in suppliers:
             scored = [
@@ -358,26 +416,39 @@ def suggest(
             ]
             scored = [s for s in scored if s.score >= config.ambiguous_min]
             scored.sort(key=lambda s: (-s.score, str(s.quote.id)))
-            for rank, s in enumerate(scored[: config.top_n], start=1):
-                runner_up = scored[1].score if rank == 1 and len(scored) > 1 else None
-                clear = (
-                    rank == 1
-                    and s.score >= config.suggest_min
-                    and s.text >= config.clear_text_min
-                    and not s.conflict
-                    and not s.multi_value
-                    and not s.unit_mismatch
-                    and (runner_up is None or s.score - runner_up >= config.margin)
+            groups.append((line, supplier_id, scored))
+            for s in scored:
+                fits[s.quote.id].append((line.id, s.unit_neutral))
+    for line, supplier_id, scored in groups:
+        for rank, s in enumerate(scored[: config.top_n], start=1):
+            # Competition: a quote that fits another BoQ line as well (or better) is not a
+            # clear answer for this one; the buyer decides which line it prices.
+            rival = max((n for b, n in fits[s.quote.id] if b != line.id), default=None)
+            shared = rival is not None and rival > s.unit_neutral - config.margin
+            # A runner-up that differs only by unit (a "roll" vs "m" offer of the same cable)
+            # is still a rival: the buyer must choose, so the margin ignores the unit signal.
+            runner_up = (
+                max(o.unit_neutral for o in scored[1:]) if rank == 1 and len(scored) > 1 else None
+            )
+            clear = (
+                rank == 1
+                and s.score >= config.suggest_min
+                and s.text >= config.clear_text_min
+                and not s.conflict
+                and not s.multi_value
+                and not s.unit_mismatch
+                and not shared
+                and (runner_up is None or s.unit_neutral - runner_up >= config.margin)
+            )
+            out.append(
+                Suggestion(
+                    line.id,
+                    s.quote.id,
+                    supplier_id,
+                    Decimal(str(round(s.score, 4))),
+                    "clear" if clear else "ambiguous",
+                    rank,
+                    _evidence(line, s, rank, closing_date, shared),
                 )
-                out.append(
-                    Suggestion(
-                        line.id,
-                        s.quote.id,
-                        supplier_id,
-                        Decimal(str(round(s.score, 4))),
-                        "clear" if clear else "ambiguous",
-                        rank,
-                        _evidence(line, s, rank, closing_date),
-                    )
-                )
+            )
     return out
