@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import type { DocumentItem } from "@/api/types";
 import { ExtractionPanel } from "@/components/extraction-panel";
 import { JobProgress } from "@/components/job-progress";
@@ -28,6 +30,13 @@ export function DocumentCard({ document, tenderId, archived }: Props) {
           <StatusBadge tone={processingTone(version.processing_status)} label={processingStatusLabel(version.processing_status)} />
         ) : null}
       </div>
+      {version && (version.processing_status === "ready" || version.processing_status === "ready_with_warnings") ? (
+        <p className="text-sm">
+          <Link href={`/tenders/${tenderId}/review/${version.id}`} className="underline">
+            Review extracted data
+          </Link>
+        </p>
+      ) : null}
       {version?.job_id ? <JobProgress key={version.job_id} jobId={version.job_id} tenderId={tenderId} archived={archived} versionStatus={version.processing_status} /> : null}
       {!archived && version ? <NewVersion tenderId={tenderId} documentId={document.id} /> : null}
       {version ? (
