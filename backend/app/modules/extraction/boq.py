@@ -145,13 +145,14 @@ def _clip(cand: BoqCandidate) -> None:
 def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
     result = BoqResult()
     carried: tuple[dict[str, int], int] | None = None  # header columns and width, across pages
+    carried_section: str | None = None  # the open section heading, carried with the header
     last_boq_page: int | None = None  # page where the carried header was last seen or continued
     scanned: list[int] = []
     for page in pages:
         if carried is not None and (
             last_boq_page is None or page.page_number not in (last_boq_page, last_boq_page + 1)
         ):
-            carried = None  # a page gap (or a page without tables) ends the continuation
+            carried, carried_section = None, None  # a page gap ends the continuation
         if page.text_source == "ocr" and not page.tables:
             words = {w for w in re.findall(r"[a-z]+", page.text.lower())}
             hits = sum(
@@ -172,18 +173,19 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                 width = max(columns.values()) + 1
                 width = max(width, max((len(rows[start]),), default=width))
                 carried = (columns, width)
+                carried_section = None
                 last_boq_page = page.page_number
                 body_from = start + 1
             elif carried is not None and table.get("kind") != "sheet":
                 columns, width = carried
                 if max(len(r) for r in rows) < width:
-                    carried = None  # not a continuation of the BoQ
+                    carried, carried_section = None, None  # not a continuation of the BoQ
                     continue
                 last_boq_page = page.page_number
                 body_from = 0
             else:
                 continue
-            section: str | None = None
+            section: str | None = carried_section
             for offset, row in enumerate(rows[body_from:], start=body_from):
                 if not any(str(c or "").strip() for c in row):
                     continue
@@ -202,6 +204,7 @@ def parse_boq(pages: Sequence[PageInput]) -> BoqResult:
                     continue
                 result.items.append(_candidate(row, columns, section, page, table, offset, width))
                 result.boq_pages.add(page.page_number)
+            carried_section = section
     if scanned:
         result.warnings.append({"code": "BOQ_NEEDS_MANUAL_ENTRY", "pages": scanned})
     return result

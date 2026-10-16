@@ -256,3 +256,33 @@ def test_parser_meets_prd_targets_on_ground_truth(pack: str) -> None:
     assert desc_ok / found >= 0.90, f"{pack}: description {desc_ok}/{found}"
     assert source_ok / found >= 0.95, f"{pack}: source {source_ok}/{found}"
     assert len(predicted) <= total * 1.05, f"{pack}: {len(predicted)} predicted for {total}"
+
+
+def test_section_carries_across_a_continuation_page() -> None:
+    p1 = _page(
+        [HEADER, ["", "CABLES", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    p2 = _page([["1.2", "Conduit", "m", "7", "", ""]], kind="table", number=4, label=None)
+    items = extraction.parse_boq([p1, p2]).items
+    assert [(i.item_no, i.section) for i in items] == [("1.1", "CABLES"), ("1.2", "CABLES")]
+
+
+def test_a_new_header_resets_the_section() -> None:
+    p1 = _page(
+        [HEADER, ["", "CABLES", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    p2 = _page([HEADER, ["2.1", "Lamp", "no", "3", "", ""]], kind="table", number=4, label=None)
+    items = extraction.parse_boq([p1, p2]).items
+    assert [(i.item_no, i.section) for i in items] == [("1.1", "CABLES"), ("2.1", None)]
+
+
+def test_a_page_gap_drops_the_carried_section() -> None:
+    p1 = _page(
+        [HEADER, ["", "CABLES", "", "", "", ""], ["1.1", "Cable", "m", "5", "", ""]],
+        kind="table", number=3, label=None,
+    )  # fmt: skip
+    p5 = _page([["1.2", "Conduit", "m", "7", "", ""]], kind="table", number=5, label=None)
+    items = extraction.parse_boq([p1, p5]).items
+    assert [i.item_no for i in items] == ["1.1"]  # page 5 is not a continuation (existing rule)
