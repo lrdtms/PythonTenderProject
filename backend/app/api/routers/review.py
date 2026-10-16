@@ -12,6 +12,7 @@ from fastapi import APIRouter
 
 from app.api.deps import Ctx, DbSession
 from app.api.reviewers import with_reviewer_names
+from app.modules.checklist import public as checklist
 from app.modules.estimating import public as estimating
 from app.modules.pipeline import public as pipeline
 
@@ -38,3 +39,27 @@ def confirm_boq_item(boq_item_id: UUID, ctx: Ctx, session: DbSession):
 @router.post("/boq-items/{boq_item_id}/reject", response_model=estimating.BoqItemDTO)
 def reject_boq_item(boq_item_id: UUID, ctx: Ctx, session: DbSession):
     return _boq(session, ctx, boq_item_id, "reject")
+
+
+def _requirement(session, ctx, row_id: UUID, action, patch=None):
+    version_id = checklist.version_of(session, ctx, row_id)
+    pipeline.lock_runs(session, ctx, version_id, "requirements")
+    dto = checklist.review_item(session, ctx, row_id, action, patch)
+    return with_reviewer_names(session, ctx, [dto])[0]
+
+
+@router.patch("/requirements/{requirement_id}", response_model=checklist.RequirementDTO)
+def correct_requirement(
+    requirement_id: UUID, body: checklist.RequirementPatch, ctx: Ctx, session: DbSession
+):
+    return _requirement(session, ctx, requirement_id, "correct", body)
+
+
+@router.post("/requirements/{requirement_id}/confirm", response_model=checklist.RequirementDTO)
+def confirm_requirement(requirement_id: UUID, ctx: Ctx, session: DbSession):
+    return _requirement(session, ctx, requirement_id, "confirm")
+
+
+@router.post("/requirements/{requirement_id}/reject", response_model=checklist.RequirementDTO)
+def reject_requirement(requirement_id: UUID, ctx: Ctx, session: DbSession):
+    return _requirement(session, ctx, requirement_id, "reject")

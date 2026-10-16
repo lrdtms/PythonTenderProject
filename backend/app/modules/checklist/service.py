@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.kernel import OrgContext, Permission
+from app.kernel import Conflict, OrgContext, Permission, ValidationFailed
+from app.modules.audit import public as audit
 
 from .models import Requirement
 from .repo import RequirementRepo
-from .schemas import ReplaceResult, RequirementDTO
+from .schemas import ReplaceResult, RequirementDTO, RequirementPatch
 
 
 def _norm(value: object) -> str:
@@ -94,3 +96,50 @@ def list_requirements(
     limit = max(1, min(limit, 1000))
     repo = RequirementRepo(session, ctx)
     return [_dto(i) for i in repo.for_version(version_id, limit, max(0, offset))]
+
+
+def version_of(session: Session, ctx: OrgContext, item_id: UUID) -> UUID:
+    ctx.require(Permission.REVIEW_DATA)
+    return RequirementRepo(session, ctx).version_id_of(item_id)
+
+
+def review_item(
+    session: Session,
+    ctx: OrgContext,
+    item_id: UUID,
+    action: Literal["confirm", "reject", "correct"],
+    patch: RequirementPatch | None = None,
+) -> RequirementDTO:
+    """Call with the extraction lock held. A row a re-run deleted since lookup is `row_replaced`."""
+    ctx.require(Permission.REVIEW_DATA)
+    row = RequirementRepo(session, ctx).fresh(item_id)
+    if row is None:
+        raise Conflict(
+            "This requirement was replaced by a newer extraction. Reload the list.",
+            code="row_replaced",
+        )
+    fields: list[str] = []
+    if action == "correct":
+        if patch is None:
+            raise ValidationFailed("No changes were given.")
+        changes = {
+            name: getattr(patch, name)
+            for name in patch.model_fields_set
+            if getattr(patch, name) != getattr(row, name)
+        }
+        if not changes:
+            return _dto(row)
+        for name, value in changes.items():
+            setattr(row, name, value)
+        row.corrected_value = {**(row.corrected_value or {}), **changes}
+        row.review_status = "corrected"
+        fields = sorted(changes)
+    else:
+        row.review_status = "confirmed" if action == "confirm" else "rejected"
+    row.reviewed_by, row.reviewed_at = ctx.user_id, datetime.now(UTC)
+    audit.record(
+        session, ctx, "requirement", row.id, f"review_{row.review_status}",
+        {"status": row.review_status, "fields": fields},
+    )  # fmt: skip
+    session.flush()
+    return _dto(row)

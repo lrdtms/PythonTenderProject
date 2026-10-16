@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+
+from app.kernel.vocab import MANDATORY_STATUSES, REQUIREMENT_TYPES
+
+RequirementType = Literal[*REQUIREMENT_TYPES]
+MandatoryStatus = Literal[*MANDATORY_STATUSES]
 
 
 @dataclass(frozen=True)
@@ -34,3 +39,25 @@ class RequirementDTO(BaseModel):
     reviewed_by: UUID | None = None
     reviewed_by_name: str | None = None
     reviewed_at: datetime | None = None
+
+
+class RequirementPatch(BaseModel):
+    """The fields a reviewer may change. The evidence quote and its location are not editable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+        | None
+    ) = None
+    requirement_type: RequirementType | None = None
+    mandatory_status: MandatoryStatus | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> RequirementPatch:
+        if not self.model_fields_set:
+            raise ValueError("Send at least one field to change.")
+        for name in self.model_fields_set:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be cleared.")
+        return self
