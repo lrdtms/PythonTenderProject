@@ -89,4 +89,23 @@ describe("AuthGate", () => {
     expect(client.getQueryData(["tenders", "dummy"])).toBeUndefined();
     expect(client.getQueryData(["me"])).toBeUndefined();
   });
+
+  it("shows the API's message for an ApiError", async () => {
+    fetchMock.mockResolvedValueOnce(respond(500, errorBody("internal_error", "The database is down.")));
+    renderWithClient(<AuthGate><Who /></AuthGate>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The database is down.");
+  });
+
+  it("never shows raw exception text for a non-API error", async () => {
+    // A body-stream failure surfaces as a plain Error, not an ApiError.
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: () => Promise.reject(new Error("Cannot read properties of undefined (reading 'x')")),
+    });
+    renderWithClient(<AuthGate><Who /></AuthGate>);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Something went wrong. Try again.");
+    expect(alert).not.toHaveTextContent(/cannot read properties/i);
+  });
 });

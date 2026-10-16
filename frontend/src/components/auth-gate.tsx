@@ -42,7 +42,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (!me) {
     return (
       <div role="alert" className="mx-auto max-w-md p-8">
-        <p className="mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
+        <p className="mb-4">{error instanceof ApiError ? error.message : "Something went wrong. Try again."}</p>
         <button
           type="button"
           onClick={() => refetch()}
