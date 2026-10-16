@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.api.deps import Ctx, DbSession
+from app.api.reviewers import with_reviewer_names
 from app.modules.checklist import public as checklist
 from app.modules.documents import public as documents
 from app.modules.estimating import public as estimating
@@ -40,7 +41,9 @@ def boq_items(
     offset: int = Query(0, ge=0),
 ):
     documents.get_version(session, ctx, version_id)  # NotFound for another organisation
-    return estimating.list_boq_items(session, ctx, version_id, limit, offset)
+    return with_reviewer_names(
+        session, ctx, estimating.list_boq_items(session, ctx, version_id, limit, offset)
+    )
 
 
 @router.get("/{version_id}/requirements", response_model=list[checklist.RequirementDTO])
@@ -52,4 +55,6 @@ def requirements(
     offset: int = Query(0, ge=0),
 ):
     documents.get_version(session, ctx, version_id)  # NotFound for another organisation
-    return checklist.list_requirements(session, ctx, version_id, limit, offset)
+    return with_reviewer_names(
+        session, ctx, checklist.list_requirements(session, ctx, version_id, limit, offset)
+    )

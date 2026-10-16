@@ -176,6 +176,8 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         members = repos["MembershipRepo"].list_with_users()
         assert {m.organisation_id for m, _ in members} == {ctx_c.organisation_id}
         assert repos["MembershipRepo"].count_active_admins() == 1
+        user_b = s.scalar(select(Membership.user_id).where(Membership.organisation_id == org_b))
+        assert repos["MembershipRepo"].names_for({user_b}) == {}
 
         # Scoped writes aimed at B's ids change nothing of B's.
         repos["PageRepo"].replace_for_version(version_b, [])

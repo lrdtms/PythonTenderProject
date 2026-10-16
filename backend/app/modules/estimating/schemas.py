@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -32,3 +33,7 @@ class BoqItemDTO(BaseModel):
     cell_range: str | None
     review_status: str
     corrected_value: dict[str, Any] | None
+    original_value: dict[str, Any] = {}
+    reviewed_by: UUID | None = None
+    reviewed_by_name: str | None = None
+    reviewed_at: datetime | None = None

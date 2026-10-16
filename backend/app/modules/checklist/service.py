@@ -81,6 +81,9 @@ def _dto(item: Requirement) -> RequirementDTO:
         quote_end=item.quote_end,
         review_status=item.review_status,
         corrected_value=item.corrected_value,
+        original_value=dict(item.original_value or {}),
+        reviewed_by=item.reviewed_by,
+        reviewed_at=item.reviewed_at,
     )
 
 

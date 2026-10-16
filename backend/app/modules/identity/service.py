@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -213,3 +214,8 @@ def reset_member_password(
     # The password is global to the user, so every session goes, not only this organisation's.
     SessionRepo(session).revoke_for_user(membership.user_id)
     audit.record(session, ctx, "membership", membership.id, "password_reset")
+
+
+def member_names(session: Session, ctx: OrgContext, user_ids: Collection[UUID]) -> dict[UUID, str]:
+    ctx.require(Permission.READ)
+    return MembershipRepo(session, ctx).names_for(set(user_ids))

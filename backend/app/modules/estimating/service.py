@@ -103,6 +103,9 @@ def _dto(item: BoqItem) -> BoqItemDTO:
         cell_range=item.cell_range,
         review_status=item.review_status,
         corrected_value=item.corrected_value,
+        original_value=dict(item.original_value or {}),
+        reviewed_by=item.reviewed_by,
+        reviewed_at=item.reviewed_at,
     )
 
 
