@@ -33,11 +33,15 @@ MAX_HEADER_SEARCH_ROWS = 60
 
 _DATE = r"(\d{4}-\d{2}-\d{2}|\d{1,2}[/.\-]\d{1,2}[/.\-]\d{4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})"
 QUOTE_DATE = re.compile(r"(?<![a-z])date\s*[:\-]?\s*" + _DATE, re.I)
+NOT_QUOTE_DATE = re.compile(r"(?:expiry|expiration|expire|delivery|valid|closing|due)\s*$", re.I)
 VALID_UNTIL = re.compile(r"valid(?:ity)?\s*(?:until|to|till|through)?\s*[:\-]?\s*" + _DATE, re.I)
 REFERENCE = re.compile(
-    r"\b(?:quotation|quote)\s*(?:no\.?|number|ref\.?|#)?\s*[:\-]?\s*([A-Za-z]*\d[\w\-/]*)", re.I
+    r"^\s*(?:quotation|quote)\s*(?:no\.?|number|ref\.?|#)?\s*[:\-]?\s*([A-Za-z]*\d[\w\-/]*)",
+    re.I | re.M,
 )
-CURRENCY = re.compile(r"currency\s*[:\-]?\s*([A-Z]{3})\b|\b(ZAR)\b")
+CURRENCY = re.compile(r"(?i:currency)\s*[:\-]\s*((?i:[a-z]{3}))\b|(?i:currency)\s+([A-Z]{3})\b")
+BARE_CURRENCY = re.compile(r"\b(ZAR)\b")
+PRICE_WORDS = re.compile(r"\b(?:prices?|amounts?|currency)\b", re.I)
 VAT_EXCLUDED = re.compile(
     r"\b(?:exclud\w*|excl\.?|ex\.?)\s*(?:of\s*)?(?:value[- ]added tax|vat)", re.I
 )
@@ -117,6 +121,10 @@ def _preamble_lines(
     for index, line in enumerate(lines):
         if _norm(line) in HEADER_WORDS["item"] | HEADER_WORDS["description"]:
             return lines[:index]
+    for index, line in enumerate(lines):  # all the column headings on one line
+        words = set(re.findall(r"[a-z]+", line.lower()))
+        if sum(1 for group in HEADER_WORDS.values() if group & words) >= 3:
+            return lines[:index]
     return lines
 
 
@@ -146,12 +154,25 @@ def _read_header(lines: list[str]) -> QuotationHeader:
     header.supplier_name = suffixed or (candidates[0] if candidates else None)
     ref = REFERENCE.search(blob)
     header.reference = ref.group(1) if ref else None
-    dated = QUOTE_DATE.search(blob)
-    header.quote_date = _parse_date(dated.group(1)) if dated else None
+    header.quote_date = next(
+        (
+            _parse_date(m.group(1))
+            for m in QUOTE_DATE.finditer(blob)
+            if not NOT_QUOTE_DATE.search(blob[: m.start()])
+        ),
+        None,
+    )
     valid = VALID_UNTIL.search(blob)
     header.valid_until = _parse_date(valid.group(1)) if valid else None
     money = CURRENCY.search(blob)
-    header.currency = (money.group(1) or money.group(2)) if money else None
+    if money:
+        header.currency = (money.group(1) or money.group(2)).upper()
+    else:
+        for line in lines:
+            bare = BARE_CURRENCY.search(line)
+            if bare and PRICE_WORDS.search(line):
+                header.currency = bare.group(1)
+                break
     if VAT_EXCLUDED.search(blob):
         header.prices_include_vat = False
     elif VAT_INCLUDED.search(blob):
@@ -177,12 +198,17 @@ def _clip(cand: QuotationCandidate) -> None:
         cand.flags.append("truncated")
 
 
-def _candidate(row, columns, page, table, row_index, width, order) -> QuotationCandidate:  # noqa: ANN001
-    description, sku = _lift_sku(_get(row, columns, "description"))
+def _candidate(  # noqa: ANN001
+    row, columns, page, table, row_index, width, order, text=None
+) -> QuotationCandidate:
+    description, sku = _lift_sku(_get(row, columns, "description") if text is None else text)
     raw_unit = _get(row, columns, "unit") or None
     raw_quantity = _get(row, columns, "quantity") or None
     raw_price = _get(row, columns, "price") or None
     flags: list[str] = []
+    if not description and sku:
+        description = sku  # never store an empty description
+        flags.append("missing_description")
     unit = canon_unit(raw_unit)
     if raw_unit and _norm(raw_unit) != unit:
         flags.append("unit_alias")
@@ -191,6 +217,8 @@ def _candidate(row, columns, page, table, row_index, width, order) -> QuotationC
         quantity, _ = parse_decimal(raw_quantity)
         if quantity is None:
             flags.append("quantity_unparsed")
+        elif quantity == 0:
+            flags.append("zero_quantity")
     else:
         flags.append("missing_quantity")
     price = None
@@ -198,6 +226,9 @@ def _candidate(row, columns, page, table, row_index, width, order) -> QuotationC
         price, _ = parse_decimal(raw_price)
         if price is None:
             flags.append("price_unparsed")
+        elif price <= 0:
+            flags.append("zero_price" if price == 0 else "negative_price")
+            price = None  # never store a zero or negative price
     else:
         flags.append("missing_price")
     if is_ambiguous_separator(raw_quantity) or is_ambiguous_separator(raw_price):
@@ -262,31 +293,48 @@ def parse_quotation(pages: Sequence[PageInput]) -> QuotationResult:
                 body_from = 0
             else:
                 continue
+            last: tuple[tuple, str] | None = None  # the previous item's build args and text
+            pending: str | None = None  # a description-only row waiting for the row below it
             for offset, row in enumerate(rows[body_from:], start=body_from):
                 if not any(str(c or "").strip() for c in row):
                     continue
                 description = _get(row, columns, "description")
-                if not description or SUBTOTAL.match(description):
+                if description and SUBTOTAL.match(description):
                     continue
-                if TOTAL_WORD.match(description) and not (
-                    _get(row, columns, "unit") or _get(row, columns, "quantity")
+                if (
+                    description
+                    and TOTAL_WORD.match(description)
+                    and not (_get(row, columns, "unit") or _get(row, columns, "quantity"))
                 ):
                     continue
-                if CHARGE_ROW.match(description):
+                if description and CHARGE_ROW.match(description):
                     continue  # VAT, delivery, discount and similar charge lines
                 if not any(_get(row, columns, f) for f in ("unit", "quantity", "price")):
-                    continue  # a heading line inside the table
-                result.items.append(
-                    _candidate(
-                        row,
-                        columns,
-                        page,
-                        table,
-                        offset,
-                        width,
-                        source_order(page.page_number, table_idx * 10_000 + offset),
-                    )  # fmt: skip
-                )
+                    if not description:
+                        continue
+                    if last is not None and (
+                        _lift_sku(description)[1] or description[:1].islower()
+                    ):  # wrapped continuation text of the item above
+                        args, text = last
+                        last = (args, f"{text} {description}")
+                        result.items[-1] = _candidate(*args, text=last[1])
+                        pending = None
+                    else:  # a heading, or the description half of a two-row item
+                        pending, last = description, None
+                    continue
+                text = description
+                if not _lift_sku(description)[0]:  # empty or only a SKU: use the row above
+                    if pending:
+                        text = f"{pending} {description}".strip()
+                    elif not description:
+                        continue
+                pending = None
+                args = (
+                    row, columns, page, table, offset, width,
+                    source_order(page.page_number, table_idx * 10_000 + offset),
+                )  # fmt: skip
+                last = (args, text)
+                result.items.append(_candidate(*args, text=text))
                 result.quote_pages.add(page.page_number)
     if not header_read:
         result.header = _read_header([])

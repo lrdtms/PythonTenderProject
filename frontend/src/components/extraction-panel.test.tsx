@@ -50,6 +50,15 @@ describe("ExtractionPanel", () => {
     expect(screen.getByText("Quotation")).toBeInTheDocument();
   });
 
+  it("uses the singular for a quotation with one item", async () => {
+    mockApi({
+      [`GET ${STATUS}`]: () =>
+        respond(200, makeExtraction([makeKind("quotation", { status: "succeeded" }, { status: "succeeded", counts: { items: 1 } })])),
+    });
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready />);
+    expect(await screen.findByText("1 item")).toBeInTheDocument();
+  });
+
   it("polls while a job is active and stops when all are done", async () => {
     let n = 0;
     const fetchMock = mockApi({

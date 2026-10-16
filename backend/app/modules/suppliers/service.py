@@ -48,6 +48,19 @@ def _date(value: object) -> date | None:
     return date.fromisoformat(value) if isinstance(value, str) and value else None
 
 
+def _header_flags(name_missing: bool, fields: Mapping[str, Any]) -> list[str]:
+    """Header warnings derived from the stored values (the name flag comes from the parse)."""
+    flags = ["NO_SUPPLIER_NAME"] if name_missing else []
+    for field, flag in (
+        ("reference", "NO_REFERENCE"), ("quote_date", "NO_QUOTE_DATE"),
+        ("valid_until", "NO_VALIDITY"), ("currency", "NO_CURRENCY"),
+        ("prices_include_vat", "VAT_UNKNOWN"),
+    ):  # fmt: skip
+        if fields.get(field) is None:
+            flags.append(flag)
+    return flags
+
+
 def store_quotation(
     session: Session,
     ctx: OrgContext,
@@ -60,16 +73,20 @@ def store_quotation(
     suppliers_repo = SupplierRepo(session, ctx)
     quotations = QuotationRepo(session, ctx)
     items = QuotationItemRepo(session, ctx)
-    flags = list(header.get("flags") or [])
+    name_missing = "NO_SUPPLIER_NAME" in (header.get("flags") or [])
     existing = quotations.for_version(version_id)
 
     created = False
     if existing is not None:
         supplier_id = existing.supplier_id  # a switch made by the user is never undone
     else:
-        name = header.get("supplier_name") or fallback_name or "Unknown supplier"
-        key = normalise_name(name) or "unknown supplier"
-        supplier = suppliers_repo.by_key(key)
+        header_name = header.get("supplier_name")
+        name = header_name or fallback_name or "Unknown supplier"
+        if header_name:
+            key = normalise_name(name) or name.lower().strip() or f"unknown supplier {version_id}"
+            supplier = suppliers_repo.by_key(key)
+        else:  # a file name says nothing about identity: never merge on it
+            key, supplier = f"file:{version_id}", None
         if supplier is None:
             supplier = suppliers_repo.add(Supplier(name=_display(name)[:200], name_key=key[:200]))
             created = True
@@ -85,15 +102,17 @@ def store_quotation(
     if existing is None:
         quotation: Quotation = quotations.add(
             Quotation(document_version_id=version_id, run_id=run_id, supplier_id=supplier_id,
-                      flags=flags, **fields)
+                      flags=_header_flags(name_missing, fields), **fields)
         )  # fmt: skip
     else:
         quotation = existing
         quotation.run_id = run_id
-        quotation.flags = flags
         for name_, value in fields.items():  # fill gaps only; never overwrite what is there
             if getattr(quotation, name_) is None and value is not None:
                 setattr(quotation, name_, value)
+        quotation.flags = _header_flags(
+            name_missing, {k: getattr(quotation, k) for k in fields}
+        )  # flags always agree with the stored fields
         session.flush()
 
     kept = items.reviewed_or_pinned(quotation.id)

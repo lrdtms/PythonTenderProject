@@ -59,6 +59,8 @@ describe("status text", () => {
   it("describes quotation extraction", () => {
     expect(kindLabel("quotation")).toBe("Quotation");
     expect(warningText({ code: "NO_SUPPLIER_NAME" })).toMatch(/supplier name/i);
+    expect(warningText({ code: "NO_REFERENCE" })).toMatch(/reference/i);
+    expect(warningText({ code: "NO_QUOTE_DATE" })).toMatch(/quotation date/i);
     expect(warningText({ code: "NO_VALIDITY" })).toMatch(/valid/i);
     expect(warningText({ code: "NO_CURRENCY" })).toMatch(/currency/i);
     expect(warningText({ code: "VAT_UNKNOWN" })).toMatch(/VAT/);

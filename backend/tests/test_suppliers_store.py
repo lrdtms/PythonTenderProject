@@ -151,3 +151,66 @@ def test_database_allows_one_confirmed_match_per_boq_line_and_supplier() -> None
         with pytest.raises(IntegrityError):
             q.session.flush()
         q.session.rollback()  # the failed flush left the session unusable for the scope's commit
+
+
+def test_header_less_quotations_with_one_file_name_stay_separate_suppliers() -> None:
+    bare = {**HEADER, "supplier_name": None, "flags": ["NO_SUPPLIER_NAME"]}
+    with quotation_context(versions=2) as q:
+        a = suppliers.store_quotation(
+            q.session, q.ctx, q.versions[0], q.runs[0], bare, [row("A")], "quote"
+        )
+        b = suppliers.store_quotation(
+            q.session, q.ctx, q.versions[1], q.runs[1], bare, [row("A")], "quote"
+        )
+        assert a.supplier_id != b.supplier_id and a.supplier_created and b.supplier_created
+        assert q.session.get(Supplier, a.supplier_id).name == "Quote"
+        assert q.session.get(Supplier, b.supplier_id).name_key == f"file:{q.versions[1]}"
+
+
+def test_a_file_name_supplier_never_merges_with_a_header_supplier() -> None:
+    bare = {**HEADER, "supplier_name": None, "flags": ["NO_SUPPLIER_NAME"]}
+    with quotation_context(versions=2) as q:
+        a = suppliers.store_quotation(
+            q.session, q.ctx, q.versions[0], q.runs[0], HEADER, [row("A")], "sparkmore supplies"
+        )
+        b = suppliers.store_quotation(
+            q.session, q.ctx, q.versions[1], q.runs[1], bare, [row("A")], "sparkmore supplies"
+        )
+        assert a.supplier_id != b.supplier_id
+
+
+def test_suffix_only_names_do_not_merge_with_each_other() -> None:
+    with quotation_context(versions=2) as q:
+        a = suppliers.store_quotation(
+            q.session, q.ctx, q.versions[0], q.runs[0], {**HEADER, "supplier_name": "Co"},
+            [row("A")], "f",
+        )  # fmt: skip
+        b = suppliers.store_quotation(
+            q.session, q.ctx, q.versions[1], q.runs[1], {**HEADER, "supplier_name": "Ltd"},
+            [row("A")], "f",
+        )  # fmt: skip
+        assert a.supplier_id != b.supplier_id
+        assert q.session.get(Supplier, a.supplier_id).name_key == "co"
+
+
+def test_a_rerun_flags_agree_with_the_stored_fields() -> None:
+    gaps = {**HEADER, "currency": None, "reference": None, "flags": ["NO_CURRENCY", "NO_REFERENCE"]}
+    with quotation_context() as q:
+        first = suppliers.store_quotation(
+            q.session, q.ctx, q.version_id, q.run_id, gaps, [row("A")], "f"
+        )
+        quotation = q.session.get(Quotation, first.quotation_id)
+        assert quotation.flags == ["NO_REFERENCE", "NO_CURRENCY"]
+        quotation.currency = "USD"  # set by the user after the first run
+        q.session.flush()
+        suppliers.store_quotation(q.session, q.ctx, q.version_id, q.run_id, gaps, [row("A")], "f")
+        assert quotation.currency == "USD" and quotation.flags == ["NO_REFERENCE"]
+
+
+def test_the_supplier_name_flag_comes_from_the_header_parse() -> None:
+    bare = {**HEADER, "supplier_name": None, "flags": ["NO_SUPPLIER_NAME"]}
+    with quotation_context() as q:
+        out = suppliers.store_quotation(
+            q.session, q.ctx, q.version_id, q.run_id, bare, [row("A")], "f"
+        )
+        assert q.session.get(Quotation, out.quotation_id).flags == ["NO_SUPPLIER_NAME"]

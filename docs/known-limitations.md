@@ -41,12 +41,15 @@ Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md):
 - **One quotation per document.** A document holding several quotations is read as one.
 - **A re-run fills only empty header fields** and never undoes a supplier switch made by a user.
 - **Prices in other currencies are shown but not converted.**
+- **Column heading synonyms are narrow.** "Unit Price (ZAR)" and "Price excl VAT" headings are not recognised, and separate SKU or Code columns are ignored.
+- **Dates are read day-first** for dd/mm/yyyy.
+- **The header is read only from the page that holds the item table**, so a cover-letter first page is missed.
+- **Supplier creation through a future API can race the worker.** Insert-on-conflict handling is due with the Phase 3 supplier API.
 
 ## Slice 4 phase 4 (review screen)
 
 - **Quote highlight is on the extracted text, not the PDF image.** The stored `quote_start`/`quote_end` index the page text after whitespace is collapsed and lower-cased (`provenance.py`), so the client maps them back onto the raw text; matching the quote inside the PDF.js text layer is not implemented. Fuzzy matches mark the nearest located span.
 - **After a BoQ re-run a reviewed row and its re-extracted twin both appear** (same item code, no visual link between them).
-- **"Run extraction again" on a quotation PDF** returns no jobs and shows no feedback (quotations are not extracted in this slice).
 - **Field-level 422 messages** are joined into one message at the top of the editor rather than shown beside each input.
 - **Tab counts show "200+"** while more pages exist; the real total needs a count endpoint.
 

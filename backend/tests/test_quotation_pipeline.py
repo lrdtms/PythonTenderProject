@@ -61,11 +61,16 @@ def test_rerun_through_the_api_keeps_one_quotation_and_replaces_items() -> None:
     tender_id = make_tender(actor)
     version = _upload(actor, tender_id, "pack02", "quotation_2_greenvale_cable_and_conduit.xlsx")
     url = f"{API}/document-versions/{version}/extract"
+    with session_scope() as s:
+        before = s.scalars(select(Quotation)).one()
+        first_run, first_items = before.run_id, set(s.scalars(select(QuotationItem.id)))
     assert actor.client.post(url, json={"deep_scan": False}).status_code == 202
     drain()
     with session_scope() as s:
-        assert len(s.scalars(select(Quotation)).all()) == 1
-        assert len(s.scalars(select(QuotationItem)).all()) == 15
+        quotation = s.scalars(select(Quotation)).one()
+        assert quotation.run_id != first_run  # the second job really ran
+        items = set(s.scalars(select(QuotationItem.id)))
+        assert len(items) == 15 and not items & first_items
 
 
 def test_a_quotation_without_a_table_completes_with_a_warning() -> None:

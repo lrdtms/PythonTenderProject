@@ -286,3 +286,117 @@ def test_po_box_alone_is_not_a_supplier() -> None:
 def test_prefixed_charge_rows_with_a_colon_are_not_items(label: str) -> None:
     rows = [HEADER, ["1", "Cable", "m", "10", "5"], ["", label, "", "", "10"]]
     assert [i.description for i in parse(rows).items] == ["Cable"]
+
+
+# --- final-review fixes: wrapped rows, zero prices, header guesses -----------------------------
+
+
+def test_sku_on_the_next_row_joins_the_item_above() -> None:
+    rows = [HEADER, ["1", "Main board, 400 A", "no", "2", "5"], ["", "[SKU-5078]", "", "", ""]]
+    items = parse(rows).items
+    assert len(items) == 1
+    assert (items[0].description, items[0].sku) == ("Main board, 400 A", "SKU-5078")
+
+
+def test_wrapped_continuation_text_with_a_sku_joins_the_item_above() -> None:
+    rows = [HEADER, ["1", "Main board, 400 A", "no", "2", "5"], ["", "with isolator [SKU-5078]"]]
+    items = parse(rows).items
+    assert len(items) == 1
+    assert (items[0].description, items[0].sku) == ("Main board, 400 A with isolator", "SKU-5078")
+
+
+def test_lower_case_continuation_without_a_sku_joins_the_item_above() -> None:
+    rows = [HEADER, ["1", "Main board", "no", "2", "5"], ["", "with isolator", "", "", ""]]
+    items = parse(rows).items
+    assert [i.description for i in items] == ["Main board with isolator"]
+
+
+def test_description_row_before_a_sku_only_figures_row_is_prepended() -> None:
+    rows = [HEADER, ["1", "Main board, 400 A"], ["", "[SKU-5078]", "no", "2", "5"]]
+    items = parse(rows).items
+    assert len(items) == 1
+    assert (items[0].description, items[0].sku) == ("Main board, 400 A", "SKU-5078")
+    assert items[0].quantity == Decimal(2) and items[0].unit_price == Decimal(5)
+
+
+def test_description_row_before_a_row_with_an_empty_description_is_prepended() -> None:
+    rows = [HEADER, ["", "Main board, 400 A", "", "", ""], ["", "", "no", "2", "5"]]
+    assert [i.description for i in parse(rows).items] == ["Main board, 400 A"]
+
+
+def test_a_real_section_heading_is_still_skipped() -> None:
+    rows = [
+        HEADER,
+        ["", "ELECTRICAL MATERIALS", "", "", ""],
+        ["1", "Cable", "m", "10", "5"],
+        ["", "LIGHTING", "", "", ""],
+        ["2", "Lamp", "no", "4", "9"],
+    ]
+    assert [i.description for i in parse(rows).items] == ["Cable", "Lamp"]
+
+
+def test_an_empty_description_falls_back_to_the_sku_and_is_flagged() -> None:
+    item = parse([HEADER, ["1", "[SKU-5078]", "no", "2", "5"]]).items[0]
+    assert item.description == "SKU-5078" and item.sku == "SKU-5078"
+    assert "missing_description" in item.flags
+
+
+@pytest.mark.parametrize(
+    "raw, flag",
+    [
+        ("0", "zero_price"),
+        ("0.00", "zero_price"),
+        ("R0,00", "zero_price"),
+        ("-50", "negative_price"),
+    ],
+)
+def test_zero_and_negative_prices_are_null_and_flagged(raw: str, flag: str) -> None:
+    item = parse([HEADER, ["1", "Cable", "m", "10", raw]]).items[0]
+    assert item.unit_price is None and item.raw_price == raw and flag in item.flags
+
+
+def test_zero_quantity_is_kept_and_flagged() -> None:
+    item = parse([HEADER, ["1", "Cable", "m", "0", "5"]]).items[0]
+    assert item.quantity == Decimal(0) and "zero_quantity" in item.flags
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Currency: USD", "USD"),
+        ("currency: zar", "ZAR"),
+        ("All prices in ZAR", "ZAR"),
+        ("Bank: FNB\nAccount currency ZAR", "ZAR"),
+        ("Bank details\nBranch ZAR 250655\nAccount 123", None),
+    ],
+)
+def test_currency_is_read_case_insensitively_and_not_guessed(
+    text: str, expected: str | None
+) -> None:
+    header = parse([HEADER, ["1", "Cable", "m", "1", "5"]], f"ACME SUPPLIES\n{text}").header
+    assert header.currency == expected
+    assert ("NO_CURRENCY" in header.flags) == (expected is None)
+
+
+def test_headings_on_one_line_do_not_feed_the_header_fields() -> None:
+    text = (
+        "ACME SUPPLIES\n# Description Unit Qty Unit price\n1 Brackets for quote 2 no 5.00\n"
+        "Delivery date: 2026-11-01"
+    )
+    header = parse([HEADER, ["1", "Brackets", "no", "2", "5"]], text).header
+    assert header.reference is None and header.quote_date is None
+    assert {"NO_REFERENCE", "NO_QUOTE_DATE"} <= set(header.flags)
+
+
+def test_reference_must_start_a_line() -> None:
+    text = "ACME SUPPLIES\nPlease quote 2 weeks lead time\nQUOTATION Q9"
+    assert parse([HEADER, ["1", "Cable", "m", "1", "5"]], text).header.reference == "Q9"
+
+
+@pytest.mark.parametrize("label", ["Expiry date", "Delivery date", "Valid date", "Due date"])
+def test_other_dates_are_not_the_quote_date(label: str) -> None:
+    text = f"ACME SUPPLIES\nQUOTATION Q1\n{label}: 2026-12-01\nDate: 2026-10-20"
+    header = parse([HEADER, ["1", "Cable", "m", "1", "5"]], text).header
+    assert header.quote_date == date(2026, 10, 20)
+    only = f"ACME SUPPLIES\nQUOTATION Q1\n{label}: 2026-12-01"
+    assert parse([HEADER, ["1", "Cable", "m", "1", "5"]], only).header.quote_date is None
