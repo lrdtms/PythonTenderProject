@@ -1,6 +1,7 @@
 "use client";
 
 import type { DocumentItem } from "@/api/types";
+import { ExtractionPanel } from "@/components/extraction-panel";
 import { JobProgress } from "@/components/job-progress";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
@@ -29,6 +30,13 @@ export function DocumentCard({ document, tenderId, archived }: Props) {
       </div>
       {version?.job_id ? <JobProgress jobId={version.job_id} tenderId={tenderId} archived={archived} /> : null}
       {!archived && version ? <NewVersion tenderId={tenderId} documentId={document.id} /> : null}
+      {version ? (
+        <ExtractionPanel
+          versionId={version.id}
+          ready={version.processing_status === "ready" || version.processing_status === "ready_with_warnings"}
+          archived={archived}
+        />
+      ) : null}
     </li>
   );
 }
