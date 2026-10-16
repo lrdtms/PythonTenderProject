@@ -128,6 +128,20 @@ def test_an_id_replaced_by_a_rerun_is_a_404_and_reviewed_rows_survive() -> None:
     assert admin.client.post(f"{API}/boq-items/{uuid4()}/confirm").status_code == 404
 
 
+def test_an_archived_tender_refuses_review_writes() -> None:
+    admin, tid, vid = boq_version()
+    item_id = _item(admin, vid, "1.1")["id"]
+    assert admin.client.post(f"{API}/tenders/{tid}/archive").status_code in (200, 204)
+    for r in (
+        _patch(admin, item_id, {"unit": "m"}),
+        admin.client.post(f"{API}/boq-items/{item_id}/confirm"),
+        admin.client.post(f"{API}/boq-items/{item_id}/reject"),
+    ):
+        assert r.status_code == 409 and r.json()["error"]["code"] == "tender_archived", r.text
+    assert _item(admin, vid, "1.1")["review_status"] == "unreviewed"
+    assert admin.client.post(f"{API}/boq-items/{uuid4()}/confirm").status_code == 404
+
+
 def test_a_row_deleted_before_the_write_is_row_replaced() -> None:
     admin, _, _ = boq_version()
     ctx = OrgContext(UUID(admin.me["user_id"]), UUID(admin.org_id), Role.ADMIN)

@@ -63,6 +63,19 @@ def test_confirm_reject_and_roles(fake_llm) -> None:
     assert _patch(estimator, row_id, {"mandatory_status": "informational"}).status_code == 200
 
 
+def test_an_archived_tender_refuses_requirement_review(fake_llm) -> None:
+    admin, tid, vid = requirement_version(fake_llm)
+    row_id = requirements(admin, vid)[0]["id"]
+    assert admin.client.post(f"{API}/tenders/{tid}/archive").status_code in (200, 204)
+    for r in (
+        _patch(admin, row_id, {"mandatory_status": "informational"}),
+        admin.client.post(f"{API}/requirements/{row_id}/confirm"),
+        admin.client.post(f"{API}/requirements/{row_id}/reject"),
+    ):
+        assert r.status_code == 409 and r.json()["error"]["code"] == "tender_archived", r.text
+    assert requirements(admin, vid)[0]["review_status"] == "unreviewed"
+
+
 def test_a_reviewed_requirement_survives_a_rerun_and_stale_ids_are_404(fake_llm) -> None:
     admin, _, vid = requirement_version(fake_llm)
     row_id = requirements(admin, vid)[0]["id"]
