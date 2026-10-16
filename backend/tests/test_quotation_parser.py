@@ -258,3 +258,31 @@ def test_plain_first_line_name_wins_without_a_suffix_line() -> None:
     assert parse([HEADER, ["1", "Cable", "m", "1", "5"]], text).header.supplier_name == (
         "SPARKMORE SUPPLIES"
     )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Main Road Electrical Supplies",
+        "Box Packaging (Pty) Ltd",
+        "Drive Systems Ltd",
+        "Floor Tiles CC",
+        "Dr Reddy Pharmacy",
+        "Park Street Hardware",
+        "2 Way Electrical (Pty) Ltd",
+    ],
+)
+def test_legit_supplier_names_with_address_words_are_chosen(name: str) -> None:
+    text = f"{name}\nQUOTATION Q1\nDate: 2026-10-20"
+    assert parse([HEADER, ["1", "Cable", "m", "1", "5"]], text).header.supplier_name == name
+
+
+def test_po_box_alone_is_not_a_supplier() -> None:
+    text = "PO Box 12\nQUOTATION Q1\nDate: 2026-10-20"
+    assert parse([HEADER, ["1", "Cable", "m", "1", "5"]], text).header.supplier_name is None
+
+
+@pytest.mark.parametrize("label", ["Less: discount", "Less: Discount 10%", "Add: VAT @ 15%"])
+def test_prefixed_charge_rows_with_a_colon_are_not_items(label: str) -> None:
+    rows = [HEADER, ["1", "Cable", "m", "10", "5"], ["", label, "", "", "10"]]
+    assert [i.description for i in parse(rows).items] == ["Cable"]

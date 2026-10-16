@@ -48,15 +48,16 @@ NOT_A_NAME = re.compile(
     r"^\s*(to|attn|attention)\b",
     re.I,
 )
-ADDRESS_LINE = re.compile(
-    r"^\s*\d|\b(street|st|road|rd|avenue|ave|drive|dr|box|p\.o\.|postal|suite|floor)\b", re.I
+ADDRESS_START = re.compile(r"^\s*\d")
+ADDRESS_WORD = re.compile(
+    r"\b(street|road|rd|avenue|ave|drive|dr|box|p\.o\.|postal|suite|floor)\b", re.I
 )
 COMPANY_SUFFIX = re.compile(r"\b(pty|ltd|cc|inc|limited|co)\b", re.I)
 CHARGE_WORD = r"vat|delivery|freight|discount|rounding|transport|handling|surcharge|carriage|levy"
 # A charge line: starts with a charge word (optionally "less"/"add"), or is only that word plus
 # a percentage, amount, "charge" or "fee".
 CHARGE_ROW = re.compile(
-    rf"^\s*(?:(?:less|add|plus)\s+)?(?:{CHARGE_WORD})\b(?:\s*(?:@|:|-)?\s*[-+R\d.,%()\s]*|\s+(?:charges?|fees?)\b.*)?$",
+    rf"^\s*(?:(?:less|add|plus)[:\s]+)?(?:{CHARGE_WORD})\b(?:\s*(?:@|:|-)?\s*[-+R\d.,%()\s]*|\s+(?:charges?|fees?)\b.*)?$",
     re.I,
 )
 BRACKET_SKU = re.compile(r"\[\s*((?:SKU[\s:\-]*)?[A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s*\]\s*$", re.I)
@@ -119,6 +120,16 @@ def _preamble_lines(
     return lines
 
 
+def _looks_like_address(line: str) -> bool:
+    """An address or PO box line. A company suffix makes it a name; an address word alone (as in
+    'Main Road Electrical Supplies') is not enough without a number or a comma."""
+    if COMPANY_SUFFIX.search(line):
+        return False
+    if ADDRESS_START.search(line):
+        return True
+    return bool(ADDRESS_WORD.search(line)) and bool(re.search(r"[\d,]", line))
+
+
 def _read_header(lines: list[str]) -> QuotationHeader:
     header = QuotationHeader()
     blob = "\n".join(line for line in lines if line)
@@ -128,7 +139,7 @@ def _read_header(lines: list[str]) -> QuotationHeader:
         if line
         and re.search(r"[^\W\d_]", line)
         and not NOT_A_NAME.search(line)
-        and not ADDRESS_LINE.search(line)
+        and not _looks_like_address(line)
         and len(line) <= 120
     ]
     suffixed = next((line for line in candidates[:8] if COMPANY_SUFFIX.search(line)), None)
