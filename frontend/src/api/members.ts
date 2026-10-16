@@ -19,7 +19,14 @@ function useMembersMutation<V>(fn: (vars: V) => Promise<unknown>) {
     mutationFn: fn,
     // The server decides (last-admin rule and so on), so always re-read the list afterwards,
     // success or failure.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: membersQueryOptions.queryKey }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: membersQueryOptions.queryKey });
+      // A role or status change can take effect on the very next request (the API reads it live),
+      // including for the person making it, so re-read who we are too.
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    // Passwords are not kept in the mutation cache after the call.
+    gcTime: 0,
   });
 }
 

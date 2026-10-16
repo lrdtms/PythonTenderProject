@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { ApiError } from "@/api/errors";
 import {
@@ -24,13 +24,21 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "reviewer", label: "Reviewer" },
 ];
 
-/** Server messages are already plain words; a 422 may carry field messages in details. */
+const BUTTON = "rounded border px-2 py-1 text-sm disabled:opacity-50";
+
+/** Server messages are already plain words; a 422 from the request schema carries
+ * details: [{field, message}], shown with the field name. */
 function errorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (Array.isArray(error.details)) {
       const messages = error.details
-        .map((d) => (typeof d === "object" && d !== null ? (d as { message?: unknown }).message : null))
-        .filter((m): m is string => typeof m === "string");
+        .map((d) => {
+          if (typeof d !== "object" || d === null) return null;
+          const { field, message } = d as { field?: unknown; message?: unknown };
+          if (typeof message !== "string") return null;
+          return typeof field === "string" && field ? `${field}: ${message}` : message;
+        })
+        .filter((m): m is string => m !== null);
       if (messages.length > 0) return messages.join(" ");
     }
     return error.message;
@@ -44,10 +52,18 @@ function CreateMember() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("estimator");
   const [password, setPassword] = useState("");
+  const [added, setAdded] = useState(false);
+
+  // Editing a field clears the previous outcome, so a stale message never sits beside new input.
+  const touch = () => {
+    if (added) setAdded(false);
+    if (create.isError) create.reset();
+  };
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (create.isPending) return;
+    setAdded(false);
     create.mutate(
       { name, email, role, password },
       {
@@ -55,6 +71,7 @@ function CreateMember() {
           setName("");
           setEmail("");
           setPassword("");
+          setAdded(true);
         },
       },
     );
@@ -64,12 +81,12 @@ function CreateMember() {
     <form onSubmit={submit} className="mb-8 space-y-3 rounded border border-zinc-300 p-4 dark:border-zinc-700" aria-label="Add a member">
       <h2 className="text-lg font-medium">Add a member</h2>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
-        <Field label="Email" type="email" required autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Field label="Temporary password" type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Field label="Name" required value={name} onChange={(e) => (touch(), setName(e.target.value))} />
+        <Field label="Email" type="email" required autoComplete="off" value={email} onChange={(e) => (touch(), setEmail(e.target.value))} />
+        <Field label="Temporary password" type="password" required autoComplete="new-password" value={password} onChange={(e) => (touch(), setPassword(e.target.value))} />
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium">Role</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
+          <select value={role} onChange={(e) => (touch(), setRole(e.target.value as Role))} className="rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
             {ROLES.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
@@ -84,7 +101,7 @@ function CreateMember() {
           {errorText(create.error)}
         </p>
       ) : null}
-      {create.isSuccess ? <p role="status" className="text-sm text-green-700 dark:text-green-300">Member added.</p> : null}
+      {added ? <p role="status" className="text-sm text-green-700 dark:text-green-300">Member added.</p> : null}
       <button type="submit" disabled={create.isPending} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
         {create.isPending ? "Adding…" : "Add member"}
       </button>
@@ -92,16 +109,35 @@ function CreateMember() {
   );
 }
 
+type Outcome = { kind: "error" | "ok"; text: string } | null;
+
 function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
   const changeRole = useChangeRole();
   const setStatus = useSetMemberStatus();
   const reset = useResetPassword();
-  const [confirming, setConfirming] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome>(null);
+  const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
+  const [pendingRole, setPendingRole] = useState<Role | null>(null);
   const [resetting, setResetting] = useState(false);
   const [password, setPassword] = useState("");
+  const deactivateRef = useRef<HTMLButtonElement>(null);
+  const resetRef = useRef<HTMLButtonElement>(null);
   const active = member.status === "active";
   const busy = changeRole.isPending || setStatus.isPending || reset.isPending;
-  const error = changeRole.error ?? setStatus.error ?? reset.error;
+  const fail = (error: unknown) => setOutcome({ kind: "error", text: errorText(error) });
+
+  const applyRole = (role: Role) => {
+    setOutcome(null);
+    setPendingRole(null);
+    changeRole.mutate({ id: member.membership_id, role }, { onError: fail });
+  };
+  const closeReset = () => {
+    setPassword("");
+    setResetting(false);
+    requestAnimationFrame(() => resetRef.current?.focus());
+  };
+  // Giving up your own admin role cannot be undone by you, so it needs a second step.
+  const losesAdmin = (role: Role) => isSelf && member.role === "admin" && role !== "admin";
 
   return (
     <li className="space-y-2 py-3">
@@ -118,7 +154,11 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
           <select
             value={member.role}
             disabled={busy}
-            onChange={(e) => changeRole.mutate({ id: member.membership_id, role: e.target.value as Role })}
+            onChange={(e) => {
+              const role = e.target.value as Role;
+              if (losesAdmin(role)) setPendingRole(role);
+              else applyRole(role);
+            }}
             className="rounded border bg-transparent p-1"
           >
             {ROLES.map((r) => (
@@ -131,22 +171,45 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
         <StatusBadge tone={active ? "success" : "neutral"} label={active ? "Active" : "Deactivated"} />
         <div className="flex gap-2">
           {active ? (
-            confirming ? (
+            confirmingDeactivate ? (
               <>
                 <button
                   type="button"
+                  autoFocus
                   disabled={busy}
-                  onClick={() => setStatus.mutate({ id: member.membership_id, active: false }, { onSettled: () => setConfirming(false) })}
-                  className="rounded border px-2 py-1 text-sm disabled:opacity-50"
+                  aria-label={`Confirm deactivate ${member.name}`}
+                  onClick={() => {
+                    setOutcome(null);
+                    setStatus.mutate(
+                      { id: member.membership_id, active: false },
+                      { onError: fail, onSettled: () => setConfirmingDeactivate(false) },
+                    );
+                  }}
+                  className={BUTTON}
                 >
                   Confirm deactivate
                 </button>
-                <button type="button" onClick={() => setConfirming(false)} className="rounded border px-2 py-1 text-sm">
+                <button
+                  type="button"
+                  aria-label={`Cancel deactivate ${member.name}`}
+                  onClick={() => {
+                    setConfirmingDeactivate(false);
+                    requestAnimationFrame(() => deactivateRef.current?.focus());
+                  }}
+                  className={BUTTON}
+                >
                   Cancel
                 </button>
               </>
             ) : (
-              <button type="button" disabled={busy} onClick={() => setConfirming(true)} className="rounded border px-2 py-1 text-sm disabled:opacity-50">
+              <button
+                ref={deactivateRef}
+                type="button"
+                disabled={busy}
+                aria-label={`Deactivate ${member.name}`}
+                onClick={() => setConfirmingDeactivate(true)}
+                className={BUTTON}
+              >
                 Deactivate
               </button>
             )
@@ -154,35 +217,75 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
             <button
               type="button"
               disabled={busy}
-              onClick={() => setStatus.mutate({ id: member.membership_id, active: true })}
-              className="rounded border px-2 py-1 text-sm disabled:opacity-50"
+              aria-label={`Reactivate ${member.name}`}
+              onClick={() => {
+                setOutcome(null);
+                setStatus.mutate({ id: member.membership_id, active: true }, { onError: fail });
+              }}
+              className={BUTTON}
             >
               Reactivate
             </button>
           )}
-          <button type="button" disabled={busy} onClick={() => setResetting((v) => !v)} className="rounded border px-2 py-1 text-sm disabled:opacity-50">
+          <button
+            ref={resetRef}
+            type="button"
+            disabled={busy}
+            aria-expanded={resetting}
+            aria-label={`Reset password for ${member.name}`}
+            onClick={() => (resetting ? closeReset() : setResetting(true))}
+            className={BUTTON}
+          >
             Reset password
           </button>
         </div>
       </div>
+      {confirmingDeactivate && isSelf ? (
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          This is your own account. Deactivating it signs you out and you will not be able to sign in again until an admin reactivates it.
+        </p>
+      ) : null}
+      {pendingRole ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <p className="text-amber-800 dark:text-amber-300">
+            Change your own role to {ROLES.find((r) => r.value === pendingRole)?.label}? You will lose admin access and cannot undo this yourself.
+          </p>
+          <button type="button" autoFocus disabled={busy} onClick={() => applyRole(pendingRole)} className={BUTTON}>
+            Change my role
+          </button>
+          <button type="button" onClick={() => setPendingRole(null)} className={BUTTON}>
+            Keep admin
+          </button>
+        </div>
+      ) : null}
       {resetting ? (
         <form
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (busy) return;
+            setOutcome(null);
             reset.mutate(
               { id: member.membership_id, password },
               {
                 onSuccess: () => {
-                  setPassword("");
-                  setResetting(false);
+                  closeReset();
+                  setOutcome({ kind: "ok", text: "Password changed and sessions ended." });
                 },
+                onError: fail,
               },
             );
           }}
         >
-          <Field label={`New password for ${member.name}`} type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Field
+            label={`New password for ${member.name}`}
+            type="password"
+            required
+            autoFocus
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
           <button type="submit" disabled={busy} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
             Set password
           </button>
@@ -191,14 +294,12 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
           </p>
         </form>
       ) : null}
-      {reset.isSuccess && !resetting ? (
-        <p role="status" className="text-sm text-green-700 dark:text-green-300">
-          Password changed and sessions ended.
-        </p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
-          {errorText(error)}
+      {outcome ? (
+        <p
+          role={outcome.kind === "error" ? "alert" : "status"}
+          className={`text-sm ${outcome.kind === "error" ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"}`}
+        >
+          {outcome.text}
         </p>
       ) : null}
     </li>
@@ -212,7 +313,7 @@ export function MembersView() {
 
   if (!canManage) {
     return (
-      <div role="alert">
+      <div>
         <h1 className="mb-2 text-2xl font-semibold tracking-tight">Members</h1>
         <p>Only an admin can manage members.</p>
       </div>
