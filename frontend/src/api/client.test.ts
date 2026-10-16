@@ -60,6 +60,29 @@ describe("requests", () => {
     expect(withQuery("/a", { skip: undefined })).toBe("/a");
   });
 
+  it("returns undefined for an empty 200 and for 205, parses a 202 JSON body", async () => {
+    fetchMock.mockResolvedValueOnce(respond(200));
+    await expect(get("/api/v1/x")).resolves.toBeUndefined();
+    fetchMock.mockResolvedValueOnce(respond(205));
+    await expect(post("/api/v1/x")).resolves.toBeUndefined();
+    fetchMock.mockResolvedValueOnce(respond(202, { queued: true }));
+    await expect(post("/api/v1/x")).resolves.toEqual({ queued: true });
+  });
+
+  it("turns a 200 with a non-JSON body into an invalid_response ApiError", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>spa</html>", { status: 200 }));
+    const error = (await get("/api/v1/x").catch((e: unknown) => e)) as ApiError;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 200, code: "invalid_response" });
+  });
+
+  it("rethrows an aborted fetch untouched", async () => {
+    const abort = new DOMException("x", "AbortError");
+    fetchMock.mockRejectedValue(abort);
+    const error = await get("/api/v1/x").catch((e: unknown) => e);
+    expect(error).toBe(abort);
+  });
+
   it("returns undefined for 204", async () => {
     fetchMock.mockResolvedValue(respond(204));
     await expect(post<void>("/api/v1/auth/logout")).resolves.toBeUndefined();
@@ -124,6 +147,10 @@ class FakeXhr {
   upload: { onprogress?: (e: { lengthComputable: boolean; loaded: number; total: number }) => void } = {};
   onload?: () => void;
   onerror?: () => void;
+  onabort?: () => void;
+  ontimeout?: () => void;
+  aborted = false;
+  sent = false;
   status = 0;
   responseText = "";
   method = "";
@@ -140,7 +167,12 @@ class FakeXhr {
     this.headers[name] = value;
   }
   send(body: unknown) {
+    this.sent = true;
     this.body = body;
+  }
+  abort() {
+    this.aborted = true;
+    this.onabort?.();
   }
 }
 
@@ -177,5 +209,54 @@ describe("upload", () => {
     const offline = upload("/api/v1/x", file, {});
     FakeXhr.last.onerror?.();
     await expect(offline).rejects.toMatchObject({ status: 0, code: "network_error" });
+  });
+
+  it("rejects with an AbortError when the signal aborts, and calls xhr.abort", async () => {
+    const controller = new AbortController();
+    const pending = upload("/api/v1/x", new File(["x"], "t.pdf"), {}, undefined, controller.signal);
+    const xhr = FakeXhr.last;
+    controller.abort();
+    expect(xhr.aborted).toBe(true);
+    const error = await pending.catch((e: unknown) => e);
+    expect((error as Error).name).toBe("AbortError");
+  });
+
+  it("rejects without sending when the signal is already aborted", async () => {
+    FakeXhr.last = undefined as unknown as FakeXhr;
+    const controller = new AbortController();
+    controller.abort();
+    const error = await upload("/api/v1/x", new File(["x"], "t.pdf"), {}, undefined, controller.signal).catch(
+      (e: unknown) => e,
+    );
+    expect((error as Error).name).toBe("AbortError");
+    expect(FakeXhr.last?.sent ?? false).toBe(false);
+  });
+
+  it("reports a timeout as a network error", async () => {
+    const pending = upload("/api/v1/x", new File(["x"], "t.pdf"), {});
+    FakeXhr.last.ontimeout?.();
+    await expect(pending).rejects.toMatchObject({ status: 0, code: "network_error" });
+  });
+
+  it("rejects invalid_response for a 2xx garbage body and resolves undefined for an empty one", async () => {
+    const file = new File(["x"], "t.pdf");
+    const garbage = upload("/api/v1/x", file, {});
+    FakeXhr.last.status = 200;
+    FakeXhr.last.responseText = "<html>";
+    FakeXhr.last.onload?.();
+    await expect(garbage).rejects.toMatchObject({ code: "invalid_response" });
+    const empty = upload("/api/v1/x", file, {});
+    FakeXhr.last.status = 201;
+    FakeXhr.last.responseText = "";
+    FakeXhr.last.onload?.();
+    await expect(empty).resolves.toBeUndefined();
+  });
+
+  it("rejects http_error for an error response with a non-JSON body", async () => {
+    const pending = upload("/api/v1/x", new File(["x"], "t.pdf"), {});
+    FakeXhr.last.status = 502;
+    FakeXhr.last.responseText = "<html>bad gateway</html>";
+    FakeXhr.last.onload?.();
+    await expect(pending).rejects.toMatchObject({ status: 502, code: "http_error" });
   });
 });

@@ -27,6 +27,24 @@ function toApiError(status: number, statusText: string, parsed: unknown): ApiErr
   );
 }
 
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { name?: unknown }).name === "AbortError";
+}
+
+function invalidResponse(status: number): ApiError {
+  return new ApiError(status, "invalid_response", "The server sent an unexpected response.");
+}
+
+/** Parse a successful body: empty -> undefined, non-JSON -> invalid_response ApiError. */
+function parseSuccess<T>(status: number, text: string): T {
+  if (status === 204 || status === 205 || text === "") return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw invalidResponse(status);
+  }
+}
+
 /** A JSON request to the same-origin API. Full paths, e.g. `/api/v1/me`. */
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
@@ -47,7 +65,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
       signal: options.signal,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (isAbortError(error)) throw error;
     throw networkError();
   }
   if (!response.ok) {
@@ -59,8 +77,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     }
     throw toApiError(response.status, response.statusText, parsed);
   }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  return parseSuccess<T>(response.status, await response.text());
 }
 
 export const get = <T>(path: string, query?: Query, signal?: AbortSignal) =>
@@ -75,8 +92,14 @@ export function upload<T>(
   file: File,
   fields: Record<string, string>,
   onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    const abortError = new DOMException("Aborted", "AbortError");
+    if (signal?.aborted) {
+      reject(abortError);
+      return;
+    }
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) form.append(key, value);
     form.append("file", file);
@@ -88,15 +111,25 @@ export function upload<T>(
       if (event.lengthComputable) onProgress?.(event.loaded / event.total);
     };
     xhr.onerror = () => reject(networkError());
+    xhr.ontimeout = () => reject(networkError());
+    xhr.onabort = () => reject(abortError);
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
     xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(parseSuccess<T>(xhr.status, xhr.responseText));
+        } catch (error) {
+          reject(error);
+        }
+        return;
+      }
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(xhr.responseText);
       } catch {
         parsed = null;
       }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(parsed as T);
-      else reject(toApiError(xhr.status, "", parsed));
+      reject(toApiError(xhr.status, "", parsed));
     };
     xhr.send(form);
   });
