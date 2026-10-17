@@ -896,3 +896,33 @@ def test_new_vetoes_are_off_when_vetoes_are_off() -> None:
     cfg = replace(m.DEFAULT, clear_vetoes=False, one_sided_word_veto=True)
     [s] = m.suggest([boq("LED downlight 10 W dimmable")], [quote("LED downlight 10 W")], config=cfg)
     assert "defining_word_missing" not in s.evidence["warnings"]
+
+
+def test_every_emitted_warning_code_is_listed() -> None:
+    from pathlib import Path
+
+    from tests.matching_eval import load_pack
+
+    emitted: set[str] = set()
+    strict = replace(m.DEFAULT, one_sided_word_veto=True)
+    pairs = [
+        *SUBSTITUTIONS_FLAT,
+        *NUMBER_PROBES,
+        *DEFINING_PROBES,
+        ("Widget alpha", "Widget beta x"),
+    ]
+    for b, q in pairs:
+        for cfg in (m.DEFAULT, strict):
+            for s in m.suggest(
+                [boq(b)], [quote(q, valid_until=date(2020, 1, 1))], date(2021, 1, 1), cfg
+            ):
+                emitted.update(s.evidence["warnings"])
+    for pack in sorted((Path(__file__).parent / "fixtures" / "packs").glob("pack0*")):
+        loaded = load_pack(pack)
+        for s in m.suggest(loaded.boq, loaded.quotes, loaded.closing, strict):
+            emitted.update(s.evidence["warnings"])
+    assert emitted <= set(m.EVIDENCE_WARNING_CODES), emitted - set(m.EVIDENCE_WARNING_CODES)
+    assert len(set(m.EVIDENCE_WARNING_CODES)) == len(m.EVIDENCE_WARNING_CODES)
+
+
+SUBSTITUTIONS_FLAT = [(b, q) for b, q, _u in SUBSTITUTIONS]

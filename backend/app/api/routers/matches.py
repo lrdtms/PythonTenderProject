@@ -138,7 +138,7 @@ def confirm_clear(tender_id: UUID, ctx: Ctx, session: DbSession):
         tender_id,
         set(quote_versions),
         {i.id for i in boq},
-        {i.id: i.reviewed_at for i in boq},
+        {i.id: i.reviewed_at for i in boq if i.review_status == "corrected"},
     )
 
 

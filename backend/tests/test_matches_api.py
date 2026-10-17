@@ -504,6 +504,16 @@ def test_bulk_confirm_skips_a_row_whose_quotation_item_was_edited_after_the_run(
     assert _decide(actor, edited["id"], "confirm").status_code == 200  # a person may still decide
 
 
+def test_bulk_confirm_still_confirms_rows_of_an_item_that_was_only_confirmed() -> None:
+    actor, tender_id = _matched_org("ma28@example.com")
+    reviewed, other = _bulk_candidates(actor, tender_id)[:2]
+    r = actor.client.post(f"{API}/quotation-items/{reviewed['quotation_item']['id']}/confirm")
+    assert r.status_code == 200, r.text
+    _bulk(actor, tender_id)
+    status = {s["id"]: s["status"] for s in _flat(_get(actor, tender_id, limit=500))}
+    assert status[reviewed["id"]] == status[other["id"]] == "confirmed"
+
+
 def test_bulk_confirm_skips_a_row_whose_boq_line_was_edited_after_the_run() -> None:
     actor, tender_id = _matched_org("ma22@example.com")
     candidates = _bulk_candidates(actor, tender_id)

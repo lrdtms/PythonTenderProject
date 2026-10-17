@@ -494,8 +494,16 @@ def confirm_clear(
     skipped = 0
     eligible = []
     for m, item, _quotation, _supplier in rows:
+        # only a content change makes a row stale; a plain confirm does not
         edited = max(
-            (t for t in (item.reviewed_at, reviewed.get(m.boq_item_id)) if t is not None),
+            (
+                t
+                for t in (
+                    item.reviewed_at if item.review_status == "corrected" else None,
+                    reviewed.get(m.boq_item_id),
+                )
+                if t is not None
+            ),
             default=None,
         )
         warnings = set((m.evidence or {}).get("warnings", ()))

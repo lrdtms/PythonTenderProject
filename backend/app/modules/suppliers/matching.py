@@ -57,6 +57,14 @@ class Suggestion:
     evidence: dict[str, Any]
 
 
+# Every warning code an evidence dict can carry (the frontend label table is checked against it).
+EVIDENCE_WARNING_CODES = (
+    "spec_conflict", "spec_multi_value", "unit_mismatch", "core_notation_differs",
+    "text_differs", "spec_one_sided", "accessory_word", "negation", "number_differs",
+    "defining_word_missing", "word_one_sided", "quote_shared", "quote_expires_before_closing",
+)  # fmt: skip
+
+
 # --- spec tokens -------------------------------------------------------------------------------
 
 # A value must not be glued to a preceding word or digit (`mcb20a` is a code, not 20 A); `2x58w`
