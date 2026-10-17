@@ -88,3 +88,17 @@ def seed_review_rows(actor: Actor, version_id: str, job_id: str) -> dict[str, st
                 )
             ),
         }
+
+
+def seed_supplier_rows(actor: Actor) -> dict[str, str]:
+    """Give an organisation one supplier (no quotation), for sweeps of the supplier routes."""
+    from uuid import UUID
+
+    from app.db.session import session_scope
+    from app.kernel import OrgContext, Role
+    from app.modules.suppliers.repo import SupplierRepo
+
+    ctx = OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
+    with session_scope() as s:
+        supplier, _ = SupplierRepo(s, ctx).get_or_create("Seeded B Supplies", "seeded b supplies")
+        return {"supplier_id": str(supplier.id)}

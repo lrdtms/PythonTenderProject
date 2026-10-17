@@ -203,6 +203,20 @@ def test_repositories_never_return_another_organisations_rows() -> None:
             repos["RequirementRepo"].version_id_of(b_ids["RequirementRepo"][0])
         assert repos["RequirementRepo"].fresh(b_ids["RequirementRepo"][0]) is None
         assert repos["SupplierRepo"].by_key("bravo supplies") is None
+        supplier_b = b_ids["SupplierRepo"][0]
+        listed = repos["SupplierRepo"].list_with_counts()
+        assert listed and not {x.id for x, _ in listed} & set(b_ids["SupplierRepo"])
+        assert repos["SupplierRepo"].quotation_count(supplier_b) == 0
+        assert repos["SupplierRepo"].version_ids(supplier_b) == set()
+        assert repos["SupplierRepo"].confirmed_boq_ids(supplier_b) == set()
+        mine = repos["SupplierRepo"].find()[0]
+        theirs = s.get(suppliers_model, supplier_b)
+        old_name, old_key = mine.name, mine.name_key
+        repos["SupplierRepo"].rename(mine, "Renamed", theirs.name_key)  # B's key is no clash for C
+        repos["SupplierRepo"].rename(mine, old_name, old_key)
+        created, was_created = repos["SupplierRepo"].get_or_create("X", theirs.name_key)
+        assert was_created and created.organisation_id == ctx_c.organisation_id
+        assert created.id != supplier_b
         assert repos["QuotationRepo"].for_version(version_b) is None
         quotation_b = b_ids["QuotationRepo"][0]
         assert repos["QuotationItemRepo"].for_quotation(quotation_b) == []

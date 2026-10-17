@@ -73,6 +73,14 @@ def _guard(session: Session, ctx: OrgContext, version_id: UUID) -> None:
         raise ProcessingFailed("TENDER_ARCHIVED", "The tender is archived.")
 
 
+def _lock_tender(session: Session, ctx: OrgContext, version_id: UUID) -> None:
+    """First lock of an extraction that touches matches: the order is tender, then runs, so a
+    match decision or merge (which hold the tender lock) cannot interleave with it."""
+    suppliers.lock_tender(
+        session, ctx, documents.processing_info(session, ctx, version_id).tender_id
+    )
+
+
 def _cap(rows: list[dict[str, Any]], warnings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     limit = get_settings().extract_max_rows_per_run
     if len(rows) > limit:
@@ -101,6 +109,7 @@ def extract_boq(
     warnings = list(result.warnings)
     rows = _cap([c.as_row() for c in result.items], warnings)
     run = pipeline.run_for_job(session, ctx, job.id, "boq")
+    _lock_tender(session, ctx, job.subject_id)
     pipeline.lock_runs(session, ctx, job.subject_id, "boq")
     stored = estimating.replace_unreviewed(
         session, ctx, job.subject_id, run.id, rows,
@@ -177,6 +186,7 @@ def extract_quotation(
     warnings += result.warnings
     rows = _cap([c.as_row() for c in result.items], warnings)
     run = pipeline.run_for_job(session, ctx, job.id, "quotation")
+    _lock_tender(session, ctx, job.subject_id)
     pipeline.lock_runs(session, ctx, job.subject_id, "quotation")
     filename = documents.get_version(session, ctx, job.subject_id).filename
     stored = suppliers.store_quotation(

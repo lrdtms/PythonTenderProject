@@ -11,12 +11,19 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.kernel import OrgContext
+from app.kernel import Conflict, OrgContext, Permission, ValidationFailed
+from app.modules.audit import public as audit
 
 from . import matching
 from .models import Quotation, Supplier
 from .repo import MatchRepo, QuotationItemRepo, QuotationRepo, SupplierRepo
-from .schemas import MatchResult, StoreResult
+from .schemas import (
+    MatchResult,
+    StoreResult,
+    SupplierCreate,
+    SupplierDTO,
+    SupplierPatch,
+)
 
 _SUFFIXES = re.compile(r"\b(pty|proprietary|ltd|limited|cc|inc|co|company|\(pty\))\b\.?", re.I)
 
@@ -85,12 +92,9 @@ def store_quotation(
         name = header_name or fallback_name or "Unknown supplier"
         if header_name:
             key = normalise_name(name) or name.lower().strip() or f"unknown supplier {version_id}"
-            supplier = suppliers_repo.by_key(key)
         else:  # a file name says nothing about identity: never merge on it
-            key, supplier = f"file:{version_id}", None
-        if supplier is None:
-            supplier = suppliers_repo.add(Supplier(name=_display(name)[:200], name_key=key[:200]))
-            created = True
+            key = f"file:{version_id}"
+        supplier, created = suppliers_repo.get_or_create(_display(name)[:200], key[:200])
         supplier_id = supplier.id
 
     fields = {
@@ -192,3 +196,90 @@ def match_tender(
 def decided_boq_item_ids(session: Session, ctx: OrgContext) -> set[UUID]:
     """BoQ lines that a person has confirmed or rejected a match for."""
     return MatchRepo(session, ctx).decided_boq_item_ids()
+
+
+def _key(name: str) -> str:
+    return (normalise_name(name) or name.lower().strip())[:200]
+
+
+def _dto(supplier: Supplier, count: int) -> SupplierDTO:
+    return SupplierDTO(
+        id=supplier.id, name=supplier.name, notes=supplier.notes,
+        quotation_count=count, created_at=supplier.created_at,
+    )  # fmt: skip
+
+
+def list_suppliers(session: Session, ctx: OrgContext) -> list[SupplierDTO]:
+    ctx.require(Permission.READ)
+    return [_dto(s, n) for s, n in SupplierRepo(session, ctx).list_with_counts()]
+
+
+def get_supplier(session: Session, ctx: OrgContext, supplier_id: UUID) -> SupplierDTO:
+    ctx.require(Permission.READ)
+    repo = SupplierRepo(session, ctx)
+    return _dto(repo.get(supplier_id), repo.quotation_count(supplier_id))
+
+
+def create_supplier(session: Session, ctx: OrgContext, body: SupplierCreate) -> SupplierDTO:
+    ctx.require(Permission.REVIEW_DATA)
+    supplier, created = SupplierRepo(session, ctx).get_or_create(body.name, _key(body.name))
+    if not created:
+        raise Conflict("A supplier with this name already exists.", code="supplier_exists")
+    supplier.notes = body.notes
+    session.flush()
+    return _dto(supplier, 0)
+
+
+def update_supplier(
+    session: Session, ctx: OrgContext, supplier_id: UUID, body: SupplierPatch
+) -> SupplierDTO:
+    ctx.require(Permission.REVIEW_DATA)
+    repo = SupplierRepo(session, ctx)
+    supplier = repo.get(supplier_id)
+    if "name" in body.model_fields_set and body.name is not None:
+        repo.rename(supplier, body.name, _key(body.name))
+    if "notes" in body.model_fields_set:
+        supplier.notes = body.notes
+    session.flush()
+    return _dto(supplier, repo.quotation_count(supplier_id))
+
+
+def tenders_of_supplier(session: Session, ctx: OrgContext, supplier_id: UUID) -> set[UUID]:
+    """Document version ids of the supplier's quotations, so a caller can resolve and lock the
+    affected tenders."""
+    ctx.require(Permission.REVIEW_DATA)
+    repo = SupplierRepo(session, ctx)
+    repo.get(supplier_id)
+    return repo.version_ids(supplier_id)
+
+
+def merge_suppliers(
+    session: Session, ctx: OrgContext, source_id: UUID, into_id: UUID
+) -> SupplierDTO:
+    """Call with the affected tenders' locks held. Moves every quotation and match of the source
+    to the target and deletes the source, or changes nothing (409 `match_conflict`) when a BoQ
+    line would end up with two confirmed matches for the target."""
+    ctx.require(Permission.REVIEW_DATA)
+    repo = SupplierRepo(session, ctx)
+    source = repo.get(source_id)
+    if source_id == into_id:
+        raise ValidationFailed("Choose a different supplier.")
+    target = repo.get(into_id)
+    if repo.confirmed_boq_ids(source_id) & repo.confirmed_boq_ids(into_id):
+        raise Conflict(
+            "Both suppliers have a confirmed match for the same BoQ line. "
+            "Reject one of them before merging.",
+            code="match_conflict",
+        )
+    repo.move_to(source_id, into_id)
+    repo.remove(source)
+    audit.record(
+        session, ctx, "supplier", into_id, "supplier_merged",
+        {"source_id": str(source_id), "into_id": str(into_id)},
+    )  # fmt: skip
+    return _dto(target, repo.quotation_count(into_id))
+
+
+def lock_tender(session: Session, ctx: OrgContext, tender_id: UUID) -> None:
+    """Serialise matching, match decisions, extraction and merges for one tender."""
+    MatchRepo(session, ctx).lock_tender(tender_id)

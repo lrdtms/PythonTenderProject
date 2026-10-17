@@ -25,7 +25,7 @@ from app.modules.tenders import models as _tenders_models  # noqa: F401
 from app.worker import handlers
 from app.worker.runner import process_one
 from tests.conftest import add_member, make_pdf, make_tender, register, upload
-from tests.review_helpers import seed_review_rows
+from tests.review_helpers import seed_review_rows, seed_supplier_rows
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 
@@ -56,6 +56,10 @@ REQUESTS = {
     ("PATCH", "/api/v1/boq-items/{boq_item_id}"): lambda: {"json": {"description": "hijacked"}},
     ("PATCH", "/api/v1/requirements/{requirement_id}"): lambda: {
         "json": {"description": "hijacked"}
+    },
+    ("PATCH", "/api/v1/suppliers/{supplier_id}"): lambda: {"json": {"notes": "hijacked"}},
+    ("POST", "/api/v1/suppliers/{supplier_id}/merge"): lambda: {
+        "json": {"into_id": "00000000-0000-0000-0000-000000000001"}
     },
 }
 SEARCH_PARAMS = {("GET", "/api/v1/tenders/{tender_id}/search"): lambda: {"params": {"q": "secret"}}}
@@ -93,6 +97,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "membership_id": membership_b,
         "page_number": 1,
         **seeded,
+        **seed_supplier_rows(org_b),
     }
     forbidden = (
         "B-only secret",

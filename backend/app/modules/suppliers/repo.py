@@ -6,9 +6,11 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import insert, select, text
+from sqlalchemy import func, insert, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.scoped import ScopedRepository
+from app.kernel import Conflict
 
 from .models import MatchSuggestion, Quotation, QuotationItem, Supplier
 
@@ -18,6 +20,89 @@ class SupplierRepo(ScopedRepository[Supplier]):
 
     def by_key(self, name_key: str) -> Supplier | None:
         return self.session.scalar(self._select().where(Supplier.name_key == name_key))
+
+    def get_or_create(self, name: str, name_key: str) -> tuple[Supplier, bool]:
+        """Race-safe: a concurrent creator of the same key makes this call return its row."""
+        stmt = (
+            pg_insert(Supplier)
+            .values(organisation_id=self.ctx.organisation_id, name=name, name_key=name_key)
+            .on_conflict_do_nothing(index_elements=["organisation_id", "name_key"])
+            .returning(Supplier.id)
+        )
+        inserted = self.session.execute(stmt).scalar_one_or_none()
+        supplier = self.by_key(name_key)
+        if supplier is None:  # unreachable: the insert or a committed twin made it
+            raise RuntimeError("supplier vanished after get_or_create")
+        return supplier, inserted is not None
+
+    def list_with_counts(self) -> list[tuple[Supplier, int]]:
+        count = func.count(Quotation.id)
+        stmt = (
+            select(Supplier, count)
+            .outerjoin(
+                Quotation,
+                (Quotation.organisation_id == Supplier.organisation_id)
+                & (Quotation.supplier_id == Supplier.id),
+            )
+            .where(Supplier.organisation_id == self.ctx.organisation_id)
+            .group_by(Supplier.id)
+            .order_by(func.lower(Supplier.name), Supplier.id)
+        )
+        return [(s, int(n)) for s, n in self.session.execute(stmt).all()]
+
+    def quotation_count(self, supplier_id: UUID) -> int:
+        stmt = select(func.count(Quotation.id)).where(
+            Quotation.organisation_id == self.ctx.organisation_id,
+            Quotation.supplier_id == supplier_id,
+        )
+        return int(self.session.scalar(stmt) or 0)
+
+    def rename(self, supplier: Supplier, name: str, key: str) -> Supplier:
+        clash = self.session.scalar(
+            select(Supplier.id).where(
+                Supplier.organisation_id == self.ctx.organisation_id,
+                Supplier.name_key == key,
+                Supplier.id != supplier.id,
+            )
+        )
+        if clash is not None:
+            raise Conflict("A supplier with this name already exists.", code="supplier_exists")
+        supplier.name, supplier.name_key = name, key
+        self.session.flush()
+        return supplier
+
+    def version_ids(self, supplier_id: UUID) -> set[UUID]:
+        stmt = select(Quotation.document_version_id).where(
+            Quotation.organisation_id == self.ctx.organisation_id,
+            Quotation.supplier_id == supplier_id,
+        )
+        return set(self.session.scalars(stmt))
+
+    def confirmed_boq_ids(self, supplier_id: UUID) -> set[UUID]:
+        stmt = select(MatchSuggestion.boq_item_id).where(
+            MatchSuggestion.organisation_id == self.ctx.organisation_id,
+            MatchSuggestion.supplier_id == supplier_id,
+            MatchSuggestion.status == "confirmed",
+        )
+        return set(self.session.scalars(stmt))
+
+    def move_to(self, source_id: UUID, target_id: UUID) -> None:
+        """Re-point the source supplier's quotations and matches at the target."""
+        org = self.ctx.organisation_id
+        self.session.execute(
+            update(Quotation)
+            .where(Quotation.organisation_id == org, Quotation.supplier_id == source_id)
+            .values(supplier_id=target_id)
+        )
+        self.session.execute(
+            update(MatchSuggestion)
+            .where(MatchSuggestion.organisation_id == org, MatchSuggestion.supplier_id == source_id)
+            .values(supplier_id=target_id)
+        )
+
+    def remove(self, supplier: Supplier) -> None:
+        self.session.delete(supplier)
+        self.session.flush()
 
 
 class QuotationRepo(ScopedRepository[Quotation]):
