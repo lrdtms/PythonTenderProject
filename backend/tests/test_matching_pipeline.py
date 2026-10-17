@@ -139,4 +139,18 @@ def test_uploads_in_a_burst_queue_one_active_matching_job() -> None:
         steps += 1
         active = [j for j in _match_jobs(tender_id) if j.status in ("queued", "running")]
         assert len(active) <= 1
-    assert steps and all(j.status == "succeeded" for j in _match_jobs(tender_id))
+    found = _match_jobs(tender_id)
+    assert steps and all(j.status == "succeeded" for j in found)
+    # several triggers ran (each finished extraction asks for a match) yet at most one match job
+    # was ever active; the final suggestions cover both quotations' suppliers (all inputs seen)
+    with session_scope() as s:
+        extracted = s.scalar(
+            select(func.count())
+            .select_from(Job)
+            .where(Job.job_type.like("extract_%"), Job.status == "succeeded")
+        )
+    assert extracted > 1 and found
+    with session_scope() as s:
+        suppliers_seen = set(s.scalars(select(MatchSuggestion.supplier_id).distinct()))
+        quotations = s.scalar(select(func.count(func.distinct(Quotation.supplier_id))))
+    assert quotations == len(QUOTES) and len(suppliers_seen) == len(QUOTES)

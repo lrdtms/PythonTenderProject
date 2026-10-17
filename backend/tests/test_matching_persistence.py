@@ -60,19 +60,18 @@ def test_a_rerun_replaces_suggested_rows_and_keeps_decided_ones() -> None:
         _run(qc)
         first = _rows(qc, "suggested")
         old_ids = {r.id for r in first}
-        confirmed, rejected = first[0], first[1] if len(first) > 1 else None
+        assert len(first) >= 2  # the fixture is deterministic
+        confirmed, rejected = first[0], first[1]
         confirmed.status = "confirmed"
-        if rejected is not None:
-            rejected.status = "rejected"
+        rejected.status = "rejected"
         qc.session.flush()
         result = _run(qc)
-        assert result.kept_decided == (2 if rejected is not None else 1)
+        assert result.kept_decided == 2
         assert result.removed_suggested == len(first) - result.kept_decided
         new = _rows(qc, "suggested")
         assert not {r.id for r in new} & old_ids
         assert {r.id for r in _rows(qc, "confirmed")} == {confirmed.id}
-        if rejected is not None:
-            assert {r.id for r in _rows(qc, "rejected")} == {rejected.id}
+        assert {r.id for r in _rows(qc, "rejected")} == {rejected.id}
 
 
 def test_decided_pairs_and_confirmed_slots_are_not_suggested_again() -> None:
@@ -89,12 +88,13 @@ def test_decided_pairs_and_confirmed_slots_are_not_suggested_again() -> None:
             r for r in after
             if r.boq_item_id == target.boq_item_id and r.supplier_id == target.supplier_id
         ]  # fmt: skip
-        if any(o.supplier_id != target.supplier_id for o in others):
-            assert [
-                r for r in after
-                if r.boq_item_id == target.boq_item_id and r.supplier_id != target.supplier_id
-            ]  # fmt: skip
+        assert any(o.supplier_id != target.supplier_id for o in others)  # a second supplier
+        assert [
+            r for r in after
+            if r.boq_item_id == target.boq_item_id and r.supplier_id != target.supplier_id
+        ]  # fmt: skip
         # a rejected pair is never suggested again
+        assert after
         pair = (after[0].boq_item_id, after[0].quotation_item_id)
         after[0].status = "rejected"
         qc.session.flush()
@@ -113,8 +113,9 @@ def test_rejected_items_missing_boq_and_other_versions_are_ignored() -> None:
         qc.session.flush()
         assert _run(qc, versions=[qc.versions[0]]).suggested == 0
         # a BoQ line that is not passed is ignored
-        _run(qc, versions=[qc.versions[1]], boq=_inputs(qc)[:1])
-        assert {r.boq_item_id for r in _rows(qc, "suggested")} <= {_boq(qc)[0].id}
+        result = _run(qc, versions=[qc.versions[1]], boq=_inputs(qc)[:1])
+        assert result.suggested > 0
+        assert {r.boq_item_id for r in _rows(qc, "suggested")} == {_boq(qc)[0].id}
 
 
 def test_decided_boq_item_ids_returns_only_decided_lines() -> None:

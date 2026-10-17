@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from app.modules.suppliers import matching as m
-from app.modules.suppliers.matching_config import MatchConfig
+from app.modules.suppliers.matching_config import ACCESSORY_WORDS, MatchConfig
 
 SUP_A, SUP_B = uuid4(), uuid4()
 
@@ -371,7 +373,7 @@ def test_shared_spec_number_alone_is_not_a_code_or_a_clear_match() -> None:
 
 
 def test_genuine_pair_with_the_same_spec_stays_clear() -> None:
-    [s] = m.suggest([boq("Isolator switch, 63 A")], [quote("Isolator switch, 63 A, IP65")])
+    [s] = m.suggest([boq("Isolator switch, 63 A")], [quote("Isolator switch, 63 A, heavy duty")])
     assert s.classification == "clear" and s.evidence["signals"]["text"] >= m.DEFAULT.clear_text_min
 
 
@@ -499,4 +501,198 @@ def test_a_multi_value_pair_is_never_clear(boqs: list[str], quotes: list[str]) -
     ]
     for s in m.suggest(lines, qs):
         if "spec_multi_value" in s.evidence["warnings"]:
+            assert s.classification != "clear"
+
+
+# --- final-review vetoes: a pair differing in something the spec parser does not read ----------
+
+# (BoQ line, quote, unit): every one of these was `clear` before the vetoes.
+SUBSTITUTIONS = [
+    (
+        "Miniature circuit breaker, Type B, 1-pole, 20 A, 6 kA",
+        "Miniature circuit breaker, Type C, 1-pole, 20 A, 6 kA",
+        "no",
+    ),
+    ("20 A SP MCB 6 kA", "20 A TP MCB 6 kA", "no"),
+    ("Earth leakage unit 63 A 4-pole 30 mA", "Earth leakage unit 63 A 4-pole 300 mA", "no"),
+    ("LED downlight 10 W 4000K", "LED downlight 10 W 6500K", "no"),
+    ("Single phase distribution board 12-way", "Three phase distribution board 12-way", "no"),
+    ("Fluorescent fitting 2 x 58 W", "Fluorescent fitting 1 x 58 W", "no"),
+    ("Surge arrester Class 1, 40 kA", "Surge arrester Class 2, 40 kA", "no"),
+    ("Conduit 20 mm PVC light duty", "Conduit 20 mm PVC heavy duty", "m"),
+    ("Earth rod 16 mm copper bonded 1.5 m", "Earth rod 16 mm copper bonded 2.4 m", "no"),
+    ("Floodlight 1 500 W", "Floodlight 500 W", "no"),
+    (
+        "Cable tray 300 mm wide, hot dip galvanised",
+        "Cable tray lid 300 mm wide, hot dip galvanised",
+        "m",
+    ),
+    ("LED floodlight 400 W, IP65", "Mounting bracket for LED floodlight 400 W, IP65", "no"),
+    ("Socket outlet 16 A double flush", "Socket outlet cover plate 16 A double flush", "no"),
+    ("Isolator 63 A 3-pole", "Isolator 63 A 3-pole enclosure", "no"),
+    ("Conduit 20 mm PVC", "Conduit 20 mm PVC coupler", "m"),
+    ("4-core 16 mm2 PVC SWA PVC cable", "16 mm2 PVC SWA PVC cable", "m"),
+    ("3-core 16 mm2 PVC SWA PVC cable", "4x16mm2 PVC SWA PVC cable", "m"),
+    ("Fluorescent lamp 58 W, excluding fitting", "Fluorescent fitting 58 W, excluding lamp", "no"),
+]
+
+
+@pytest.mark.parametrize(("b", "q", "unit"), SUBSTITUTIONS)
+def test_a_substituted_product_is_never_clear(b: str, q: str, unit: str) -> None:
+    line, offer = boq(b, unit), quote(q, unit)
+    out = m.suggest([line], [offer])
+    if not out:  # a parsed conflict (1500 W vs 500 W) drops the pair altogether: also fine
+        assert m.spec_tokens(b) != m.spec_tokens(q)
+    assert all(s.classification != "clear" for s in out)
+    off = m.suggest([line], [offer], config=replace(m.DEFAULT, clear_vetoes=False))
+    assert [(s.quote_id, s.score, s.rank) for s in out] == [
+        (s.quote_id, s.score, s.rank) for s in off
+    ]
+    assert all(s.evidence["warnings"] for s in out), (b, q)
+
+
+GENUINE = [
+    ("Miniature circuit breaker, 1-pole, 20 A, 6 kA", "MCB, 1-pole, 20 A, 6 kA", "no"),
+    ("Isolator switch, 63 A", "Isolator switch, 63 A, heavy duty", "no"),
+    ("Supply and install LED floodlight 400 W IP65", "LED floodlight 400 W IP65", "no"),
+    ("Cable tray 300 mm wide, hot dip galv", "Cable tray 300 mm wide, hot dip galvanised", "m"),
+    ("Luminaire 36 W recessed", "Light fitting 36 W recessed", "no"),
+    ("Distribution board 12-way 3-phase 100 A", "DB 12-way 3-phase 100 A", "no"),
+    ("Cable tray 300 mm wide, galvanised", "Cable tray 300 mm wide, galvanised", "m"),
+]
+
+
+@pytest.mark.parametrize(("b", "q", "unit"), GENUINE)
+def test_a_genuine_pair_stays_clear(b: str, q: str, unit: str) -> None:
+    [s] = m.suggest([boq(b, unit)], [quote(q, unit)])
+    assert s.classification == "clear", s.evidence["warnings"]
+    assert s.evidence["warnings"] == []
+
+
+def _warnings(b: str, q: str) -> list[str]:
+    return m.suggest([boq(b)], [quote(q)])[0].evidence["warnings"]
+
+
+def test_text_differs_needs_extras_on_both_sides() -> None:
+    assert "text_differs" in _warnings("Widget alpha 10 A", "Widget beta 10 A")
+    assert "text_differs" not in _warnings("Widget alpha heavy 10 A", "Widget alpha 10 A")
+    assert "text_differs" not in _warnings("Widget alpha 10 A", "Widget alpha heavy 10 A")
+
+
+def test_text_differs_ignores_spec_spans_stopwords_and_aliases() -> None:
+    assert "text_differs" not in _warnings("Supply of MCB 20 A", "Miniature circuit breaker 20 A")
+    assert "text_differs" not in _warnings("Luminaire 36 W", "Light fitting 36 W")
+    assert "text_differs" not in _warnings("Tray galv 300 mm", "Tray galvanised 300 mm")
+
+
+def test_spec_one_sided_blocks_clear_both_ways() -> None:
+    for b, q, which in (
+        ("Isolator switch, 63 A", "Isolator switch, 63 A, IP65", "quote_only"),
+        ("Isolator switch, 63 A, IP65", "Isolator switch, 63 A", "boq_only"),
+    ):
+        [s] = m.suggest([boq(b)], [quote(q)])
+        assert s.evidence["spec"][which] == ["ip"]
+        assert "spec_one_sided" in s.evidence["warnings"]
+        assert s.classification == "ambiguous"
+
+
+def test_accessory_word_is_symmetric() -> None:
+    assert "accessory_word" in _warnings("Isolator 63 A", "Isolator enclosure 63 A")
+    assert "accessory_word" in _warnings("Isolator bracket 63 A", "Isolator 63 A")
+    assert "accessory_word" not in _warnings("Isolator bracket 63 A", "Isolator bracket 63 A")
+    assert "accessory_word" in _warnings("Cable glands 20 mm", "Cable 20 mm")  # plural stems
+
+
+@pytest.mark.parametrize("word", sorted(ACCESSORY_WORDS))
+def test_every_accessory_word_vetoes(word: str) -> None:
+    assert "accessory_word" in _warnings("Widget 10 A", f"Widget {word} 10 A")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Lamp 58 W, excluding fitting",
+        "Lamp 58 W excl. fitting",
+        "Lamp 58 W without fitting",
+        "Lamp 58 W except fitting",
+        "Lamp 58 W, not included fitting",
+        "Lamp 58 W less fitting",
+    ],
+)
+def test_negation_words_block_clear_from_either_side(text: str) -> None:
+    assert "negation" in _warnings(text, "Lamp 58 W")
+    assert "negation" in _warnings("Lamp 58 W", text)
+
+
+def test_negation_matches_whole_words_only() -> None:
+    assert "negation" not in _warnings("Lamp 58 W wireless", "Lamp 58 W")
+    assert "negation" not in _warnings("Lamp 58 W exceptional", "Lamp 58 W")
+
+
+def test_vetoes_are_clear_only_scores_and_ranks_do_not_change() -> None:
+    line = boq("Isolator 63 A 3-pole")
+    offers = [quote("Isolator 63 A 3-pole enclosure"), quote("Isolator 63 A 3-pole")]
+    on = m.suggest([line], offers)
+    off = m.suggest([line], offers, config=replace(m.DEFAULT, clear_vetoes=False))
+    assert [(s.quote_id, s.score, s.rank) for s in on] == [
+        (s.quote_id, s.score, s.rank) for s in off
+    ]
+
+
+# --- parsing improvements ----------------------------------------------------------------------
+
+
+def test_a_value_glued_to_a_preceding_word_is_not_a_spec() -> None:
+    assert m.spec_tokens("MCB20A breaker") == {}
+    assert m.spec_tokens("code ab63a") == {}
+    assert m.spec_tokens("MCB 20A")["a"] == {"20"}
+    assert m.spec_tokens("2.5mm2 cable")["mm2"] == {"2.5"}
+    assert m.spec_tokens("63 A isolator")["a"] == {"63"}
+    assert m.spec_tokens("(63A)")["a"] == {"63"}
+    assert m.spec_tokens("2x58W lamp")["w"] == {"58"}
+    assert m.spec_tokens("1,5 mm2")["mm2"] == {"1.5"}
+
+
+def test_space_grouped_thousands_before_a_unit_are_joined() -> None:
+    assert m.spec_tokens("Floodlight 1 500 W")["w"] == {"1500"}
+    assert m.spec_tokens("Trunking 1 200 mm")["mm"] == {"1200"}
+    assert m.spec_tokens("Floodlight 500 W")["w"] == {"500"}
+    assert m.spec_tokens("Floodlight 12 500 W")["w"] == {"12500"}
+    assert m.spec_tokens("3 phase 500 W")["w"] == {"500"}  # not a thousands group
+
+
+def test_n_by_s_reads_as_cores_and_cross_section() -> None:
+    for text in ("4x16mm2 SWA", "4 x 16 mm2 SWA", "4X16 mm² SWA"):
+        t = m.spec_tokens(text)
+        assert t["core"] == {"4c+e"} and t["mm2"] == {"16"}, text
+    assert m.spec_tokens("3 x 2.5 mm2")["mm2"] == {"2.5"}
+    assert m.spec_tokens("2 x 58 W")["w"] == {"58"} and "core" not in m.spec_tokens("2 x 58 W")
+    assert m.spec_tokens("4x16mm2")["core"] == m.spec_tokens("4-core 16 mm2")["core"]
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 4])
+def test_n_by_s_and_n_core_agree_on_the_core_kind(n: int) -> None:
+    [s] = m.suggest([boq(f"{n}-core 16 mm2 SWA cable", "m")], [quote(f"{n}x16mm2 SWA cable", "m")])
+    assert s.evidence["spec"]["conflicts"] == []
+
+
+@settings(max_examples=80, deadline=None)
+@given(st.lists(descs, min_size=1, max_size=3), st.lists(descs, min_size=1, max_size=6))
+def test_vetoes_never_add_clears_and_never_move_scores(boqs: list[str], quotes: list[str]) -> None:
+    lines = [m.BoqLine(UUID(int=i + 1), str(i), d, "no") for i, d in enumerate(boqs)]
+    qs = [
+        m.QuoteLine(UUID(int=100 + i), SUP_A, UUID(int=500), d, None, "no", None, None)
+        for i, d in enumerate(quotes)
+    ]
+    on = m.suggest(lines, qs)
+    off = m.suggest(lines, qs, config=replace(m.DEFAULT, clear_vetoes=False))
+    assert [(s.boq_id, s.quote_id, s.score, s.rank) for s in on] == [
+        (s.boq_id, s.quote_id, s.score, s.rank) for s in off
+    ]
+    clear_on = {(s.boq_id, s.quote_id) for s in on if s.classification == "clear"}
+    clear_off = {(s.boq_id, s.quote_id) for s in off if s.classification == "clear"}
+    assert clear_on <= clear_off
+    vetoes = {"text_differs", "spec_one_sided", "accessory_word", "negation"}
+    for s in on:
+        if vetoes & set(s.evidence["warnings"]):
             assert s.classification != "clear"

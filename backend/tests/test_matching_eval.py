@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from uuid import uuid4
@@ -10,12 +11,12 @@ from app.modules.suppliers import matching as m
 from tests.matching_eval import is_spec_exact
 
 
-def _clear_evidence(boq_desc: str, quote_desc: str) -> dict:
+def _clear_evidence(boq_desc: str, quote_desc: str, vetoes: bool = True) -> dict:
     line = m.BoqLine(uuid4(), "1", boq_desc, "no")
     q = m.QuoteLine(
         uuid4(), uuid4(), uuid4(), quote_desc, None, "no", Decimal("1"), date(2030, 1, 1)
     )
-    [s] = m.suggest([line], [q])
+    [s] = m.suggest([line], [q], config=replace(m.DEFAULT, clear_vetoes=vetoes))
     assert s.classification == "clear"
     return s.evidence
 
@@ -29,6 +30,7 @@ def test_a_clear_pair_with_an_unmatched_spec_kind_is_not_excused() -> None:
     ev = _clear_evidence(
         "Miniature circuit breaker, 1-pole, 20 A, 6 kA, DIN rail mounted",
         "Miniature circuit breaker, 1-pole, 20 A, DIN rail mounted",
+        vetoes=False,  # the one-sided spec veto would (rightly) stop this pair being clear
     )
     assert ev["spec"]["boq_only"] and not is_spec_exact(ev, 0.5)
 

@@ -39,8 +39,8 @@ class Pack:
     boq: list[matching.BoqLine]
     quotes: list[matching.QuoteLine]
     closing: date | None = None
-    # lower-cased SKU -> (quote line, ground-truth item)
-    by_sku: dict[str, tuple[matching.QuoteLine, dict]] = field(default_factory=dict)
+    # (quotation filename, lower-cased SKU) -> (quote line, ground-truth item)
+    by_sku: dict[tuple[str, str], tuple[matching.QuoteLine, dict]] = field(default_factory=dict)
 
 
 @dataclass
@@ -52,6 +52,7 @@ class EvalReport:
     per_pack: dict[str, dict]
     misses: list[str]
     exact_spec_on_trap_items: int = 0
+    clear_suggestions: int = 0
     excused: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)  # packs with no machine-readable BoQ
 
@@ -77,6 +78,14 @@ class EvalReport:
             f"overall: top_accuracy={self.top_accuracy:.3f} wrong_clear={self.wrong_clear} "
             f"unit_mismatch_unflagged={self.unit_mismatch_unflagged} "
             f"ambiguous_cases_clear={self.ambiguous_cases_clear}"
+        )
+        lines.append(
+            "items per pack (quote_items/expected_matches/clear_suggestions): "
+            + ", ".join(
+                f"{n} {r['quote_items']}/{r['expected_matches']}/{r['clear_suggestions']}"
+                for n, r in self.per_pack.items()
+            )
+            + f"; total clear suggestions={self.clear_suggestions}"
         )
         lines.append(
             f"exact_spec_on_trap_items={self.exact_spec_on_trap_items} (excused from the counts "
@@ -115,7 +124,7 @@ def load_pack(pack_dir: Path) -> Pack:
                     )
                 )
     quotes: list[matching.QuoteLine] = []
-    by_sku: dict[str, tuple[matching.QuoteLine, dict]] = {}
+    by_sku: dict[tuple[str, str], tuple[matching.QuoteLine, dict]] = {}
     for doc in truth["documents"]:
         if doc["kind"] != "quotation":
             continue
@@ -138,7 +147,7 @@ def load_pack(pack_dir: Path) -> Pack:
             quotes.append(line)
             sku = (item.sku or "").lower()
             if sku in truth_by_sku:
-                by_sku[sku] = (line, truth_by_sku[sku])
+                by_sku[(doc["filename"], sku)] = (line, truth_by_sku[sku])
     closing = None
     if truth.get("closing_at"):
         closing = date.fromisoformat(truth["closing_at"][:10])
@@ -154,7 +163,7 @@ def _score_pack(pack: Pack, config: MatchConfig) -> tuple[dict, list[str]]:
     scored = top_ok = wrong_clear = unit_unflagged = amb_clear = 0
     misses: list[str] = []
     excused_ids: list[str] = []
-    for sku, (line, gt) in sorted(pack.by_sku.items()):
+    for (_filename, sku), (line, gt) in sorted(pack.by_sku.items()):
         mine = by_quote.get(line.id, [])
         tag = f"{pack.name}/{sku.upper()}"
         expected = gt["expected_match"]
@@ -198,6 +207,14 @@ def _score_pack(pack: Pack, config: MatchConfig) -> tuple[dict, list[str]]:
         "wrong_clear": wrong_clear,
         "unit_mismatch_unflagged": unit_unflagged,
         "ambiguous_cases_clear": amb_clear,
+        "quote_items": sum(len(q["items"]) for q in pack.truth["quotations"]),
+        "expected_matches": sum(
+            1
+            for q in pack.truth["quotations"]
+            for i in q["items"]
+            if i["expected_match"] is not None and not i["ambiguous"]
+        ),
+        "clear_suggestions": sum(1 for s in suggestions if s.classification == "clear"),
         "exact_spec_on_trap_items": len(excused_ids),
         "excused": excused_ids,
     }
@@ -226,6 +243,7 @@ def evaluate(packs: Sequence[Path], config: MatchConfig = DEFAULT) -> EvalReport
         per_pack=per_pack,
         misses=misses,
         exact_spec_on_trap_items=sum(r["exact_spec_on_trap_items"] for r in per_pack.values()),
+        clear_suggestions=sum(r["clear_suggestions"] for r in per_pack.values()),
         excused=[e for r in per_pack.values() for e in r["excused"]],
         skipped=skipped,
     )

@@ -12,6 +12,8 @@ ALIASES: dict[str, str] = {
     "elcb": "earth leakage circuit breaker",
     "pvc": "pvc",
     "cct": "circuit",
+    "luminaire": "light fitting",
+    "galv": "galvanised",
 }
 STOPWORDS: frozenset[str] = frozenset(
     {
@@ -34,6 +36,47 @@ STOPWORDS: frozenset[str] = frozenset(
     }
 )
 
+# Accessory nouns: a product and its lid / bracket / coupler / ... are different items. If one
+# description names one and the other does not, the pair is never `clear` (matching.py vetoes).
+ACCESSORY_WORDS: frozenset[str] = frozenset(
+    {
+        "lid",
+        "cover",
+        "plate",
+        "bracket",
+        "enclosure",
+        "coupler",
+        "coupling",
+        "gland",
+        "adaptor",
+        "adapter",
+        "bend",
+        "clip",
+        "saddle",
+        "bush",
+        "locknut",
+        "strap",
+        "hinge",
+        "spacer",
+        "support",
+        "fixing",
+        "elbow",
+        "reducer",
+        "cleat",
+        "ferrule",
+    }
+)
+
+# A description that says it leaves something out is not an exact statement of the item.
+NEGATION_WORDS: tuple[str, ...] = (
+    "excluding",
+    "excl",
+    "without",
+    "except",
+    "not included",
+    "less",
+)
+
 # The values of extraction's UNIT_CANON: the only unit strings the evidence may carry.
 CANONICAL_UNITS: frozenset[str] = frozenset(
     {"m", "no", "item", "sum", "m2", "m3", "roll", "kg", "hr", "day", "set", "pair"}
@@ -53,6 +96,7 @@ class MatchConfig:
     margin: float = 0.08
     clear_text_min: float = 0.5  # a clear match needs real word overlap, not just matching specs
     top_n: int = 3
+    clear_vetoes: bool = True  # text/spec/accessory/negation vetoes on `clear` (never on score)
 
 
 DEFAULT = MatchConfig()

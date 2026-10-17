@@ -14,7 +14,15 @@ from uuid import UUID
 
 from app.modules.extraction.public import canon_unit
 
-from .matching_config import ALIASES, CANONICAL_UNITS, DEFAULT, STOPWORDS, MatchConfig
+from .matching_config import (
+    ACCESSORY_WORDS,
+    ALIASES,
+    CANONICAL_UNITS,
+    DEFAULT,
+    NEGATION_WORDS,
+    STOPWORDS,
+    MatchConfig,
+)
 
 
 @dataclass(frozen=True)
@@ -50,7 +58,18 @@ class Suggestion:
 
 # --- spec tokens -------------------------------------------------------------------------------
 
-_VALUE_UNIT = re.compile(r"(\d+(?:[.,]\d+)?)\s*(ka|kv|kw|kva|mm2|mm|hz|va|a|v|w)(?![a-z0-9])")
+# A value must not be glued to a preceding word or digit (`mcb20a` is a code, not 20 A); `2x58w`
+# is the one glued form that still reads (the `x` follows a digit).
+_VALUE_UNIT = re.compile(
+    r"(?:(?<![a-z\d.,])|(?<=\dx))(\d+(?:[.,]\d+)?)\s*(ka|kv|kw|kva|mm2|mm|hz|va|a|v|w)(?![a-z0-9])"
+)
+# `4x16mm2`, `4 x 16 mm2`: N cores of S mm2 (same core convention as `4-core`).
+_N_BY_S = re.compile(r"(?<![a-z\d.,])(\d+)\s*x\s*(\d+(?:[.,]\d+)?)\s*mm2(?![a-z0-9])")
+# `1 500 W`, `1 200 mm`: space-grouped thousands before a unit.
+_UNITS = r"(?:ka|kv|kw|kva|mm2|mm|hz|va|a|v|w)"
+_GROUPED = re.compile(
+    r"(?<![\d.,])(\d{1,3})((?:[ \u00a0]\d{3})+)(?=\s*" + _UNITS + r"(?![a-z0-9]))"
+)
 _CORES = re.compile(r"(\d+)\s*c\s*\+\s*e(?![a-z0-9])")
 _CORE_WORD = re.compile(r"(?<![a-z0-9])(\d+)[\s-]*core(?![a-z0-9])")  # "4-core" == "4C+E"
 _IP = re.compile(r"(?<![a-z0-9])ip\s?(\d{2})(?![a-z0-9])")
@@ -69,6 +88,10 @@ def spec_tokens(text: str) -> dict[str, frozenset[str]]:
     """Electrical specifics as {kind: values}: `400 A` -> a:{400}, `3C+E` -> core:{3c+e}."""
     low = _normalise(text)
     kinds: dict[str, set[str]] = defaultdict(set)
+    for cores, section in _N_BY_S.findall(low):
+        kinds["core"].add(f"{cores}c+e")
+        kinds["mm2"].add(_norm_number(section))
+    low = _N_BY_S.sub(" ", low)
     for number, unit in _VALUE_UNIT.findall(low):
         kinds[unit].add(_norm_number(number))
     for n in (*_CORES.findall(low), *_CORE_WORD.findall(low)):
@@ -81,11 +104,12 @@ def spec_tokens(text: str) -> dict[str, frozenset[str]]:
     return {k: frozenset(v) for k, v in kinds.items()}
 
 
-_SPEC_SPANS = (_VALUE_UNIT, _CORES, _CORE_WORD, _IP, *_STRUCT.values())
+_SPEC_SPANS = (_N_BY_S, _VALUE_UNIT, _CORES, _CORE_WORD, _IP, *_STRUCT.values())
 
 
 def _normalise(text: str) -> str:
-    return text.lower().replace("²", "2").replace("³", "3")
+    low = text.lower().replace("²", "2").replace("³", "3")
+    return _GROUPED.sub(lambda g: g.group(1) + re.sub(r"\s", "", g.group(2)), low)
 
 
 def _strip_specs(low: str) -> str:
@@ -175,8 +199,18 @@ def _tokens(text: str) -> frozenset[str]:
         for word in ALIASES.get(raw, raw).split():
             if word in STOPWORDS:
                 continue
-            out.add(word[:-1] if len(word) > 3 and word.endswith("s") else word)
+            out.add(_stem(word))
     return frozenset(out)
+
+
+def _stem(word: str) -> str:
+    return word[:-1] if len(word) > 3 and word.endswith("s") else word
+
+
+_ACCESSORY_STEMS = frozenset(_stem(w) for w in ACCESSORY_WORDS)
+_NEGATION = re.compile(
+    r"(?<![a-z0-9])(?:" + "|".join(re.escape(w) for w in NEGATION_WORDS) + r")(?![a-z0-9])"
+)
 
 
 _DICE_FLOOR = 0.2  # below this the (slow) sequence ratio cannot matter; text = dice
@@ -228,13 +262,14 @@ class _Prepared:
     spec_pairs: frozenset[tuple[str, str]]
     quals: dict[str, frozenset[str]]
     core_notation: frozenset[str]  # which spellings were used: "word" (3-core), "plus" (3C+E)
+    negated: bool = False
 
 
 def _core_notation(low: str) -> frozenset[str]:
     out = set()
     if _CORES.search(low):
         out.add("plus")
-    if _CORE_WORD.search(low):
+    if _CORE_WORD.search(low) or _N_BY_S.search(low):
         out.add("word")
     return frozenset(out)
 
@@ -252,6 +287,7 @@ def _prepare(description: str, sku: str | None = None) -> _Prepared:
         pairs,
         qualifier_tokens(description),
         _core_notation(_normalise(description)),
+        bool(_NEGATION.search(_normalise(description))),
     )
 
 
@@ -267,6 +303,7 @@ class _Scored:
     code_hit: bool
     unit_neutral: float  # the score if the unit matched: the margin must not rest on units alone
     core_notation_differs: bool = False
+    vetoes: tuple[str, ...] = ()
 
     @property
     def conflict(self) -> bool:
@@ -292,6 +329,24 @@ def _known_unit(raw: str | None) -> str | None:
     """The canonical unit, or None: free text must never be echoed into the evidence."""
     unit = canon_unit(raw)
     return unit if unit in CANONICAL_UNITS else None
+
+
+def _vetoes(boq_p: _Prepared, quote_p: _Prepared, spec_detail: dict[str, Any]) -> tuple[str, ...]:
+    """Reasons a pair must not be `clear` even though it scores well: the score never moves.
+
+    The spec parser reads only a few kinds, so two products that differ in an unread word (Type B
+    vs Type C, a lid vs the tray) can share every parsed spec. These checks catch that.
+    """
+    out = []
+    if boq_p.tokens - quote_p.tokens and quote_p.tokens - boq_p.tokens:
+        out.append("text_differs")  # each side has a word the other lacks (one-sided extras are ok)
+    if spec_detail["boq_only"] or spec_detail["quote_only"]:
+        out.append("spec_one_sided")
+    if (boq_p.tokens ^ quote_p.tokens) & _ACCESSORY_STEMS:
+        out.append("accessory_word")
+    if boq_p.negated or quote_p.negated:
+        out.append("negation")
+    return tuple(out)
 
 
 def _score_pair(
@@ -337,6 +392,7 @@ def _score_pair(
             and quote_p.core_notation
             and boq_p.core_notation != quote_p.core_notation
         ),
+        _vetoes(boq_p, quote_p, spec_detail) if cfg.clear_vetoes else (),
     )
 
 
@@ -353,6 +409,7 @@ def _evidence(
         warnings.append("unit_mismatch")
     if s.core_notation_differs:
         warnings.append("core_notation_differs")
+    warnings.extend(s.vetoes)
     if shared:
         warnings.append("quote_shared")
     if closing and quote.valid_until and quote.valid_until < closing:
@@ -463,6 +520,7 @@ def suggest(
                 and not s.conflict
                 and not s.multi_value
                 and not s.unit_mismatch
+                and not s.vetoes
                 and not shared
                 and (runner_up is None or s.unit_neutral - runner_up >= config.margin)
             )
