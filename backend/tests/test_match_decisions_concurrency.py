@@ -205,5 +205,106 @@ def test_the_match_job_takes_the_tender_lock_before_it_reads(monkeypatch) -> Non
         handlers, "_tender_inputs", lambda *a: (calls.append("read"), real_inputs(*a))[1]
     )
     assert actor.client.post(f"{API}/tenders/{tender_id}/match").status_code == 202
+    calls.clear()  # the route takes the lock too; this test is about the job
     drain()
     assert calls[:2] == ["lock", "read"], calls
+
+
+# --- an archive that commits while a write waits for the lock ----------------------------------
+
+
+def _archive_directly(tender_id: str) -> Callable[[Session], None]:
+    from app.modules.tenders.models import Tender
+
+    def work(s: Session) -> None:
+        t = s.get(Tender, UUID(tender_id))
+        t.status, t.archived_at = "archived", datetime.now(UTC)
+
+    return work
+
+
+def _blocked_by_an_archive(actor: Actor, tender_id: str, request: Callable[[], object]):
+    """Run `request` while an archiving transaction holds the lock; return its response."""
+    with Holder(actor, tender_id, _archive_directly(tender_id)) as holder:
+        with ThreadPoolExecutor(1) as pool:
+            blocked = pool.submit(request)
+            done = threading.Event()
+            threading.Timer(1.0, done.set).start()
+            assert done.wait(5) and not blocked.done(), "the write must wait for the lock"
+            holder.finish()
+            return blocked.result(30)
+
+
+def _assert_archived_refusal(r) -> None:
+    assert r.status_code == 409 and r.json()["error"]["code"] == "tender_archived", r.text
+
+
+def test_a_decision_that_waited_for_an_archive_is_refused() -> None:
+    actor, tender_id = _matched_org("mc10@example.com")
+    s = _flat(_get(actor, tender_id, limit=500))[0]
+    _assert_archived_refusal(
+        _blocked_by_an_archive(actor, tender_id, lambda: _decide(actor, s["id"], "confirm"))
+    )
+    with session_scope() as db:
+        assert db.get(MatchSuggestion, UUID(s["id"])).status == "suggested"
+
+
+def test_confirm_clear_that_waited_for_an_archive_is_refused() -> None:
+    actor, tender_id = _matched_org("mc11@example.com")
+    url = f"{API}/tenders/{tender_id}/match-suggestions/confirm-clear"
+    _assert_archived_refusal(
+        _blocked_by_an_archive(actor, tender_id, lambda: actor.client.post(url))
+    )
+    with session_scope() as db:
+        assert not db.scalars(
+            select(MatchSuggestion).where(MatchSuggestion.status == "confirmed")
+        ).all()
+
+
+def test_the_match_trigger_that_waited_for_an_archive_queues_nothing() -> None:
+    from app.modules.jobs.models import Job
+
+    actor, tender_id = _matched_org("mc12@example.com")
+    r = _blocked_by_an_archive(
+        actor, tender_id, lambda: actor.client.post(f"{API}/tenders/{tender_id}/match")
+    )
+    _assert_archived_refusal(r)
+    with session_scope() as db:
+        assert not db.scalars(
+            select(Job).where(Job.job_type == "match_suppliers", Job.status == "queued")
+        ).all()
+
+
+def test_a_quotation_write_that_waited_for_an_archive_is_refused() -> None:
+    from app.modules.suppliers.models import Quotation
+
+    actor, tender_id = _matched_org("mc13@example.com")
+    s = _flat(_get(actor, tender_id, limit=500))[0]
+    quotation_id = s["quotation_item"]["quotation_id"]
+    _assert_archived_refusal(
+        _blocked_by_an_archive(
+            actor,
+            tender_id,
+            lambda: actor.client.patch(
+                f"{API}/quotations/{quotation_id}", json={"currency": "EUR"}
+            ),
+        )
+    )
+    with session_scope() as db:
+        assert db.get(Quotation, UUID(quotation_id)).currency != "EUR"
+
+
+def test_a_quotation_item_write_that_waited_for_an_archive_is_refused() -> None:
+    from app.modules.suppliers.models import QuotationItem
+
+    actor, tender_id = _matched_org("mc14@example.com")
+    item_id = _flat(_get(actor, tender_id, limit=500))[0]["quotation_item"]["id"]
+    _assert_archived_refusal(
+        _blocked_by_an_archive(
+            actor,
+            tender_id,
+            lambda: actor.client.post(f"{API}/quotation-items/{item_id}/reject"),
+        )
+    )
+    with session_scope() as db:
+        assert db.get(QuotationItem, UUID(item_id)).review_status == "unreviewed"

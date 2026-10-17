@@ -746,6 +746,17 @@
       },
       "MatchQuoteRef": {
         "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -754,6 +765,17 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "prices_include_vat": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prices Include Vat"
           },
           "quantity": {
             "anyOf": [

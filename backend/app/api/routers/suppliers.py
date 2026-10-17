@@ -11,10 +11,12 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from app.api.deps import Ctx, DbSession
+from app.api.matching_trigger import enqueue_match
 from app.db.session import set_org
 from app.kernel import Conflict
 from app.modules.documents import public as documents
 from app.modules.suppliers import public as suppliers
+from app.modules.tenders import public as tenders
 
 router = APIRouter(prefix="/api/v1/suppliers", tags=["suppliers"])
 
@@ -66,13 +68,19 @@ def merge_supplier(supplier_id: UUID, body: suppliers.SupplierMerge, ctx: Ctx, s
             suppliers.lock_tender(session, ctx, tender_id)
         now = _affected(session, ctx, supplier_id)
         if set(now) <= wanted:
-            if any(now.values()):
+            # the locks are held: re-read each tender, an archive may have committed meanwhile
+            if any(now.values()) or any(
+                tenders.is_archived(session, ctx, t, fresh=True) for t in sorted(now)
+            ):
                 raise Conflict(
                     "A tender with this supplier's quotations is archived. Re-open it before "
                     "merging.",
                     code="tender_archived",
                 )
-            return suppliers.merge_suppliers(session, ctx, supplier_id, body.into_id)
+            merged = suppliers.merge_suppliers(session, ctx, supplier_id, body.into_id)
+            for tender_id in sorted(now):  # the moved quotations must be matched under the target
+                enqueue_match(session, ctx, tender_id)
+            return merged
         session.rollback()  # releases the advisory transaction locks
         set_org(session, ctx.organisation_id)
     raise Conflict("The suppliers changed while merging. Try again.", code="try_again")

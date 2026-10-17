@@ -165,6 +165,8 @@ class MatchQuoteRef(BaseModel):
     quantity: str | None
     unit_price: str | None
     valid_until: date | None
+    currency: str | None = None
+    prices_include_vat: bool | None = None
 
 
 class MatchSuggestionDTO(BaseModel):

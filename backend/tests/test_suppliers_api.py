@@ -373,3 +373,62 @@ def test_an_integrity_error_during_the_move_is_try_again(monkeypatch) -> None:
     assert r.status_code == 409 and r.json()["error"]["code"] == "try_again", r.text
     counts = {s["id"]: s["quotation_count"] for s in actor.client.get(URL).json()}
     assert counts == {spark: 1, green: 2}  # the savepoint undid the move
+
+
+def _queued_match_subjects() -> list[UUID]:
+    from app.modules.jobs.models import Job
+
+    with session_scope() as s:
+        return sorted(
+            s.scalars(
+                select(Job.subject_id).where(
+                    Job.job_type == "match_suppliers", Job.status == "queued"
+                )
+            )
+        )
+
+
+def _clear_slots_with_rivals() -> list[tuple[UUID, UUID]]:
+    with session_scope() as s:
+        rows = s.execute(
+            select(MatchSuggestion.boq_item_id, MatchSuggestion.supplier_id).where(
+                MatchSuggestion.classification == "clear", MatchSuggestion.status == "suggested"
+            )
+        ).all()
+    seen: set[tuple[UUID, UUID]] = set()
+    return [tuple(r) for r in rows if tuple(r) in seen or seen.add(tuple(r))]  # type: ignore[func-returns-value]
+
+
+def test_a_merge_queues_matching_for_every_affected_tender() -> None:
+    actor, t1, t2, spark, green = _two_tender_org("mt9@example.com")
+    assert _queued_match_subjects() == []
+    r = actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark})
+    assert r.status_code == 200, r.text
+    assert _queued_match_subjects() == sorted({UUID(t1), UUID(t2)})
+
+
+def test_matching_after_a_merge_removes_rival_clear_rows() -> None:
+    actor, tender_id = _matched_org("mt11@example.com")
+    by = _by_name(actor)
+    spark = next(s for n, s in by.items() if "park" in n)["id"]
+    green = next(s for n, s in by.items() if "reen" in n)["id"]
+    with session_scope() as s:  # a line that both suppliers match: clear for both of them
+        by_line: dict[UUID, dict[UUID, MatchSuggestion]] = {}
+        for m in s.scalars(select(MatchSuggestion).order_by(MatchSuggestion.score.desc())):
+            by_line.setdefault(m.boq_item_id, {}).setdefault(m.supplier_id, m)
+        both = next(v for v in by_line.values() if len(v) == 2)
+        for m in both.values():
+            m.classification = "clear"
+    assert actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark}).status_code == 200
+    assert _clear_slots_with_rivals(), "the merge leaves two clear rows for one slot"
+    assert _queued_match_subjects() == [UUID(tender_id)]
+    drain()
+    assert _clear_slots_with_rivals() == []  # one clear row per (BoQ line, supplier)
+
+
+def test_a_refused_merge_queues_nothing() -> None:
+    actor, t1, t2, spark, green = _two_tender_org("mt10@example.com")
+    assert actor.client.post(f"{API}/tenders/{t2}/archive").status_code == 200
+    r = actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark})
+    assert r.status_code == 409
+    assert _queued_match_subjects() == []

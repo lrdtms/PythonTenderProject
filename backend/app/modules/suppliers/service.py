@@ -190,14 +190,28 @@ def match_tender(
         )
         for i, q in pairs
     ]
-    release_stale_confirmed(session, ctx, [b.id for b in boq_lines], [q.id for q in quote_lines])
-    existing = matches.for_items({b.id for b in boq_lines}, {q.id for q in quote_lines})
+    suggestions = matching.suggest(boq_lines, quote_lines, closing_date)
+    boq_ids, quote_ids = {b.id for b in boq_lines}, {q.id for q in quote_lines}
+    decided_pairs = {
+        (m.boq_item_id, m.quotation_item_id)
+        for m in matches.for_items(boq_ids, quote_ids)
+        if m.status != "suggested"
+    }
+    # A stale confirmed match (its quotation item is not current) is released only where this run
+    # has a live candidate for its (BoQ line, supplier) slot; elsewhere it stays untouched.
+    needed = {
+        (s.boq_id, s.supplier_id)
+        for s in suggestions
+        if (s.boq_id, s.quote_id) not in decided_pairs
+    }
+    release_stale_confirmed(session, ctx, tender_id, needed, quote_ids)
+    existing = matches.for_items(boq_ids, quote_ids)
     decided = [m for m in existing if m.status != "suggested"]
     removed = matches.delete_suggested([m.id for m in existing if m.status == "suggested"])
     decided_pairs = {(m.boq_item_id, m.quotation_item_id) for m in decided}
     confirmed_slots = {(m.boq_item_id, m.supplier_id) for m in decided if m.status == "confirmed"}
     rows: list[dict[str, Any]] = []
-    for s in matching.suggest(boq_lines, quote_lines, closing_date):
+    for s in suggestions:
         if (s.boq_id, s.quote_id) in decided_pairs or (s.boq_id, s.supplier_id) in confirmed_slots:
             continue
         rows.append({
@@ -326,7 +340,8 @@ def _suggestion_dto(
             unit=item.unit,
             quantity=None if item.quantity is None else str(item.quantity),
             unit_price=None if item.unit_price is None else str(item.unit_price),
-            valid_until=quotation.valid_until,
+            valid_until=quotation.valid_until, currency=quotation.currency,
+            prices_include_vat=quotation.prices_include_vat,
         ),
         boq_item_id=m.boq_item_id, decided_by=m.decided_by, decided_at=m.decided_at,
     )  # fmt: skip
@@ -364,17 +379,22 @@ def suggestion_tender_version(session: Session, ctx: OrgContext, suggestion_id: 
 def release_stale_confirmed(
     session: Session,
     ctx: OrgContext,
-    boq_ids: Collection[UUID],
+    tender_id: UUID | None,
+    slots: Collection[tuple[UUID, UUID]],
     current_quote_item_ids: Collection[UUID],
-) -> int:
+) -> list[UUID]:
     """Call with the tender lock held. A confirmed match is stale when its quotation item is not
-    among the tender's current, non-rejected items; it would hold the (BoQ line, supplier) slot
-    while being hidden from every list. It goes back to `suggested`. Returns the count."""
-    released = MatchRepo(session, ctx).release_stale_confirmed(boq_ids, current_quote_item_ids)
+    among the tender's current, non-rejected items; it still holds its (BoQ line, supplier) slot.
+    It is released (back to `suggested`) only in the given slots, which the caller limits to those
+    a live candidate needs: a stale decision with no live candidate is left alone, so a replacement
+    that is still processing, failed or empty loses nothing. Returns the released ids."""
+    released = MatchRepo(session, ctx).release_stale_confirmed(slots, current_quote_item_ids)
     if released:
         audit.record(
-            session, ctx, "match_suggestion", None, "match_released_stale", {"count": released}
-        )
+            session, ctx, "tender" if tender_id else "match_suggestion", tender_id,
+            "match_released_stale",
+            {"count": len(released), "match_ids": sorted(str(i) for i in released)},
+        )  # fmt: skip
     return released
 
 
@@ -395,6 +415,7 @@ def decide(
     action: Literal["confirm", "reject", "reset"],
     current_quote_version_ids: Collection[UUID],
     current_boq_ids: Collection[UUID],
+    tender_id: UUID | None = None,
 ) -> MatchSuggestionDTO:
     """Call with the tender lock held. 409 `stale_match` when the suggestion's quotation version or
     BoQ line is no longer current; 409 `match_conflict` when confirming would give the BoQ line a
@@ -411,13 +432,11 @@ def decide(
             "This suggestion belongs to an older version. Reload the list.", code="stale_match"
         )
     target = _TARGET[action]
-    if action == "confirm" and m.status != target:
+    if action == "confirm" and m.status != target:  # free the slot being confirmed, only it
         release_stale_confirmed(
-            session,
-            ctx,
-            current_boq_ids,
+            session, ctx, tender_id, [(m.boq_item_id, m.supplier_id)],
             _current_item_ids(session, ctx, current_quote_version_ids),
-        )
+        )  # fmt: skip
     if m.status != target:
         if action == "confirm" and repo.other_confirmed(m):
             raise Conflict(
@@ -445,28 +464,57 @@ def decide(
     return _suggestion_dto(m, item, quotation, supplier)
 
 
+_BULK_BLOCKING_WARNINGS = frozenset({"quote_expires_before_closing", "core_notation_differs"})
+
+
 def confirm_clear(
     session: Session,
     ctx: OrgContext,
     tender_id: UUID,
     current_quote_version_ids: Collection[UUID],
     current_boq_ids: Collection[UUID],
+    boq_reviewed_at: Mapping[UUID, datetime | None] | None = None,
 ) -> ConfirmClearResult:
     """Call with the tender lock held. Confirms every undecided `clear` suggestion of a current
-    BoQ line and quotation item, except where the BoQ line already has a confirmed match for the
-    supplier or another row confirmed in this call took the slot (counted as `skipped`)."""
+    BoQ line and quotation item, except (counted as `skipped`; the buyer decides those one by one):
+    - a (BoQ line, supplier) slot with more than one undecided clear row (rivals),
+    - a row whose quotation item or BoQ line was reviewed after the match run made it,
+    - a row warning of an expiry before closing or of a core notation difference,
+    - a slot that already has a confirmed match, or that another row of this call took."""
     ctx.require(Permission.REVIEW_DATA)
     repo = MatchRepo(session, ctx)
-    release_stale_confirmed(
-        session, ctx, current_boq_ids, _current_item_ids(session, ctx, current_quote_version_ids)
-    )
     rows = repo.joined(current_boq_ids, current_quote_version_ids, "suggested", "clear")
     rows.sort(key=lambda r: (r[0].boq_item_id.int, r[0].supplier_id.int, -float(r[0].score),
                              r[0].id.int))  # fmt: skip
+    per_slot: dict[tuple[UUID, UUID], int] = {}
+    for m, *_rest in rows:
+        slot = (m.boq_item_id, m.supplier_id)
+        per_slot[slot] = per_slot.get(slot, 0) + 1
+    reviewed = boq_reviewed_at or {}
+    skipped = 0
+    eligible = []
+    for m, item, _quotation, _supplier in rows:
+        edited = max(
+            (t for t in (item.reviewed_at, reviewed.get(m.boq_item_id)) if t is not None),
+            default=None,
+        )
+        warnings = set((m.evidence or {}).get("warnings", ()))
+        if (
+            per_slot[(m.boq_item_id, m.supplier_id)] > 1
+            or (edited is not None and edited > m.created_at)
+            or warnings & _BULK_BLOCKING_WARNINGS
+        ):
+            skipped += 1
+        else:
+            eligible.append(m)
+    release_stale_confirmed(
+        session, ctx, tender_id, {(m.boq_item_id, m.supplier_id) for m in eligible},
+        _current_item_ids(session, ctx, current_quote_version_ids),
+    )  # fmt: skip
     taken = repo.confirmed_slots(current_boq_ids)
-    confirmed = skipped = 0
+    confirmed = 0
     now = datetime.now(UTC)
-    for m, _item, _quotation, _supplier in rows:
+    for m in eligible:
         slot = (m.boq_item_id, m.supplier_id)
         if slot in taken:
             skipped += 1
@@ -475,10 +523,11 @@ def confirm_clear(
         m.status, m.decided_by, m.decided_at = "confirmed", ctx.user_id, now
         confirmed += 1
     session.flush()
-    audit.record(
-        session, ctx, "tender", tender_id, "match_confirm_clear",
-        {"confirmed": confirmed, "skipped": skipped},
-    )  # fmt: skip
+    if confirmed or skipped:
+        audit.record(
+            session, ctx, "tender", tender_id, "match_confirm_clear",
+            {"confirmed": confirmed, "skipped": skipped},
+        )  # fmt: skip
     return ConfirmClearResult(confirmed=confirmed, skipped=skipped)
 
 

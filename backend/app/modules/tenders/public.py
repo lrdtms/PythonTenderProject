@@ -1,7 +1,14 @@
 """Public surface of the tenders module."""
 
 from .schemas import TenderCreate, TenderDTO, TenderUpdate
-from .service import archive_tender, create_tender, get_tender, list_tenders, update_tender
+from .service import (
+    archive_tender,
+    create_tender,
+    get_tender,
+    is_archived,
+    list_tenders,
+    update_tender,
+)
 
 __all__ = [
     "TenderCreate",
@@ -10,6 +17,7 @@ __all__ = [
     "archive_tender",
     "create_tender",
     "get_tender",
+    "is_archived",
     "list_tenders",
     "update_tender",
 ]

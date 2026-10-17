@@ -6,7 +6,7 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, insert, select, text, update
+from sqlalchemy import func, insert, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
@@ -411,25 +411,30 @@ class MatchRepo(ScopedRepository[MatchSuggestion]):
         return {(b, s) for b, s in self.session.execute(stmt).all()}
 
     def release_stale_confirmed(
-        self, boq_ids: Collection[UUID], current_quote_item_ids: Collection[UUID]
-    ) -> int:
-        """Set confirmed matches of the given (current) BoQ lines whose quotation item is not in
-        the current set back to `suggested`, clearing the decision. Returns how many."""
-        if not boq_ids:
-            return 0
-        stmt = (
-            update(MatchSuggestion)
-            .where(
-                MatchSuggestion.organisation_id == self.ctx.organisation_id,
-                MatchSuggestion.status == "confirmed",
-                MatchSuggestion.boq_item_id.in_(boq_ids),
+        self, slots: Collection[tuple[UUID, UUID]], current_quote_item_ids: Collection[UUID]
+    ) -> list[UUID]:
+        """Set confirmed matches in the given (BoQ line, supplier) slots whose quotation item is not
+        in the current set back to `suggested`, clearing the decision. Returns their ids."""
+        released: list[UUID] = []
+        wanted = sorted(slots, key=lambda t: (t[0].int, t[1].int))
+        for start in range(0, len(wanted), 500):
+            stmt = (
+                update(MatchSuggestion)
+                .where(
+                    MatchSuggestion.organisation_id == self.ctx.organisation_id,
+                    MatchSuggestion.status == "confirmed",
+                    tuple_(MatchSuggestion.boq_item_id, MatchSuggestion.supplier_id).in_(
+                        wanted[start : start + 500]
+                    ),
+                )
+                .values(status="suggested", decided_by=None, decided_at=None)
+                .returning(MatchSuggestion.id)
+                .execution_options(synchronize_session="fetch")
             )
-            .values(status="suggested", decided_by=None, decided_at=None)
-            .execution_options(synchronize_session="fetch")
-        )
-        if current_quote_item_ids:
-            stmt = stmt.where(MatchSuggestion.quotation_item_id.not_in(current_quote_item_ids))
-        return int(self.session.execute(stmt).rowcount or 0)  # type: ignore[attr-defined]
+            if current_quote_item_ids:
+                stmt = stmt.where(MatchSuggestion.quotation_item_id.not_in(current_quote_item_ids))
+            released.extend(self.session.execute(stmt).scalars().all())
+        return released
 
     def other_confirmed(self, suggestion: MatchSuggestion) -> bool:
         stmt = select(MatchSuggestion.id).where(

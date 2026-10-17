@@ -13,7 +13,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import Ctx, DbSession
 from app.api.matching_trigger import enqueue_match
 from app.api.reviewers import with_reviewer_names
-from app.kernel import Conflict
+from app.api.tender_guard import refuse_archived
 from app.modules.documents import public as documents
 from app.modules.pipeline import public as pipeline
 from app.modules.suppliers import public as suppliers
@@ -25,10 +25,9 @@ def _lock_writable_tender(session, ctx, version_id: UUID) -> UUID:
     """Refuse an archived tender, then take its lock. Returns the tender id."""
     info = documents.processing_info(session, ctx, version_id)
     if info.tender_archived:
-        raise Conflict(
-            "This tender is archived. Re-open it before reviewing.", code="tender_archived"
-        )
+        refuse_archived(session, ctx, info.tender_id)
     suppliers.lock_tender(session, ctx, info.tender_id)
+    refuse_archived(session, ctx, info.tender_id, fresh=True)  # re-check once the lock is ours
     return info.tender_id
 
 
@@ -47,8 +46,11 @@ def update_quotation(
     quotation_id: UUID, body: suppliers.QuotationPatch, ctx: Ctx, session: DbSession
 ):
     version_id = suppliers.get_quotation_tender_version(session, ctx, quotation_id)
-    _lock_writable_tender(session, ctx, version_id)
-    return suppliers.update_quotation(session, ctx, quotation_id, body)
+    tender_id = _lock_writable_tender(session, ctx, version_id)
+    dto = suppliers.update_quotation(session, ctx, quotation_id, body)
+    if "supplier_id" in body.model_fields_set:  # a switch moves matches: matching must run again
+        enqueue_match(session, ctx, tender_id)
+    return dto
 
 
 @router.get(

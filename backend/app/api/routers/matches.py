@@ -16,7 +16,8 @@ from fastapi import APIRouter, Query
 from app.api.deps import Ctx, DbSession
 from app.api.matching_trigger import enqueue_match
 from app.api.reviewers import with_decider_names
-from app.kernel import Conflict, Permission
+from app.api.tender_guard import refuse_archived
+from app.kernel import Permission
 from app.modules.documents import public as documents
 from app.modules.estimating import public as estimating
 from app.modules.jobs import public as jobs
@@ -86,21 +87,15 @@ def match_suggestions(
     return page
 
 
-def _writable_tender(session, ctx, tender_id: UUID) -> None:
-    if tenders.get_tender(session, ctx, tender_id).status == "archived":
-        raise Conflict(
-            "This tender is archived. Re-open it before reviewing.", code="tender_archived"
-        )
-
-
 def _decide(session, ctx, suggestion_id: UUID, action):
     version_id = suppliers.suggestion_tender_version(session, ctx, suggestion_id)
     tender_id = documents.processing_info(session, ctx, version_id).tender_id
-    _writable_tender(session, ctx, tender_id)
+    refuse_archived(session, ctx, tender_id)
     suppliers.lock_tender(session, ctx, tender_id)
+    refuse_archived(session, ctx, tender_id, fresh=True)  # an archive may have committed meanwhile
     boq, quote_versions = _current(session, ctx, tender_id)
     dto = suppliers.decide(
-        session, ctx, suggestion_id, action, set(quote_versions), {i.id for i in boq}
+        session, ctx, suggestion_id, action, set(quote_versions), {i.id for i in boq}, tender_id
     )
     return with_decider_names(session, ctx, [dto])[0]
 
@@ -133,11 +128,17 @@ def reset_suggestion(suggestion_id: UUID, ctx: Ctx, session: DbSession):
 def confirm_clear(tender_id: UUID, ctx: Ctx, session: DbSession):
     tenders.get_tender(session, ctx, tender_id)  # NotFound for another organisation
     ctx.require(Permission.REVIEW_DATA)
-    _writable_tender(session, ctx, tender_id)
+    refuse_archived(session, ctx, tender_id)
     suppliers.lock_tender(session, ctx, tender_id)
+    refuse_archived(session, ctx, tender_id, fresh=True)
     boq, quote_versions = _current(session, ctx, tender_id)
     return suppliers.confirm_clear(
-        session, ctx, tender_id, set(quote_versions), {i.id for i in boq}
+        session,
+        ctx,
+        tender_id,
+        set(quote_versions),
+        {i.id for i in boq},
+        {i.id: i.reviewed_at for i in boq},
     )
 
 
@@ -146,5 +147,7 @@ def match_tender(tender_id: UUID, ctx: Ctx, session: DbSession):
     """Queue the tender's matching job (the active one when one is queued or running)."""
     tenders.get_tender(session, ctx, tender_id)  # NotFound for another organisation
     ctx.require(Permission.REVIEW_DATA)
-    _writable_tender(session, ctx, tender_id)
+    refuse_archived(session, ctx, tender_id)
+    suppliers.lock_tender(session, ctx, tender_id)
+    refuse_archived(session, ctx, tender_id, fresh=True)
     return enqueue_match(session, ctx, tender_id)

@@ -1133,6 +1133,8 @@ export interface components {
         };
         /** MatchQuoteRef */
         MatchQuoteRef: {
+            /** Currency */
+            currency?: string | null;
             /** Description */
             description: string;
             /**
@@ -1140,6 +1142,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Prices Include Vat */
+            prices_include_vat?: boolean | null;
             /** Quantity */
             quantity: string | null;
             /**

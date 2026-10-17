@@ -54,7 +54,7 @@ def test_one_line_per_current_boq_line_with_suggestions_attached() -> None:
     assert set(one["supplier"]) == {"id", "name"}
     assert set(one["quotation_item"]) == {
         "id", "quotation_id", "description", "sku", "unit", "quantity", "unit_price",
-        "valid_until",
+        "valid_until", "currency", "prices_include_vat",
     }  # fmt: skip
     assert all(
         isinstance(s["quotation_item"]["unit_price"], str)
@@ -218,7 +218,7 @@ def test_confirm_clear_confirms_only_clear_rows_and_is_idempotent() -> None:
         assert len(event) == 2
 
 
-def test_confirm_clear_skips_a_slot_that_is_already_taken_or_collides() -> None:
+def test_bulk_confirm_leaves_rival_clear_rows_undecided() -> None:
     actor, tender_id = _matched_org("ma8@example.com")
     first, second = _two_candidates(actor, tender_id)
     with session_scope() as db:  # make both candidates clear so they collide with each other
@@ -230,9 +230,9 @@ def test_confirm_clear_skips_a_slot_that_is_already_taken_or_collides() -> None:
     ]
     r = actor.client.post(f"{API}/tenders/{tender_id}/match-suggestions/confirm-clear")
     assert r.status_code == 200
-    assert r.json()["skipped"] >= 1
+    assert r.json()["skipped"] >= 2  # both rivals are skipped: the buyer picks one
     statuses = {s["id"]: s["status"] for s in _flat(_get(actor, tender_id, limit=500))}
-    assert sorted([statuses[first], statuses[second]]) == ["confirmed", "suggested"]
+    assert [statuses[first], statuses[second]] == ["suggested", "suggested"]
     assert r.json()["confirmed"] + r.json()["skipped"] == len(clear_rows)
 
 
@@ -409,7 +409,9 @@ def test_a_confirmed_match_of_a_replaced_quotation_is_released_not_a_dead_end() 
         events = db.scalars(
             select(AuditEvent).where(AuditEvent.action == "match_released_stale")
         ).all()
-        assert len(events) == 1 and events[0].event_metadata == {"count": 1}
+        assert len(events) == 1
+        assert events[0].event_metadata == {"count": 1, "match_ids": [mine["id"]]}
+        assert events[0].entity_type == "tender" and str(events[0].entity_id) == tender_id
 
 
 def _make_first_stale(first: str) -> None:
@@ -434,11 +436,157 @@ def test_confirm_clear_releases_a_stale_confirmed_row_first() -> None:
     actor, tender_id = _matched_org("ma18@example.com")
     first, second = _two_candidates(actor, tender_id)
     with session_scope() as db:
-        db.query(MatchSuggestion).filter(
-            MatchSuggestion.id.in_([UUID(first), UUID(second)])
-        ).update({"classification": "clear"})
+        row = db.get(MatchSuggestion, UUID(second))
+        row.classification, row.evidence = "clear", {**row.evidence, "warnings": []}
     assert _decide(actor, first, "confirm").status_code == 200
     _make_first_stale(first)
     r = actor.client.post(f"{API}/tenders/{tender_id}/match-suggestions/confirm-clear")
     assert r.status_code == 200
     assert _statuses(actor, tender_id)[second]["status"] == "confirmed"
+
+
+# --- overall review: currency, bulk-confirm hygiene, lazy release ------------------------------
+
+CONFIRM_CLEAR = "match-suggestions/confirm-clear"
+
+
+def _bulk_candidates(actor: Actor, tender_id: str) -> list[dict]:
+    """Clear rows that nothing else blocks: the only clear row of their slot, no warnings."""
+    clear = [s for s in _flat(_get(actor, tender_id, limit=500)) if s["classification"] == "clear"]
+    per_slot: dict[tuple[str, str], int] = {}
+    for s in clear:
+        key = (s["boq_item_id"], s["supplier"]["id"])
+        per_slot[key] = per_slot.get(key, 0) + 1
+    return [
+        s for s in clear
+        if per_slot[(s["boq_item_id"], s["supplier"]["id"])] == 1 and not s["evidence"]["warnings"]
+    ]  # fmt: skip
+
+
+def _bulk(actor: Actor, tender_id: str) -> dict:
+    r = actor.client.post(f"{API}/tenders/{tender_id}/{CONFIRM_CLEAR}")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_candidate_prices_carry_their_currency_and_vat_basis() -> None:
+    actor, tender_id = _matched_org("ma20@example.com")
+    s = _flat(_get(actor, tender_id, limit=500))[0]
+    with session_scope() as db:
+        q = db.get(Quotation, UUID(s["quotation_item"]["quotation_id"]))
+        q.currency, q.prices_include_vat = "ZAR", True
+    same = [
+        x["quotation_item"] for x in _flat(_get(actor, tender_id, limit=500))
+        if x["quotation_item"]["quotation_id"] == s["quotation_item"]["quotation_id"]
+    ]  # fmt: skip
+    assert same and all(i["currency"] == "ZAR" and i["prices_include_vat"] is True for i in same)
+    with session_scope() as db:
+        q = db.get(Quotation, UUID(s["quotation_item"]["quotation_id"]))
+        q.currency, q.prices_include_vat = None, None
+    one = next(x for x in _flat(_get(actor, tender_id, limit=500)) if x["id"] == s["id"])[
+        "quotation_item"
+    ]
+    assert one["currency"] is None and one["prices_include_vat"] is None
+
+
+def test_bulk_confirm_skips_a_row_whose_quotation_item_was_edited_after_the_run() -> None:
+    actor, tender_id = _matched_org("ma21@example.com")
+    edited, normal = _bulk_candidates(actor, tender_id)[:2]
+    r = actor.client.patch(
+        f"{API}/quotation-items/{edited['quotation_item']['id']}",
+        json={"description": edited["quotation_item"]["description"] + " heavy duty"},
+    )
+    assert r.status_code == 200, r.text  # the rematch it queues has not run yet
+    result = _bulk(actor, tender_id)
+    status = {s["id"]: s["status"] for s in _flat(_get(actor, tender_id, limit=500))}
+    assert status[edited["id"]] == "suggested" and status[normal["id"]] == "confirmed"
+    assert result["skipped"] >= 1
+    assert _decide(actor, edited["id"], "confirm").status_code == 200  # a person may still decide
+
+
+def test_bulk_confirm_skips_a_row_whose_boq_line_was_edited_after_the_run() -> None:
+    actor, tender_id = _matched_org("ma22@example.com")
+    candidates = _bulk_candidates(actor, tender_id)
+    edited = candidates[0]
+    normal = next(c for c in candidates if c["boq_item_id"] != edited["boq_item_id"])
+    r = actor.client.patch(f"{API}/boq-items/{edited['boq_item_id']}", json={"unit": "m"})
+    assert r.status_code == 200, r.text
+    _bulk(actor, tender_id)
+    status = {s["id"]: s["status"] for s in _flat(_get(actor, tender_id, limit=500))}
+    assert status[edited["id"]] == "suggested" and status[normal["id"]] == "confirmed"
+
+
+def test_bulk_confirm_skips_expiry_and_core_notation_warnings() -> None:
+    actor, tender_id = _matched_org("ma23@example.com")
+    first, second, third = _bulk_candidates(actor, tender_id)[:3]
+    with session_scope() as db:
+        for row, warning in (
+            (first, "quote_expires_before_closing"),
+            (second, "core_notation_differs"),
+        ):
+            m = db.get(MatchSuggestion, UUID(row["id"]))
+            m.evidence = {**m.evidence, "warnings": [warning]}
+    result = _bulk(actor, tender_id)
+    status = {s["id"]: s["status"] for s in _flat(_get(actor, tender_id, limit=500))}
+    assert status[first["id"]] == status[second["id"]] == "suggested"
+    assert status[third["id"]] == "confirmed" and result["skipped"] >= 2
+
+
+def test_bulk_confirm_writes_no_audit_row_when_there_is_nothing_to_do() -> None:
+    actor, tender_id = _matched_org("ma24@example.com")
+    with session_scope() as db:
+        db.query(MatchSuggestion).update({"classification": "ambiguous"})
+    assert _bulk(actor, tender_id) == {"confirmed": 0, "skipped": 0}
+    with session_scope() as db:
+        assert not db.scalars(
+            select(AuditEvent).where(AuditEvent.action == "match_confirm_clear")
+        ).all()
+
+
+def test_bulk_confirm_audit_row_is_written_when_rows_were_only_skipped() -> None:
+    actor, tender_id = _matched_org("ma25@example.com")
+    first, second = _two_candidates(actor, tender_id)
+    with session_scope() as db:
+        db.query(MatchSuggestion).update({"classification": "ambiguous"})
+        db.query(MatchSuggestion).filter(
+            MatchSuggestion.id.in_([UUID(first), UUID(second)])
+        ).update({"classification": "clear"})
+    assert _bulk(actor, tender_id) == {"confirmed": 0, "skipped": 2}
+    with session_scope() as db:
+        [event] = db.scalars(
+            select(AuditEvent).where(AuditEvent.action == "match_confirm_clear")
+        ).all()
+        assert event.event_metadata == {"confirmed": 0, "skipped": 2}
+        assert str(event.entity_id) == tender_id
+
+
+def _stale_confirmed_elsewhere(actor: Actor, tender_id: str, avoid: dict) -> str:
+    """Confirm a row of another slot and make its quotation item stale; returns its id."""
+    other = next(
+        s for s in _flat(_get(actor, tender_id, limit=500))
+        if (s["boq_item_id"], s["supplier"]["id"]) != (avoid["boq_item_id"], avoid["supplier"]["id"])
+    )  # fmt: skip
+    assert _decide(actor, other["id"], "confirm").status_code == 200
+    _make_first_stale(other["id"])
+    return other["id"]
+
+
+def test_confirming_releases_only_its_own_slot_not_other_stale_rows() -> None:
+    actor, tender_id = _matched_org("ma26@example.com")
+    target = _first(_get(actor, tender_id, limit=500), "clear")
+    stale = _stale_confirmed_elsewhere(actor, tender_id, target)
+    assert _decide(actor, target["id"], "confirm").status_code == 200
+    with session_scope() as db:
+        assert db.get(MatchSuggestion, UUID(stale)).status == "confirmed"
+        assert not db.scalars(
+            select(AuditEvent).where(AuditEvent.action == "match_released_stale")
+        ).all()
+
+
+def test_bulk_confirm_leaves_a_stale_row_alone_when_no_clear_row_needs_its_slot() -> None:
+    actor, tender_id = _matched_org("ma27@example.com")
+    target = _bulk_candidates(actor, tender_id)[0]
+    stale = _stale_confirmed_elsewhere(actor, tender_id, target)
+    _bulk(actor, tender_id)
+    with session_scope() as db:
+        assert db.get(MatchSuggestion, UUID(stale)).status == "confirmed"

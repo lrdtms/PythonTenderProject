@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.modules.estimating.models import BoqItem
 from app.modules.suppliers import public as suppliers
-from app.modules.suppliers.models import MatchSuggestion
+from app.modules.suppliers.models import MatchSuggestion, QuotationItem
 from app.modules.suppliers.repo import MatchRepo
 from tests.quotation_helpers import QuotationContext, quotation_context
 
@@ -155,27 +155,75 @@ def _released_events(qc: QuotationContext) -> list:
     return list(qc.session.scalars(stmt))
 
 
-def test_a_confirmed_match_of_a_quotation_that_is_no_longer_current_is_released() -> None:
+def _pair_on_one_line(qc: QuotationContext) -> tuple[MatchSuggestion, MatchSuggestion]:
+    """Two suggested rows for one BoQ line from two suppliers: (mine, theirs)."""
+    rows = _rows(qc, "suggested")
+    mine = rows[0]
+    theirs = next(
+        r for r in rows if r.boq_item_id == mine.boq_item_id and r.supplier_id != mine.supplier_id
+    )
+    return mine, theirs
+
+
+def _versions_of(qc: QuotationContext, row: MatchSuggestion) -> list:
+    return [v for v, s in zip(qc.versions, qc.supplier_ids, strict=True) if s == row.supplier_id]
+
+
+def test_a_stale_confirmed_match_without_a_live_candidate_is_left_untouched() -> None:
     with quotation_context(versions=2, with_boq=True, quotation_rows=ROWS) as qc:
         _run(qc)
-        rows = _rows(qc, "suggested")
-        mine = rows[0]
-        theirs = next(
-            r
-            for r in rows
-            if r.boq_item_id == mine.boq_item_id and r.supplier_id != mine.supplier_id
-        )
+        mine, theirs = _pair_on_one_line(qc)
         _confirm(qc, mine)
         _confirm(qc, theirs)
-        keep = [
-            v for v, s in zip(qc.versions, qc.supplier_ids, strict=True) if s == theirs.supplier_id
-        ]
-        _run(qc, versions=keep)  # my supplier's version is superseded
+        _run(qc, versions=_versions_of(qc, theirs))  # my supplier's version is not current
+        qc.session.expire_all()
+        kept = qc.session.get(MatchSuggestion, mine.id)
+        assert kept is not None and kept.status == "confirmed" and kept.decided_by is not None
+        assert qc.session.get(MatchSuggestion, theirs.id).status == "confirmed"
+        assert _released_events(qc) == []
+
+
+def test_a_stale_confirmed_match_survives_a_replacement_that_is_empty_or_rejected() -> None:
+    with quotation_context(versions=1, with_boq=True, quotation_rows=ROWS) as qc:
+        _run(qc)
+        mine = _rows(qc, "suggested")[0]
+        _confirm(qc, mine)
+        item = qc.session.get(QuotationItem, mine.quotation_item_id)
+        item.review_status = "rejected"  # the item leaves the current set ...
+        qc.session.flush()
+        _run(qc)  # ... and nothing else takes its slot
+        assert qc.session.get(MatchSuggestion, mine.id).status == "confirmed"
+        item.review_status = "unreviewed"  # re-instated: the confirmation is intact
+        qc.session.flush()
+        _run(qc)
+        row = qc.session.get(MatchSuggestion, mine.id)
+        assert row.status == "confirmed" and row.decided_by == qc.ctx.user_id
+        assert _released_events(qc) == []
+
+
+def test_a_stale_confirmed_match_is_released_when_a_live_candidate_needs_its_slot() -> None:
+    with quotation_context(versions=1, with_boq=True, quotation_rows=ROWS) as qc:
+        _run(qc)
+        mine = _rows(qc, "suggested")[0]
+        _confirm(qc, mine)
+        old = qc.session.get(QuotationItem, mine.quotation_item_id)
+        clone = QuotationItem(
+            organisation_id=qc.ctx.organisation_id, quotation_id=old.quotation_id,
+            document_version_id=old.document_version_id, run_id=old.run_id, position=99,
+            source_order=99, description=old.description, sku=old.sku, unit=old.unit,
+            quantity=old.quantity, unit_price=old.unit_price, flags=[], original_value={},
+        )  # fmt: skip
+        qc.session.add(clone)
+        old.review_status = "rejected"
+        qc.session.flush()
+        _run(qc)
         qc.session.expire_all()
         assert qc.session.get(MatchSuggestion, mine.id) is None  # released, then replaced
-        assert qc.session.get(MatchSuggestion, theirs.id).status == "confirmed"
-        assert [e.event_metadata for e in _released_events(qc)] == [{"count": 1}]
-        assert not [r for r in _rows(qc) if r.supplier_id == mine.supplier_id]
+        fresh = [r for r in _rows(qc) if r.quotation_item_id == clone.id]
+        assert fresh and all(r.status == "suggested" for r in fresh)
+        [event] = _released_events(qc)
+        assert event.event_metadata == {"count": 1, "match_ids": [str(mine.id)]}
+        assert event.entity_type == "tender" and event.entity_id == qc.tender_id
 
 
 def test_a_live_confirmed_match_is_not_released() -> None:
@@ -198,9 +246,8 @@ def test_release_never_touches_another_organisations_rows() -> None:
         mine = _rows(qc, "suggested")[0]
         _confirm(qc, mine)
         stranger = OrgContext(uuid4(), uuid4(), Role.ADMIN)
-        assert (
-            MatchRepo(qc.session, stranger).release_stale_confirmed({mine.boq_item_id}, set()) == 0
-        )
+        slot = {(mine.boq_item_id, mine.supplier_id)}
+        assert MatchRepo(qc.session, stranger).release_stale_confirmed(slot, set()) == []
         qc.session.expire_all()
         assert qc.session.get(MatchSuggestion, mine.id).status == "confirmed"
-        assert MatchRepo(qc.session, qc.ctx).release_stale_confirmed({mine.boq_item_id}, set()) == 1
+        assert MatchRepo(qc.session, qc.ctx).release_stale_confirmed(slot, set()) == [mine.id]

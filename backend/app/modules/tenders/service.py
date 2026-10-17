@@ -38,6 +38,14 @@ def get_tender(session: Session, ctx: OrgContext, tender_id: UUID) -> TenderDTO:
     return _dto(TenderRepo(session, ctx).get(tender_id))
 
 
+def is_archived(session: Session, ctx: OrgContext, tender_id: UUID, fresh: bool = False) -> bool:
+    """Whether the tender is archived. `fresh` re-reads it: use that right after taking the tender
+    lock, when an archive may have committed while the caller waited."""
+    ctx.require(Permission.READ)
+    repo = TenderRepo(session, ctx)
+    return (repo.get_fresh(tender_id) if fresh else repo.get(tender_id)).status == "archived"
+
+
 def update_tender(
     session: Session, ctx: OrgContext, tender_id: UUID, data: TenderUpdate
 ) -> TenderDTO:

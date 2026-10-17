@@ -221,3 +221,36 @@ def test_the_patch_takes_the_tender_lock(monkeypatch) -> None:
     )
     assert _patch(actor, q["id"], {"currency": "ZAR"}).status_code == 200
     assert locked == [tender_id]
+
+
+def _queued_match_count() -> int:
+    from app.modules.jobs.models import Job
+
+    with session_scope() as s:
+        return len(
+            s.scalars(
+                select(Job).where(Job.job_type == "match_suppliers", Job.status == "queued")
+            ).all()
+        )
+
+
+def test_switching_supplier_queues_matching_but_a_header_edit_does_not() -> None:
+    actor, tender_id = _matched_org("q9@example.com")
+    rows = _by_supplier(_list(actor, tender_id))
+    spark, green = rows["spark"], rows["green"]
+    assert _queued_match_count() == 0
+    assert _patch(actor, spark["id"], {"currency": "EUR"}).status_code == 200
+    assert _queued_match_count() == 0
+    assert _patch(actor, spark["id"], {"supplier_id": green["supplier_id"]}).status_code == 200
+    assert _queued_match_count() == 1
+    drain()
+    with session_scope() as s:
+        slots = [
+            (m.boq_item_id, m.supplier_id)
+            for m in s.scalars(
+                select(MatchSuggestion).where(
+                    MatchSuggestion.classification == "clear", MatchSuggestion.status == "suggested"
+                )
+            )
+        ]
+    assert len(slots) == len(set(slots))  # no rival clear rows for one supplier after the switch
