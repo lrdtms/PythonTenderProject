@@ -296,6 +296,25 @@ describe("ReviewScreen", () => {
       expect(screen.queryByRole("tab")).toBeNull();
     });
 
+    it("still opens in quotation mode when the version is no longer the document's current one", async () => {
+      mockApi(
+        quoteRoutes({
+          [`GET /api/v1/tenders/${ids.tender}/documents`]: () =>
+            respond(200, [
+              makeDocument({
+                kind: "quotation",
+                current_version: makeVersion({ id: "00000000-0000-4000-8000-0000000000aa", version_number: 2 }),
+              }),
+            ]),
+        }),
+        estimator,
+      );
+      renderSignedIn(<ReviewScreen />);
+      expect(await screen.findByText("LED panel quote")).toBeInTheDocument();
+      expect(screen.getByText("Quotation items (2)")).toBeInTheDocument();
+      expect(screen.queryByRole("tab")).toBeNull();
+    });
+
     it("jumps a PDF quotation item to its page", async () => {
       mockApi(quoteRoutes(), estimator);
       renderSignedIn(<ReviewScreen />);

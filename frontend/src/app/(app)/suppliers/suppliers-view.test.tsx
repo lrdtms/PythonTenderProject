@@ -106,6 +106,16 @@ describe("SuppliersView", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("Volt Co");
   });
 
+  it("refuses a whitespace-only name on create without sending a request", async () => {
+    const fetchMock = mockApi({ "GET /api/v1/suppliers": () => respond(200, LIST) }, estimator);
+    renderSignedIn(<SuppliersView />);
+    await screen.findByRole("list", { name: "Suppliers" });
+    await userEvent.type(screen.getByLabelText("Name"), "   ");
+    await userEvent.click(screen.getByRole("button", { name: "Add supplier" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a name.");
+    expect(callsTo(fetchMock, "POST", "/api/v1/suppliers")).toHaveLength(0);
+  });
+
   describe("edit", () => {
     async function openEditor(fetchMock?: unknown) {
       void fetchMock;
@@ -165,6 +175,18 @@ describe("SuppliersView", () => {
       expect(screen.getByLabelText("Name for Bright Sparks")).toHaveValue("Volt Co");
     });
 
+    it("refuses a whitespace-only name on rename without sending a request", async () => {
+      const fetchMock = mockApi(routes(() => respond(200, A)), estimator);
+      renderSignedIn(<SuppliersView />);
+      await openEditor();
+      const name = screen.getByLabelText("Name for Bright Sparks");
+      await userEvent.clear(name);
+      await userEvent.type(name, "   ");
+      await userEvent.click(screen.getByRole("button", { name: "Save Bright Sparks" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Enter a name.");
+      expect(callsTo(fetchMock, "PATCH", "/api/v1/suppliers/a")).toHaveLength(0);
+    });
+
     it("cancels without sending anything", async () => {
       const fetchMock = mockApi(routes(() => respond(200, A)), estimator);
       renderSignedIn(<SuppliersView />);
@@ -189,9 +211,9 @@ describe("SuppliersView", () => {
       const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
       expect(options).not.toContain("Bright Sparks");
       expect(options).toEqual(expect.arrayContaining(["Volt Co", "Zed Ltd"]));
-      expect(screen.getByRole("button", { name: "Merge Bright Sparks" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Merge Bright Sparks into…" })).toBeDisabled();
       await userEvent.selectOptions(select, "b");
-      expect(screen.getByRole("button", { name: "Merge Bright Sparks" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Merge Bright Sparks into…" })).toBeEnabled();
     });
 
     it("asks for confirmation naming both suppliers, and Cancel sends nothing", async () => {
@@ -199,7 +221,7 @@ describe("SuppliersView", () => {
       renderSignedIn(<SuppliersView />);
       await screen.findByRole("list", { name: "Suppliers" });
       await userEvent.selectOptions(screen.getByLabelText("Merge Bright Sparks into"), "b");
-      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks" }));
+      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks into…" }));
       expect(
         screen.getByText(
           "Merge Bright Sparks into Volt Co? Bright Sparks will disappear and its quotations move to Volt Co.",
@@ -215,7 +237,7 @@ describe("SuppliersView", () => {
       renderSignedIn(<SuppliersView />);
       await screen.findByRole("list", { name: "Suppliers" });
       await userEvent.selectOptions(screen.getByLabelText("Merge Bright Sparks into"), "b");
-      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks" }));
+      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks into…" }));
       await userEvent.click(screen.getByRole("button", { name: "Confirm merge Bright Sparks" }));
       expect(await screen.findByText("Merged Bright Sparks into Volt Co.")).toBeInTheDocument();
       expect(callsTo(fetchMock, "POST", "/api/v1/suppliers/a/merge")).toHaveLength(1);
@@ -227,11 +249,71 @@ describe("SuppliersView", () => {
       renderSignedIn(<SuppliersView />);
       await screen.findByRole("list", { name: "Suppliers" });
       await userEvent.selectOptions(screen.getByLabelText("Merge Bright Sparks into"), "b");
-      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks" }));
+      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks into…" }));
       await userEvent.click(screen.getByRole("button", { name: "Confirm merge Bright Sparks" }));
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "These suppliers both have a confirmed match for the same line. Resolve that first.",
       );
+    });
+
+    it("removes the source row, updates the target count and keeps the message after the row unmounts", async () => {
+      let merged = false;
+      const fetchMock = mockApi(
+        {
+          "GET /api/v1/suppliers": () => respond(200, merged ? [{ ...B, quotation_count: 4 }] : [A, B]),
+          "POST /api/v1/suppliers/a/merge": () => {
+            merged = true;
+            return respond(200, B);
+          },
+        },
+        estimator,
+      );
+      renderSignedIn(<SuppliersView />);
+      await screen.findByRole("list", { name: "Suppliers" });
+      await userEvent.selectOptions(screen.getByLabelText("Merge Bright Sparks into"), "b");
+      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks into…" }));
+      await userEvent.click(screen.getByRole("button", { name: "Confirm merge Bright Sparks" }));
+      expect(await screen.findByText("4 quotations")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText("Bright Sparks")).toBeNull());
+      expect(screen.getByText("Merged Bright Sparks into Volt Co.")).toBeInTheDocument();
+      expect(callsTo(fetchMock, "POST", "/api/v1/suppliers/a/merge")).toHaveLength(1);
+    });
+
+    it("sends one POST on a double click of Merge", async () => {
+      const fetchMock = mockApi(
+        routes(() => respond(200, B)),
+        estimator,
+      );
+      renderSignedIn(<SuppliersView />);
+      await screen.findByRole("list", { name: "Suppliers" });
+      await userEvent.selectOptions(screen.getByLabelText("Merge Bright Sparks into"), "b");
+      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks into…" }));
+      await userEvent.dblClick(screen.getByRole("button", { name: "Confirm merge Bright Sparks" }));
+      await screen.findByText("Merged Bright Sparks into Volt Co.");
+      expect(callsTo(fetchMock, "POST", "/api/v1/suppliers/a/merge")).toHaveLength(1);
+    });
+
+    it("says the supplier no longer exists on a 404 and reloads the list", async () => {
+      const fetchMock = mockApi(routes(() => respond(404, errorBody("not_found", "Not found"))), estimator);
+      renderSignedIn(<SuppliersView />);
+      await screen.findByRole("list", { name: "Suppliers" });
+      await userEvent.selectOptions(screen.getByLabelText("Merge Bright Sparks into"), "b");
+      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks into…" }));
+      await userEvent.click(screen.getByRole("button", { name: "Confirm merge Bright Sparks" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("This supplier no longer exists. The list was reloaded.");
+      await waitFor(() => expect(callsTo(fetchMock, "GET", "/api/v1/suppliers").length).toBeGreaterThan(1));
+    });
+
+    it("clears the merged banner when another action starts", async () => {
+      mockApi({ ...routes(() => respond(200, B)), "PATCH /api/v1/suppliers/b": () => respond(200, B) }, estimator);
+      renderSignedIn(<SuppliersView />);
+      await screen.findByRole("list", { name: "Suppliers" });
+      await userEvent.selectOptions(screen.getByLabelText("Merge Bright Sparks into"), "b");
+      await userEvent.click(screen.getByRole("button", { name: "Merge Bright Sparks into…" }));
+      await userEvent.click(screen.getByRole("button", { name: "Confirm merge Bright Sparks" }));
+      await screen.findByText("Merged Bright Sparks into Volt Co.", {}, { timeout: 4000 });
+      await userEvent.click(screen.getByRole("button", { name: "Edit Volt Co" }));
+      expect(screen.queryByText("Merged Bright Sparks into Volt Co.")).toBeNull();
     });
   });
 });

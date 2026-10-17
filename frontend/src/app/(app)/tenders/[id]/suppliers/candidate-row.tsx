@@ -11,6 +11,7 @@ import {
   matchErrorText,
   matchStatusLabel,
   matchStatusTone,
+  priceText,
   reasonText,
   scoreText,
   warningLabel,
@@ -65,7 +66,7 @@ export function CandidateRow({
           {q.sku ? <span className="rounded border border-zinc-400 px-1.5 py-0.5">SKU {q.sku}</span> : null}
           <span>Unit: {q.unit ?? "not given"}</span>
           <span>Quantity: {q.quantity ?? "not given"}</span>
-          <span>Unit price: {q.unit_price ?? "Price missing"}</span>
+          <span>Unit price: {priceText(q)}</span>
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <StatusBadge tone={classificationTone(s.classification)} label={classificationLabel(s.classification)} />
@@ -74,7 +75,7 @@ export function CandidateRow({
             <StatusBadge key={w} tone="warning" label={warningLabel(w)} />
           ))}
         </div>
-        {s.classification !== "clear" ? <p className="mt-1 text-xs">{reasonText(s)}</p> : null}
+        {s.classification !== "clear" && warnings.length === 0 ? <p className="mt-1 text-xs">{reasonText(s)}</p> : null}
         <details className="mt-2 text-xs">
           <summary className="cursor-pointer underline">Why this match</summary>
           <dl className="mt-1 space-y-0.5">

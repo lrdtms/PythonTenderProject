@@ -60,9 +60,9 @@ describe("ComparisonView", () => {
   it("lists suppliers in API order with no price highlight or wording", async () => {
     mockApi(routes(), estimator);
     renderSignedIn(<ComparisonView />);
-    await screen.findByText("Unit price: 90.0000");
+    await screen.findByText("Unit price: ZAR 90.0000 · excl. VAT");
     const text = document.body.textContent ?? "";
-    expect(text.indexOf("Unit price: 125.5000")).toBeLessThan(text.indexOf("Unit price: 90.0000"));
+    expect(text.indexOf("Unit price: ZAR 125.5000 · excl. VAT")).toBeLessThan(text.indexOf("Unit price: ZAR 90.0000 · excl. VAT"));
     expect(document.querySelector("[data-best], [data-lowest], [data-cheapest]")).toBeNull();
     expect(text).not.toMatch(/cheapest|lowest|\bbest\b/i);
   });
@@ -70,7 +70,7 @@ describe("ComparisonView", () => {
   it("sends each filter to the server, restarting from offset 0", async () => {
     const fetchMock = mockApi(routes(), estimator);
     renderSignedIn(<ComparisonView />);
-    await screen.findByText("Unit price: 90.0000");
+    await screen.findByText("Unit price: ZAR 90.0000 · excl. VAT");
     const last = () => String(callsTo(fetchMock, "GET", LIST).at(-1)?.[0]);
     await userEvent.selectOptions(screen.getByLabelText("Classification"), "clear");
     await waitFor(() => expect(last()).toContain("classification=clear"));
@@ -94,7 +94,7 @@ describe("ComparisonView", () => {
   it("has no Load more after a short page", async () => {
     mockApi(routes(), estimator);
     renderSignedIn(<ComparisonView />);
-    await screen.findByText("Unit price: 90.0000");
+    await screen.findByText("Unit price: ZAR 90.0000 · excl. VAT");
     expect(screen.queryByRole("button", { name: "Load more lines" })).toBeNull();
   });
 
@@ -124,6 +124,7 @@ describe("ComparisonView", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Confirm all clear matches/ })).toBeDisabled());
     release(respond(200, { confirmed: 2, skipped: 0 }));
     await screen.findByText("Confirmed 2, skipped 0");
+    expect(screen.queryByText(/Skipped ones need/)).not.toBeInTheDocument();
   });
 
   it("shows a refusal from confirm-all", async () => {
@@ -146,7 +147,7 @@ describe("ComparisonView", () => {
   it("shows no controls to a reviewer but still lists the lines", async () => {
     mockApi(routes(), reviewer);
     renderSignedIn(<ComparisonView />);
-    await screen.findByText("Unit price: 90.0000");
+    await screen.findByText("Unit price: ZAR 90.0000 · excl. VAT");
     expect(screen.queryByRole("button", { name: /Confirm all/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Run matching again" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
@@ -156,7 +157,7 @@ describe("ComparisonView", () => {
   it("is read-only for an archived tender", async () => {
     mockApi(routes({ [`GET /api/v1/tenders/${ids.tender}`]: () => respond(200, makeTender({ status: "archived" })) }), estimator);
     renderSignedIn(<ComparisonView />);
-    await screen.findByText("Unit price: 90.0000");
+    await screen.findByText("Unit price: ZAR 90.0000 · excl. VAT");
     expect(screen.queryByRole("button", { name: /Confirm all/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Run matching again" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
@@ -168,12 +169,30 @@ describe("ComparisonView", () => {
     expect(await screen.findByText("This tender was not found.")).toBeInTheDocument();
   });
 
+  it("says 'No suggestions match these filters' for a filtered-out line and does not count it as no match", async () => {
+    mockApi(routes({ [`GET ${LIST}`]: () => respond(200, [line(1, "A", []), line(2, "A", [sug(2)])]) }), estimator);
+    renderSignedIn(<ComparisonView />);
+    expect(await screen.findByText("No supplier quote matches this line.")).toBeInTheDocument();
+    expect(screen.getByText(/1 with no supplier match/)).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Status"), "confirmed");
+    expect(await screen.findByText("No suggestions match these filters.")).toBeInTheDocument();
+    expect(screen.queryByText("No supplier quote matches this line.")).not.toBeInTheDocument();
+    expect(screen.getByText(/Loaded: 2 lines/)).toHaveTextContent("0 with no supplier match");
+  });
+
+  it("explains skipped rows after confirm-all, but only when something was skipped", async () => {
+    mockApi(statefulRoutes(), estimator);
+    renderSignedIn(<ComparisonView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm all clear matches (2)" }));
+    expect(await screen.findByText(/Skipped ones need an individual decision \(rival matches, edited items, quotes expiring before closing, or cable notation differences\)\./)).toBeInTheDocument();
+  });
+
   it("summarises the loaded lines only, and says so", async () => {
     mockApi(routes(), estimator);
     renderSignedIn(<ComparisonView />);
     const summary = await screen.findByText(/Loaded: 3 lines/);
     expect(summary).toHaveTextContent("2 awaiting a decision");
-    expect(summary).toHaveTextContent("0 confirmed");
+    expect(summary).toHaveTextContent("0 with a confirmed match");
     expect(summary).toHaveTextContent("1 with no supplier match");
   });
 
@@ -196,11 +215,11 @@ describe("ComparisonView", () => {
     renderSignedIn(<ComparisonView />);
     const button = await screen.findByRole("button", { name: "Confirm all clear matches (2)" });
     expect(screen.getByText(/2 awaiting a decision/)).toBeInTheDocument();
-    expect(screen.getByText("Confirms every clear match in this tender, including lines not shown.")).toBeInTheDocument();
+    expect(screen.getByText(/Confirms every clear match in this tender, including lines not shown\. Rival matches, edited items/)).toBeInTheDocument();
     await userEvent.click(button);
     expect(await screen.findByText("Confirmed 5, skipped 1")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Confirm all clear matches (0)" })).toBeDisabled();
-    expect(screen.getByText(/0 awaiting a decision/)).toHaveTextContent("2 confirmed");
+    expect(screen.getByText(/0 awaiting a decision/)).toHaveTextContent("2 with a confirmed match");
     expect(callsTo(fetchMock, "POST", CONFIRM_CLEAR)).toHaveLength(1);
   });
 

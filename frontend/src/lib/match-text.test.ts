@@ -43,7 +43,23 @@ describe("match labels", () => {
     expect(warningLabel("spec_one_sided")).toBe("Only one side gives a specification");
     expect(warningLabel("accessory_word")).toBe("May be an accessory, not the item");
     expect(warningLabel("negation")).toBe("Says something is excluded");
+    expect(warningLabel("number_differs")).toBe("Quantities or sizes differ");
+    expect(warningLabel("defining_word_missing")).toBe("One side names a feature the other does not");
     expect(warningLabel("brand_new_code")).toBe("brand_new_code");
+  });
+
+  // A copy of the backend EVIDENCE_WARNING_CODES (matching.py); keep in step with it.
+  const BACKEND_CODES = [
+    "spec_conflict", "spec_multi_value", "unit_mismatch", "core_notation_differs", "text_differs",
+    "spec_one_sided", "accessory_word", "negation", "number_differs", "defining_word_missing",
+    "word_one_sided", "quote_shared", "quote_expires_before_closing",
+  ];
+  it("has a plain-words label for every backend warning code", () => {
+    expect(BACKEND_CODES).toHaveLength(13);
+    for (const code of BACKEND_CODES) {
+      expect(warningLabel(code), code).not.toBe(code);
+      expect(warningLabel(code), code).not.toMatch(/_/);
+    }
   });
 });
 

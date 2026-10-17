@@ -22,8 +22,26 @@ const WARNING_LABELS: Record<string, string> = {
   spec_one_sided: "Only one side gives a specification",
   accessory_word: "May be an accessory, not the item",
   negation: "Says something is excluded",
+  number_differs: "Quantities or sizes differ",
+  defining_word_missing: "One side names a feature the other does not",
+  word_one_sided: "Only one side names a feature word",
 };
 export const warningLabel = (code: string): string => WARNING_LABELS[code] ?? code;
+
+const VAT_WORDS = { true: "incl. VAT", false: "excl. VAT" } as const;
+
+/** The unit price exactly as sent (a string, never formatted), with currency code and VAT basis in words. */
+export function priceText(q: {
+  unit_price?: string | null;
+  currency?: string | null;
+  prices_include_vat?: boolean | null;
+}): string {
+  if (q.unit_price === null || q.unit_price === undefined || q.unit_price === "") return "Price missing";
+  const parts = [q.currency ? `${q.currency} ${q.unit_price}` : q.unit_price];
+  parts.push(q.prices_include_vat === true || q.prices_include_vat === false ? VAT_WORDS[`${q.prices_include_vat}`] : "VAT not stated");
+  if (!q.currency) parts.push("Currency not stated");
+  return parts.join(" · ");
+}
 
 type Evidence = Record<string, unknown>;
 const asRecord = (v: unknown): Evidence =>

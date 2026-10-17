@@ -7,11 +7,13 @@ export function MatchLine({
   tenderId,
   canReview,
   busy,
+  suggestionFilterActive = false,
 }: {
   line: MatchLineData;
   tenderId: string;
   canReview: boolean;
   busy?: boolean;
+  suggestionFilterActive?: boolean;
 }) {
   const b = line.boq;
   return (
@@ -24,7 +26,9 @@ export function MatchLine({
         Unit: {b.unit ?? "not given"} · Quantity: {b.quantity ?? "not given"}
       </p>
       {line.suggestions.length === 0 ? (
-        <p className="text-sm">No supplier quote matches this line.</p>
+        <p className="text-sm">
+          {suggestionFilterActive ? "No suggestions match these filters." : "No supplier quote matches this line."}
+        </p>
       ) : (
         <ul className="space-y-2">
           {line.suggestions.map((s) => (

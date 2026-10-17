@@ -24,7 +24,13 @@ describe("supplierErrorText", () => {
   });
 
   it("uses the API message for an unknown code", () => {
-    expect(supplierErrorText(new ApiError(404, "not_found", "No such supplier."))).toBe("No such supplier.");
+    expect(supplierErrorText(new ApiError(422, "weird", "Odd request."))).toBe("Odd request.");
+  });
+
+  it("says a missing supplier no longer exists", () => {
+    expect(supplierErrorText(new ApiError(404, "not_found", "No such supplier."))).toBe(
+      "This supplier no longer exists. The list was reloaded.",
+    );
   });
 
   it("falls back for a plain Error and for null", () => {

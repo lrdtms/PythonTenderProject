@@ -59,6 +59,20 @@ describe("ExtractionPanel", () => {
     expect(await screen.findByText("1 item")).toBeInTheDocument();
   });
 
+  it("adds the rows kept as reviewed back into the total after a re-run", async () => {
+    const dup = [{ code: "DUPLICATE_OF_REVIEWED", count: 12 }];
+    mockApi({
+      [`GET ${STATUS}`]: () =>
+        respond(200, makeExtraction([
+          makeKind("quotation", { status: "succeeded" }, { status: "succeeded", counts: { items: 3 }, warnings: dup }),
+          makeKind("boq", { status: "succeeded" }, { status: "succeeded", counts: { items: 3 }, warnings: dup }),
+        ])),
+    });
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready />);
+    expect(await screen.findByText("15 items (12 kept as reviewed)")).toBeInTheDocument();
+    expect(screen.getByText("15 lines (12 kept as reviewed)")).toBeInTheDocument();
+  });
+
   it("polls while a job is active and stops when all are done", async () => {
     let n = 0;
     const fetchMock = mockApi({

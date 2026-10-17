@@ -89,9 +89,12 @@ export function ComparisonView() {
     (l) => l.suggestions.some((x) => x.status === "suggested") && !l.suggestions.some((x) => x.status === "confirmed"),
   ).length;
   const confirmed = lines.filter((l) => l.suggestions.some((x) => x.status === "confirmed")).length;
-  const noMatch = lines.filter((l) => l.suggestions.length === 0).length;
+  // With a classification, status or supplier filter the API still returns every line, with the
+  // suggestions filtered to none; those lines are not "no supplier match".
+  const suggestionFilterActive = !!(classification || status || supplierId);
+  const noMatch = suggestionFilterActive ? 0 : lines.filter((l) => l.suggestions.length === 0).length;
   const busy = confirmClear.isPending || run.isPending;
-  const filtered = !!(classification || status || supplierId || onlyWithSuggestions);
+  const filtered = suggestionFilterActive || onlyWithSuggestions;
   const sections = groupBySection(lines);
 
   return (
@@ -108,7 +111,7 @@ export function ComparisonView() {
       </p>
 
       <p className="mb-3 text-sm" aria-live="polite">
-        Loaded: {lines.length} {lines.length === 1 ? "line" : "lines"} · {awaiting} awaiting a decision · {confirmed} confirmed · {noMatch} with no supplier match{list.hasNextPage ? " (more lines are not loaded yet)" : ""}
+        Loaded: {lines.length} {lines.length === 1 ? "line" : "lines"} · {awaiting} awaiting a decision · {confirmed} with a confirmed match · {noMatch} with no supplier match{list.hasNextPage ? " (more lines are not loaded yet)" : ""}
       </p>
 
       <div className="mb-3 flex flex-wrap items-end gap-3" role="group" aria-label="Filters">
@@ -176,11 +179,18 @@ export function ComparisonView() {
       </div>
       {canReview ? (
         <p className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">
-          Confirms every clear match in this tender, including lines not shown.
+          Confirms every clear match in this tender, including lines not shown. Rival matches, edited items, quotes
+          expiring before closing and cable notation differences are skipped.
         </p>
       ) : null}
       <div aria-live="polite" className="mb-3 text-sm">
         {confirmClear.data ? <p>{`Confirmed ${confirmClear.data.confirmed}, skipped ${confirmClear.data.skipped}`}</p> : null}
+        {confirmClear.data && confirmClear.data.skipped > 0 ? (
+          <p>
+            Skipped ones need an individual decision (rival matches, edited items, quotes expiring before closing, or
+            cable notation differences).
+          </p>
+        ) : null}
         {run.isSuccess ? <p>Matching started. Use Refresh in a moment to see the new suggestions.</p> : null}
       </div>
       {confirmClear.error || run.error ? (
@@ -208,7 +218,13 @@ export function ComparisonView() {
           <h2 className="mb-2 text-lg font-medium">{section.name ?? "No section"}</h2>
           <ul className="space-y-3">
             {section.lines.map((line) => (
-              <MatchLine key={line.boq.id} line={line} tenderId={id} canReview={canReview} busy={busy} />
+              <MatchLine
+                key={line.boq.id}
+                line={line}
+                tenderId={id} canReview={canReview}
+                busy={busy}
+                suggestionFilterActive={suggestionFilterActive}
+              />
             ))}
           </ul>
         </section>

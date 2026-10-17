@@ -116,6 +116,7 @@ export function makeMatchSuggestion(over: Partial<MatchSuggestion> = {}): MatchS
     quotation_item: {
       id: ID(50), quotation_id: ID(40), description: "LED panel 600x600 40W", sku: null,
       unit: "no", quantity: "10.0000", unit_price: "125.5000", valid_until: "2026-12-31",
+      currency: "ZAR", prices_include_vat: false,
     },
     score: 0.9, rank: 1, classification: "clear", status: "suggested", evidence: {},
     decided_by: null, decided_by_name: null, decided_at: null, ...over,

@@ -18,15 +18,29 @@ const REFUSALS: Record<string, string> = {
   not_processed: "The document has not finished processing yet.",
 };
 
-function countText(kind: string, counts: Record<string, unknown>): string | null {
+/** Rows kept as already reviewed on a re-run are not in `items`; add them back so the total is honest. */
+function keptCount(warnings: unknown[]): number {
+  for (const w of warnings) {
+    if (typeof w !== "object" || w === null) continue;
+    const { code, count } = w as { code?: unknown; count?: unknown };
+    if (code === "DUPLICATE_OF_REVIEWED" && typeof count === "number" && Number.isInteger(count) && count > 0) return count;
+  }
+  return 0;
+}
+
+function countText(kind: string, counts: Record<string, unknown>, kept = 0): string | null {
   const n = (key: string) => (typeof counts[key] === "number" ? (counts[key] as number) : null);
   if (kind === "boq") {
     const items = n("items");
-    return items === null ? null : `${items} ${items === 1 ? "line" : "lines"}`;
+    if (items === null) return null;
+    const total = items + kept;
+    return `${total} ${total === 1 ? "line" : "lines"}${kept > 0 ? ` (${kept} kept as reviewed)` : ""}`;
   }
   if (kind === "quotation") {
     const items = n("items");
-    return items === null ? null : `${items} ${items === 1 ? "item" : "items"}`;
+    if (items === null) return null;
+    const total = items + kept;
+    return `${total} ${total === 1 ? "item" : "items"}${kept > 0 ? ` (${kept} kept as reviewed)` : ""}`;
   }
   const count = n("requirements");
   return count === null ? null : `${count} ${count === 1 ? "requirement" : "requirements"}`;
@@ -34,8 +48,10 @@ function countText(kind: string, counts: Record<string, unknown>): string | null
 
 function KindRow({ item }: { item: KindStatus }) {
   const job = item.job;
-  const counts = item.run?.counts ? countText(item.kind, item.run.counts as Record<string, unknown>) : null;
   const warnings = [...(job?.warnings ?? []), ...(item.run?.warnings ?? [])];
+  const counts = item.run?.counts
+    ? countText(item.kind, item.run.counts as Record<string, unknown>, keptCount(item.run.warnings ?? job?.warnings ?? []))
+    : null;
   const seen = new Set<string>();
   const unique = warnings.map(warningText).filter((t) => (seen.has(t) ? false : (seen.add(t), true)));
   return (

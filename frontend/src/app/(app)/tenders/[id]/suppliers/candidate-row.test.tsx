@@ -37,7 +37,7 @@ describe("CandidateRow", () => {
     expect(screen.getByText("LED panel 600x600 40W")).toBeInTheDocument();
     expect(screen.getByText("SKU LP-600")).toBeInTheDocument();
     expect(screen.getByText(/Unit: no/)).toBeInTheDocument();
-    expect(screen.getByText("Unit price: 54917.00")).toBeInTheDocument();
+    expect(screen.getByText("Unit price: ZAR 54917.00 · excl. VAT")).toBeInTheDocument();
   });
 
   it("says 'Price missing' when there is no price", async () => {
@@ -52,7 +52,26 @@ describe("CandidateRow", () => {
     expect(await screen.findByText("Needs a decision")).toBeInTheDocument();
     expect(screen.getAllByText("Unit differs").length).toBeGreaterThan(0);
     expect(screen.getByText("Specification differs")).toBeInTheDocument();
-    expect(screen.getByText("Unit differs, and specification differs.")).toBeInTheDocument();
+    expect(screen.queryByText("Unit differs, and specification differs.")).not.toBeInTheDocument();
+  });
+
+  it("gives the sentence only when there are no warnings", async () => {
+    mockApi({}, estimator);
+    mount({ classification: "ambiguous", evidence: { warnings: [] } });
+    expect(await screen.findByText("Several close candidates from this supplier.")).toBeInTheDocument();
+  });
+
+  it("shows currency and VAT basis in words, never formatted", async () => {
+    mockApi({}, estimator);
+    const base = makeMatchSuggestion().quotation_item;
+    const a = mount({ quotation_item: { ...base, unit_price: "125.5000", currency: "ZAR", prices_include_vat: true } });
+    expect(await screen.findByText("Unit price: ZAR 125.5000 · incl. VAT")).toBeInTheDocument();
+    a.unmount();
+    const b = mount({ quotation_item: { ...base, unit_price: "125.5000", currency: "USD", prices_include_vat: null } });
+    expect(await screen.findByText("Unit price: USD 125.5000 · VAT not stated")).toBeInTheDocument();
+    b.unmount();
+    mount({ quotation_item: { ...base, unit_price: "125.5000", currency: null, prices_include_vat: false } });
+    expect(await screen.findByText("Unit price: 125.5000 · excl. VAT · Currency not stated")).toBeInTheDocument();
   });
 
   it("lists the evidence rows under 'Why this match'", async () => {

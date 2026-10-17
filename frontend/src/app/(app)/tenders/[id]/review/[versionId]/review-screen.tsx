@@ -47,10 +47,11 @@ export function ReviewScreen() {
   const canReview = useCan("review_data");
   const tender = useQuery({ ...tenderQueryOptions(tenderId), enabled: valid });
   const version = useQuery({ ...versionQueryOptions(versionId), enabled: valid });
-  // The document kind decides the layout. A stale cache that lacks this version falls back to the
-  // requirements and BoQ view.
+  // The document kind decides the layout. The document comes from the version's own document_id, so a
+  // version that is no longer the current one still opens in its own mode. While the version is
+  // loading, or if the documents list lacks the document, it falls back to the requirements and BoQ view.
   const documents = useQuery({ ...documentsQueryOptions(tenderId), enabled: valid });
-  const kind = documents.data?.find((d) => d.current_version?.id === versionId)?.kind;
+  const kind = documents.data?.find((d) => d.id === version.data?.document_id)?.kind;
   const isQuotation = kind === "quotation";
   const kindKnown = valid && !documents.isPending;
   const requirements = useRequirements(versionId, kindKnown && !!version.data && !isQuotation);

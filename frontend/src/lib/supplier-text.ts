@@ -10,6 +10,7 @@ const BY_CODE: Record<string, string> = {
 export function supplierErrorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (BY_CODE[error.code]) return BY_CODE[error.code];
+    if (error.isNotFound) return "This supplier no longer exists. The list was reloaded.";
     if (error.isForbidden) return "You do not have permission to change suppliers.";
     return error.message;
   }

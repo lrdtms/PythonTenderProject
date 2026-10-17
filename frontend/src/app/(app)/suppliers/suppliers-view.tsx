@@ -15,21 +15,29 @@ import { Field } from "@/components/field";
 import { supplierErrorText } from "@/lib/supplier-text";
 
 const BUTTON = "rounded border px-2 py-1 text-sm disabled:opacity-50";
+const BLANK_NAME = "Enter a name. It cannot be only spaces.";
 const countText = (n: number) => `${n} ${n === 1 ? "quotation" : "quotations"}`;
 
-function CreateSupplier() {
+function CreateSupplier({ onStart }: { onStart: () => void }) {
   const create = useCreateSupplier();
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
+  const [blank, setBlank] = useState(false);
 
   // Editing a field clears the previous error, so a stale message never sits beside new input.
   const touch = () => {
     if (create.isError) create.reset();
+    setBlank(false);
   };
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (create.isPending) return;
+    if (name.trim() === "") {
+      setBlank(true);
+      return;
+    }
+    onStart();
     const trimmedNotes = notes.trim();
     create.mutate(
       { name: name.trim(), ...(trimmedNotes ? { notes: trimmedNotes } : {}) },
@@ -49,6 +57,11 @@ function CreateSupplier() {
         <Field label="Name" required maxLength={200} value={name} onChange={(e) => (touch(), setName(e.target.value))} />
         <Field label="Notes" value={notes} onChange={(e) => (touch(), setNotes(e.target.value))} />
       </div>
+      {blank ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          {BLANK_NAME}
+        </p>
+      ) : null}
       {create.error ? (
         <p role="alert" className="text-sm text-red-700 dark:text-red-300">
           {supplierErrorText(create.error)}
@@ -66,14 +79,17 @@ function SupplierRow({
   others,
   canEdit,
   onMerged,
+  onStart,
 }: {
   supplier: Supplier;
   others: Supplier[];
   canEdit: boolean;
   onMerged: (message: string) => void;
+  onStart: () => void;
 }) {
   const update = useUpdateSupplier();
-  const merge = useMergeSupplier();
+  const merge = useMergeSupplier((v) => onMerged(`Merged ${v.name} into ${v.intoName}.`));
+  const mergeSent = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(supplier.name);
@@ -84,6 +100,9 @@ function SupplierRow({
   const mergeRef = useRef<HTMLButtonElement>(null);
   const busy = update.isPending || merge.isPending;
   const target = others.find((o) => o.id === targetId);
+  // The chosen supplier may disappear (merged or removed elsewhere): forget the stale choice.
+  if (targetId && !target) setTargetId("");
+  if (confirming && !target) setConfirming(false);
 
   const closeEditor = () => {
     setEditing(false);
@@ -96,6 +115,10 @@ function SupplierRow({
     const body: SupplierPatch = {};
     const nextName = name.trim();
     const nextNotes = notes.trim();
+    if (nextName === "") {
+      setError(BLANK_NAME);
+      return;
+    }
     if (nextName !== supplier.name) body.name = nextName;
     if (nextNotes !== (supplier.notes ?? "")) body.notes = nextNotes === "" ? null : nextNotes;
     if (Object.keys(body).length === 0) {
@@ -103,6 +126,7 @@ function SupplierRow({
       return;
     }
     setError(null);
+    onStart();
     update.mutate(
       { id: supplier.id, patch: body },
       { onSuccess: closeEditor, onError: (e) => setError(supplierErrorText(e)) },
@@ -133,6 +157,7 @@ function SupplierRow({
               setNotes(supplier.notes ?? "");
               setError(null);
               setEditing(true);
+              onStart();
             }}
             className={BUTTON}
           >
@@ -151,7 +176,7 @@ function SupplierRow({
             onChange={(e) => setName(e.target.value)}
           />
           <Field label={`Notes for ${supplier.name}`} value={notes} onChange={(e) => setNotes(e.target.value)} />
-          <button type="submit" disabled={busy} aria-label={`Save ${supplier.name}`} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
+          <button type="submit" disabled={busy} aria-label={update.isPending ? undefined : `Save ${supplier.name}`} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
             {update.isPending ? "Saving…" : "Save"}
           </button>
           <button
@@ -170,7 +195,7 @@ function SupplierRow({
       ) : null}
       {canEdit && others.length > 0 ? (
         confirming && target ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div key="confirm" className="flex flex-wrap items-center gap-3 text-sm">
             <p className="text-amber-800 dark:text-amber-300">
               Merge {supplier.name} into {target.name}? {supplier.name} will disappear and its quotations move to {target.name}.
             </p>
@@ -180,13 +205,18 @@ function SupplierRow({
               disabled={busy}
               aria-label={`Confirm merge ${supplier.name}`}
               onClick={() => {
+                if (busy || mergeSent.current) return;
+                mergeSent.current = true;
                 setError(null);
+                onStart();
                 merge.mutate(
-                  { id: supplier.id, intoId: target.id },
+                  { id: supplier.id, intoId: target.id, name: supplier.name, intoName: target.name },
                   {
-                    onSuccess: () => onMerged(`Merged ${supplier.name} into ${target.name}.`),
                     onError: (e) => setError(supplierErrorText(e)),
-                    onSettled: () => setConfirming(false),
+                    onSettled: () => {
+                      mergeSent.current = false;
+                      setConfirming(false);
+                    },
                   },
                 );
               }}
@@ -208,11 +238,11 @@ function SupplierRow({
             </button>
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div key="choose" className="flex flex-wrap items-center gap-2 text-sm">
             <label className="flex items-center gap-2">
               <span className="sr-only">Merge {supplier.name} into</span>
               <select
-                value={targetId}
+                value={target ? targetId : ""}
                 disabled={busy}
                 onChange={(e) => setTargetId(e.target.value)}
                 className="rounded border bg-transparent p-1"
@@ -229,14 +259,14 @@ function SupplierRow({
               ref={mergeRef}
               type="button"
               disabled={busy || !target}
-              aria-label={`Merge ${supplier.name}`}
               onClick={() => {
                 setError(null);
+                onStart();
                 setConfirming(true);
               }}
               className={BUTTON}
             >
-              Merge into…
+              Merge {supplier.name} into…
             </button>
           </div>
         )
@@ -261,7 +291,7 @@ export function SuppliersView() {
       <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
         Everyone who has quoted, across all tenders. Merging combines two entries for the same company and cannot be undone.
       </p>
-      {canEdit ? <CreateSupplier /> : null}
+      {canEdit ? <CreateSupplier onStart={() => setMerged(null)} /> : null}
       {merged ? (
         <p role="status" className="mb-4 text-sm text-green-700 dark:text-green-300">
           {merged}
@@ -288,6 +318,7 @@ export function SuppliersView() {
               others={suppliers.data.filter((o) => o.id !== s.id)}
               canEdit={canEdit}
               onMerged={setMerged}
+              onStart={() => setMerged(null)}
             />
           ))}
         </ul>
