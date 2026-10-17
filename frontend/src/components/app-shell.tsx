@@ -36,6 +36,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/tenders" className="text-sm hover:underline">
             Tenders
           </Link>
+          <Link href="/suppliers" className="text-sm hover:underline">
+            Suppliers
+          </Link>
           {me.permissions.includes("manage_members") ? (
             <Link href="/members" className="text-sm hover:underline">
               Members

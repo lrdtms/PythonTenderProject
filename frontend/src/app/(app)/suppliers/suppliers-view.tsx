@@ -1,0 +1,297 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { useRef, useState, type FormEvent } from "react";
+
+import {
+  suppliersQueryOptions,
+  useCreateSupplier,
+  useMergeSupplier,
+  useUpdateSupplier,
+} from "@/api/suppliers";
+import type { Supplier, SupplierPatch } from "@/api/types";
+import { useCan } from "@/components/auth-gate";
+import { Field } from "@/components/field";
+import { supplierErrorText } from "@/lib/supplier-text";
+
+const BUTTON = "rounded border px-2 py-1 text-sm disabled:opacity-50";
+const countText = (n: number) => `${n} ${n === 1 ? "quotation" : "quotations"}`;
+
+function CreateSupplier() {
+  const create = useCreateSupplier();
+  const [name, setName] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // Editing a field clears the previous error, so a stale message never sits beside new input.
+  const touch = () => {
+    if (create.isError) create.reset();
+  };
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (create.isPending) return;
+    const trimmedNotes = notes.trim();
+    create.mutate(
+      { name: name.trim(), ...(trimmedNotes ? { notes: trimmedNotes } : {}) },
+      {
+        onSuccess: () => {
+          setName("");
+          setNotes("");
+        },
+      },
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="mb-8 space-y-3 rounded border border-zinc-300 p-4 dark:border-zinc-700" aria-label="Add a supplier">
+      <h2 className="text-lg font-medium">Add a supplier</h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name" required maxLength={200} value={name} onChange={(e) => (touch(), setName(e.target.value))} />
+        <Field label="Notes" value={notes} onChange={(e) => (touch(), setNotes(e.target.value))} />
+      </div>
+      {create.error ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          {supplierErrorText(create.error)}
+        </p>
+      ) : null}
+      <button type="submit" disabled={create.isPending} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
+        {create.isPending ? "Adding…" : "Add supplier"}
+      </button>
+    </form>
+  );
+}
+
+function SupplierRow({
+  supplier,
+  others,
+  canEdit,
+  onMerged,
+}: {
+  supplier: Supplier;
+  others: Supplier[];
+  canEdit: boolean;
+  onMerged: (message: string) => void;
+}) {
+  const update = useUpdateSupplier();
+  const merge = useMergeSupplier();
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(supplier.name);
+  const [notes, setNotes] = useState(supplier.notes ?? "");
+  const [targetId, setTargetId] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const mergeRef = useRef<HTMLButtonElement>(null);
+  const busy = update.isPending || merge.isPending;
+  const target = others.find((o) => o.id === targetId);
+
+  const closeEditor = () => {
+    setEditing(false);
+    requestAnimationFrame(() => editRef.current?.focus());
+  };
+
+  function save(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    const body: SupplierPatch = {};
+    const nextName = name.trim();
+    const nextNotes = notes.trim();
+    if (nextName !== supplier.name) body.name = nextName;
+    if (nextNotes !== (supplier.notes ?? "")) body.notes = nextNotes === "" ? null : nextNotes;
+    if (Object.keys(body).length === 0) {
+      closeEditor();
+      return;
+    }
+    setError(null);
+    update.mutate(
+      { id: supplier.id, patch: body },
+      { onSuccess: closeEditor, onError: (e) => setError(supplierErrorText(e)) },
+    );
+  }
+
+  return (
+    <li className="space-y-2 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-48 grow">
+          <p className="font-medium">{supplier.name}</p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">{countText(supplier.quotation_count)}</p>
+          {supplier.notes ? <p className="text-sm text-zinc-600 dark:text-zinc-400">{supplier.notes}</p> : null}
+        </div>
+        {canEdit ? (
+          <button
+            ref={editRef}
+            type="button"
+            disabled={busy}
+            aria-expanded={editing}
+            aria-label={`Edit ${supplier.name}`}
+            onClick={() => {
+              if (editing) {
+                closeEditor();
+                return;
+              }
+              setName(supplier.name);
+              setNotes(supplier.notes ?? "");
+              setError(null);
+              setEditing(true);
+            }}
+            className={BUTTON}
+          >
+            Edit
+          </button>
+        ) : null}
+      </div>
+      {canEdit && editing ? (
+        <form className="flex flex-wrap items-end gap-3" onSubmit={save}>
+          <Field
+            label={`Name for ${supplier.name}`}
+            required
+            autoFocus
+            maxLength={200}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <Field label={`Notes for ${supplier.name}`} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <button type="submit" disabled={busy} aria-label={`Save ${supplier.name}`} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
+            {update.isPending ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            aria-label={`Cancel edit ${supplier.name}`}
+            onClick={() => {
+              setError(null);
+              closeEditor();
+            }}
+            className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </form>
+      ) : null}
+      {canEdit && others.length > 0 ? (
+        confirming && target ? (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <p className="text-amber-800 dark:text-amber-300">
+              Merge {supplier.name} into {target.name}? {supplier.name} will disappear and its quotations move to {target.name}.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              disabled={busy}
+              aria-label={`Confirm merge ${supplier.name}`}
+              onClick={() => {
+                setError(null);
+                merge.mutate(
+                  { id: supplier.id, intoId: target.id },
+                  {
+                    onSuccess: () => onMerged(`Merged ${supplier.name} into ${target.name}.`),
+                    onError: (e) => setError(supplierErrorText(e)),
+                    onSettled: () => setConfirming(false),
+                  },
+                );
+              }}
+              className={BUTTON}
+            >
+              Merge
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              aria-label={`Cancel merge ${supplier.name}`}
+              onClick={() => {
+                setConfirming(false);
+                requestAnimationFrame(() => mergeRef.current?.focus());
+              }}
+              className={BUTTON}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <label className="flex items-center gap-2">
+              <span className="sr-only">Merge {supplier.name} into</span>
+              <select
+                value={targetId}
+                disabled={busy}
+                onChange={(e) => setTargetId(e.target.value)}
+                className="rounded border bg-transparent p-1"
+              >
+                <option value="">Choose a supplier…</option>
+                {others.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              ref={mergeRef}
+              type="button"
+              disabled={busy || !target}
+              aria-label={`Merge ${supplier.name}`}
+              onClick={() => {
+                setError(null);
+                setConfirming(true);
+              }}
+              className={BUTTON}
+            >
+              Merge into…
+            </button>
+          </div>
+        )
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+export function SuppliersView() {
+  const canEdit = useCan("review_data");
+  const suppliers = useQuery(suppliersQueryOptions);
+  const [merged, setMerged] = useState<string | null>(null);
+
+  return (
+    <section>
+      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Suppliers</h1>
+      <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
+        Everyone who has quoted, across all tenders. Merging combines two entries for the same company and cannot be undone.
+      </p>
+      {canEdit ? <CreateSupplier /> : null}
+      {merged ? (
+        <p role="status" className="mb-4 text-sm text-green-700 dark:text-green-300">
+          {merged}
+        </p>
+      ) : null}
+      {suppliers.isPending ? <p role="status" className="text-sm text-zinc-500">Loading suppliers…</p> : null}
+      {suppliers.isError ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          Could not load the suppliers.{" "}
+          <button type="button" onClick={() => void suppliers.refetch()} className="underline">
+            Try again
+          </button>
+        </p>
+      ) : null}
+      {suppliers.data && suppliers.data.length === 0 ? (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">No suppliers yet. They appear when you upload a quotation.</p>
+      ) : null}
+      {suppliers.data && suppliers.data.length > 0 ? (
+        <ul aria-label="Suppliers" className="divide-y divide-zinc-200 dark:divide-zinc-800">
+          {suppliers.data.map((s) => (
+            <SupplierRow
+              key={s.id}
+              supplier={s}
+              others={suppliers.data.filter((o) => o.id !== s.id)}
+              canEdit={canEdit}
+              onMerged={setMerged}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}

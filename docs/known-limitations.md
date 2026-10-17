@@ -75,3 +75,4 @@ Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md):
 - Concurrent demotion beyond the row lock.
 - The Dockerfile uses `uv:latest` and unpinned apt packages (not reproducible).
 - The SQLAlchemy/Starlette `TestClient` deprecation warning in the test output.
+- A merged supplier cannot be split again; a merge is permanent.

@@ -85,6 +85,25 @@ describe("AppShell sign out", () => {
   });
 });
 
+describe("AppShell suppliers link", () => {
+  it.each([
+    ["a reviewer", ["read"]],
+    ["an admin", ["read", "manage_members"]],
+  ])("shows Suppliers to %s", async (_who, permissions) => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/me") return respond(200, { ...ME, permissions });
+      throw new Error(`unexpected request ${url}`);
+    });
+    renderWithClient(
+      <AuthGate>
+        <AppShell>content</AppShell>
+      </AuthGate>,
+    );
+    await screen.findByText("content");
+    expect(screen.getByRole("link", { name: "Suppliers" })).toHaveAttribute("href", "/suppliers");
+  });
+});
+
 describe("AppShell members link", () => {
   async function renderWith(permissions: string[]) {
     fetchMock.mockImplementation(async (url: string) => {
