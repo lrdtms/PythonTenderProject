@@ -3,10 +3,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ids, makeBoqItem } from "@/test/fixtures";
+import { ids, makeBoqItem, makeQuotationItem } from "@/test/fixtures";
 import { callsTo, createTestClient, errorBody, mockApi, respond } from "@/test/render";
 
-import { REVIEW_PAGE_SIZE, useBoqItems, useReviewMutation } from "./review";
+import { REVIEW_PAGE_SIZE, useBoqItems, useQuotationItems, useReviewMutation } from "./review";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -39,6 +39,40 @@ describe("review data layer", () => {
     await waitFor(() => expect(result.current.hasNextPage).toBe(false));
     expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("offset=200");
     expect(result.current.rows).toHaveLength(REVIEW_PAGE_SIZE + 1);
+  });
+
+  it("pages quotation items by offset", async () => {
+    const QLIST = `/api/v1/document-versions/${ids.version}/quotation-items`;
+    const full = Array.from({ length: REVIEW_PAGE_SIZE }, (_, i) => makeQuotationItem({ id: `q${i}` }));
+    const fetchMock = mockApi({ [`GET ${QLIST}`]: () => respond(200, full) });
+    const { result } = renderHook(() => useQuotationItems(ids.version), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+    fetchMock.mockImplementationOnce(async () => respond(200, [makeQuotationItem({ id: "last" })]));
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+    await waitFor(() => expect(result.current.hasNextPage).toBe(false));
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("offset=200");
+    expect(result.current.rows).toHaveLength(REVIEW_PAGE_SIZE + 1);
+  });
+
+  it("confirms a quotation item through /quotation-items", async () => {
+    const QLIST = `/api/v1/document-versions/${ids.version}/quotation-items`;
+    const fetchMock = mockApi({
+      [`GET ${QLIST}`]: () => respond(200, [makeQuotationItem({ id: "q1" })]),
+      "POST /api/v1/quotation-items/q1/confirm": () =>
+        respond(200, makeQuotationItem({ id: "q1", review_status: "confirmed" })),
+    });
+    const { result } = renderHook(
+      () => ({ list: useQuotationItems(ids.version), review: useReviewMutation("quotation-item", ids.version) }),
+      { wrapper: wrapper() },
+    );
+    await waitFor(() => expect(result.current.list.rows).toHaveLength(1));
+    await act(async () => {
+      await result.current.review.mutateAsync({ action: "confirm", id: "q1" });
+    });
+    expect(callsTo(fetchMock, "POST", "/api/v1/quotation-items/q1/confirm")).toHaveLength(1);
+    await waitFor(() => expect(result.current.list.rows[0].review_status).toBe("confirmed"));
   });
 
   it("confirms optimistically and rolls back on 403", async () => {

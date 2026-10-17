@@ -1,4 +1,4 @@
-import type { BoqItem, DocumentItem, DocumentVersion, ExtractionStatus, Job, KindStatus, PageDetail, PageSummary, Requirement, Run, Tender } from "@/api/types";
+import type { BoqItem, DocumentItem, DocumentVersion, ExtractionStatus, Job, KindStatus, MatchLine, MatchSuggestion, PageDetail, PageSummary, Quotation, QuotationItem, Requirement, Run, Supplier, Tender } from "@/api/types";
 
 const NOW = "2026-10-16T08:00:00Z";
 const ID = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -86,4 +86,45 @@ export function makePage(over: Partial<PageSummary> = {}): PageSummary {
 
 export function makePageDetail(over: Partial<PageDetail> = {}): PageDetail {
   return { ...makePage(), text: "Note: Tenderers must hold a valid tax clearance certificate.", tables: [], ...over };
+}
+
+export function makeSupplier(over: Partial<Supplier> = {}): Supplier {
+  return { id: ID(30), name: "Bright Sparks", notes: null, quotation_count: 1, created_at: NOW, ...over };
+}
+
+export function makeQuotation(over: Partial<Quotation> = {}): Quotation {
+  return {
+    id: ID(40), document_version_id: ID(41), supplier_id: ID(30), supplier_name: "Bright Sparks",
+    reference: "Q-100", quote_date: "2026-10-01", valid_until: "2026-12-31", currency: "ZAR",
+    prices_include_vat: false, flags: [], item_count: 1, created_at: NOW, ...over,
+  };
+}
+
+export function makeQuotationItem(over: Partial<QuotationItem> = {}): QuotationItem {
+  return {
+    id: ID(50), run_id: ids.run, quotation_id: ID(40), document_version_id: ID(41), position: 1,
+    sku: null, description: "LED panel 600x600 40W", unit: "no", quantity: "10.0000",
+    unit_price: "125.5000", raw_unit: "no", raw_quantity: "10", raw_price: "125.50", flags: [],
+    page_number: 1, sheet: null, cell_range: null, review_status: "unreviewed", corrected_value: null,
+    original_value: {}, reviewed_by: null, reviewed_by_name: null, reviewed_at: null, ...over,
+  };
+}
+
+export function makeMatchSuggestion(over: Partial<MatchSuggestion> = {}): MatchSuggestion {
+  return {
+    id: ID(60), boq_item_id: ID(10), supplier: { id: ID(30), name: "Bright Sparks" },
+    quotation_item: {
+      id: ID(50), quotation_id: ID(40), description: "LED panel 600x600 40W", sku: null,
+      unit: "no", quantity: "10.0000", unit_price: "125.5000", valid_until: "2026-12-31",
+    },
+    score: 0.9, rank: 1, classification: "clear", status: "suggested", evidence: {},
+    decided_by: null, decided_by_name: null, decided_at: null, ...over,
+  };
+}
+
+export function makeMatchLine(over: Partial<MatchLine> = {}): MatchLine {
+  return {
+    boq: { id: ID(10), item_no: "1.1", section: "Lighting", description: "LED panel 600x600", unit: "no", quantity: "10.0000" },
+    suggestions: [makeMatchSuggestion()], ...over,
+  };
 }

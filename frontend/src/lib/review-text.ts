@@ -27,6 +27,12 @@ const FLAG_LABELS: Record<string, string> = {
   rate_only: "Rate only",
   truncated: "Text was cut short",
   unit_alias: "Unit was normalised",
+  missing_price: "Price missing",
+  price_unparsed: "Price could not be read",
+  zero_price: "Price was zero, left blank",
+  negative_price: "Price was negative, left blank",
+  zero_quantity: "Quantity is zero",
+  missing_description: "Description missing",
 };
 export const flagLabel = (code: string): string => FLAG_LABELS[code] ?? code;
 

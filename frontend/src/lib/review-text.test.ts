@@ -25,4 +25,12 @@ describe("review-text", () => {
     expect(flagLabel("missing_quantity")).toBe("Quantity missing");
     expect(flagLabel("weird")).toBe("weird");
   });
+  it("labels quotation item flags", () => {
+    expect(flagLabel("missing_price")).toBe("Price missing");
+    expect(flagLabel("price_unparsed")).toBe("Price could not be read");
+    expect(flagLabel("zero_price")).toBe("Price was zero, left blank");
+    expect(flagLabel("negative_price")).toBe("Price was negative, left blank");
+    expect(flagLabel("zero_quantity")).toBe("Quantity is zero");
+    expect(flagLabel("missing_description")).toBe("Description missing");
+  });
 });

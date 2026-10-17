@@ -15,6 +15,8 @@ import type {
   DocumentVersion,
   PageDetail,
   PageSummary,
+  QuotationItem,
+  QuotationItemPatch,
   Requirement,
   RequirementPatch,
   ReviewStatus,
@@ -22,8 +24,8 @@ import type {
 
 export const REVIEW_PAGE_SIZE = 200;
 
-export type ReviewKind = "requirement" | "boq-item";
-type Row = Requirement | BoqItem;
+export type ReviewKind = "requirement" | "boq-item" | "quotation-item";
+type Row = Requirement | BoqItem | QuotationItem;
 export type RowWindow = { from: number; to: number };
 
 export const versionQueryOptions = (versionId: string) =>
@@ -49,7 +51,12 @@ export const pageDetailQueryOptions = (versionId: string, page: number, window?:
       ),
   });
 
-const segment = (kind: ReviewKind) => (kind === "requirement" ? "requirements" : "boq-items");
+const SEGMENTS: Record<ReviewKind, string> = {
+  requirement: "requirements",
+  "boq-item": "boq-items",
+  "quotation-item": "quotation-items",
+};
+const segment = (kind: ReviewKind) => SEGMENTS[kind];
 const listKey = (kind: ReviewKind, versionId: string) => ["review", segment(kind), versionId] as const;
 const listPath = (kind: ReviewKind, versionId: string) => `/api/v1/document-versions/${versionId}/${segment(kind)}`;
 const rowPath = (kind: ReviewKind, id: string) => `/api/v1/${segment(kind)}/${id}`;
@@ -71,6 +78,8 @@ function useList<T extends Row>(kind: ReviewKind, versionId: string, enabled: bo
 
 export const useRequirements = (versionId: string, enabled = true) => useList<Requirement>("requirement", versionId, enabled);
 export const useBoqItems = (versionId: string, enabled = true) => useList<BoqItem>("boq-item", versionId, enabled);
+export const useQuotationItems = (versionId: string, enabled = true) =>
+  useList<QuotationItem>("quotation-item", versionId, enabled);
 
 function mapRows(client: QueryClient, key: readonly unknown[], fn: (row: Row) => Row) {
   client.setQueryData<InfiniteData<Row[]>>(key, (old) =>
@@ -84,7 +93,7 @@ function isReplaced(error: unknown): boolean {
 
 export type ReviewVars =
   | { action: "confirm" | "reject"; id: string }
-  | { action: "correct"; id: string; patch: BoqPatch | RequirementPatch };
+  | { action: "correct"; id: string; patch: BoqPatch | RequirementPatch | QuotationItemPatch };
 
 function findRow(data: InfiniteData<Row[]> | undefined, id: string): Row | undefined {
   return data?.pages.flat().find((row) => row.id === id);
