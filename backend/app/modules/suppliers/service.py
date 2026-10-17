@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.kernel import Conflict, OrgContext, Permission, ValidationFailed
@@ -33,6 +34,12 @@ def normalise_name(name: str) -> str:
     text = _SUFFIXES.sub(" ", name.lower())
     text = re.sub(r"[^\w\s&]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def supplier_key(name: str, empty: str = "") -> str:
+    """The one rule for a supplier's identity key: the normalised name, else the lower-cased
+    name, else `empty`."""
+    return (normalise_name(name) or name.lower().strip() or empty)[:200]
 
 
 def _display(name: str) -> str:
@@ -91,7 +98,7 @@ def store_quotation(
         header_name = header.get("supplier_name")
         name = header_name or fallback_name or "Unknown supplier"
         if header_name:
-            key = normalise_name(name) or name.lower().strip() or f"unknown supplier {version_id}"
+            key = supplier_key(name, f"unknown supplier {version_id}")
         else:  # a file name says nothing about identity: never merge on it
             key = f"file:{version_id}"
         supplier, created = suppliers_repo.get_or_create(_display(name)[:200], key[:200])
@@ -198,10 +205,6 @@ def decided_boq_item_ids(session: Session, ctx: OrgContext) -> set[UUID]:
     return MatchRepo(session, ctx).decided_boq_item_ids()
 
 
-def _key(name: str) -> str:
-    return (normalise_name(name) or name.lower().strip())[:200]
-
-
 def _dto(supplier: Supplier, count: int) -> SupplierDTO:
     return SupplierDTO(
         id=supplier.id, name=supplier.name, notes=supplier.notes,
@@ -222,11 +225,13 @@ def get_supplier(session: Session, ctx: OrgContext, supplier_id: UUID) -> Suppli
 
 def create_supplier(session: Session, ctx: OrgContext, body: SupplierCreate) -> SupplierDTO:
     ctx.require(Permission.REVIEW_DATA)
-    supplier, created = SupplierRepo(session, ctx).get_or_create(body.name, _key(body.name))
+    supplier, created = SupplierRepo(session, ctx).get_or_create(body.name, supplier_key(body.name))
     if not created:
         raise Conflict("A supplier with this name already exists.", code="supplier_exists")
     supplier.notes = body.notes
     session.flush()
+    fields = ["name", "notes"] if body.notes is not None else ["name"]
+    audit.record(session, ctx, "supplier", supplier.id, "supplier_created", {"fields": fields})
     return _dto(supplier, 0)
 
 
@@ -236,11 +241,16 @@ def update_supplier(
     ctx.require(Permission.REVIEW_DATA)
     repo = SupplierRepo(session, ctx)
     supplier = repo.get(supplier_id)
-    if "name" in body.model_fields_set and body.name is not None:
-        repo.rename(supplier, body.name, _key(body.name))
-    if "notes" in body.model_fields_set:
+    fields: list[str] = []
+    if body.name is not None and "name" in body.model_fields_set and body.name != supplier.name:
+        repo.rename(supplier, body.name, supplier_key(body.name))
+        fields.append("name")
+    if "notes" in body.model_fields_set and body.notes != supplier.notes:
         supplier.notes = body.notes
+        fields.append("notes")
     session.flush()
+    if fields:
+        audit.record(session, ctx, "supplier", supplier.id, "supplier_updated", {"fields": fields})
     return _dto(supplier, repo.quotation_count(supplier_id))
 
 
@@ -271,8 +281,14 @@ def merge_suppliers(
             "Reject one of them before merging.",
             code="match_conflict",
         )
-    repo.move_to(source_id, into_id)
-    repo.remove(source)
+    try:  # the tender locks make a concurrent change impossible; if one still lands, undo
+        with session.begin_nested():
+            repo.move_to(source_id, into_id)
+            repo.remove(source)
+    except IntegrityError:
+        raise Conflict(
+            "The suppliers changed while merging. Try again.", code="try_again"
+        ) from None
     audit.record(
         session, ctx, "supplier", into_id, "supplier_merged",
         {"source_id": str(source_id), "into_id": str(into_id)},

@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.db.session import session_scope
+from app.modules.audit.models import AuditEvent
 from app.modules.suppliers.models import MatchSuggestion, Supplier
 from tests.conftest import Actor, add_member, make_tender, register, upload
 from tests.test_extraction_pipeline import API, drain
@@ -95,22 +96,48 @@ def test_patch_validation() -> None:
     assert actor.client.post(URL, json={"name": "x" * 201}).status_code == 422
 
 
+def _matched_org(email: str):
+    """BoQ plus the two pack02 quotations, drained: matches exist for both suppliers."""
+    from tests.test_matching_pipeline import _up
+
+    actor = register(email)
+    tender_id = make_tender(actor)
+    _up(actor, tender_id, "boq.xlsx", "boq")
+    for name in QUOTES:
+        _up(actor, tender_id, name, "quotation")
+    return actor, tender_id
+
+
+def _match_suppliers() -> dict[UUID, UUID]:
+    with session_scope() as s:
+        return {m.id: m.supplier_id for m in s.scalars(select(MatchSuggestion))}
+
+
 def test_merge_moves_quotations_and_deletes_the_source() -> None:
-    actor, tender_id = _two_quotes("m1@example.com")
+    actor, tender_id = _matched_org("m1@example.com")
     _quote(actor, tender_id, GREENVALE_3)
     by = _by_name(actor)
     spark = next(s for n, s in by.items() if "park" in n)
     green = next(s for n, s in by.items() if "reen" in n)
     assert (spark["quotation_count"], green["quotation_count"]) == (1, 2)
+    before = _match_suppliers()
+    moved = {m for m, sid in before.items() if str(sid) == spark["id"]}
+    assert moved, "the fixture must give the source supplier some matches"
     r = actor.client.post(f"{URL}/{spark['id']}/merge", json={"into_id": green["id"]})
     assert r.status_code == 200, r.text
     assert r.json()["id"] == green["id"] and r.json()["quotation_count"] == 3
     assert actor.client.get(f"{URL}/{spark['id']}").status_code == 404
     assert [s["id"] for s in actor.client.get(URL).json()] == [green["id"]]
-    with session_scope() as s:  # matches follow their quotations
-        assert not [
-            m for m in s.scalars(select(MatchSuggestion)) if str(m.supplier_id) == spark["id"]
-        ]
+    after = _match_suppliers()
+    assert set(after) == set(before)
+    assert {after[m] for m in moved} == {UUID(green["id"])}
+    assert set(after.values()) == {UUID(green["id"])}
+    with session_scope() as s:
+        events = s.scalars(select(AuditEvent).where(AuditEvent.action == "supplier_merged")).all()
+        assert len(events) == 1 and events[0].event_metadata == {
+            "source_id": spark["id"],
+            "into_id": green["id"],
+        }
 
 
 def _confirm_pair(actor: Actor, boq_item_id: UUID, quote_item_id: UUID, supplier_id: str) -> None:
@@ -147,8 +174,10 @@ def test_merge_with_a_confirmed_collision_changes_nothing() -> None:
             ).first()
     for sid in ids:  # confirmed for the same BoQ line, one per supplier
         _confirm_pair(actor, boq_id, items[sid], sid)
+    matches_before = _match_suppliers()
     r = actor.client.post(f"{URL}/{ids[0]}/merge", json={"into_id": ids[1]})
     assert r.status_code == 409 and r.json()["error"]["code"] == "match_conflict", r.text
+    assert _match_suppliers() == matches_before
     after = _by_name(actor)
     assert {s["id"]: s["quotation_count"] for s in after.values()} == {
         s["id"]: s["quotation_count"] for s in by.values()
@@ -204,3 +233,143 @@ def test_foreign_ids_are_404() -> None:
     mine = a.client.post(URL, json={"name": "Mine"}).json()["id"]
     assert a.client.post(f"{URL}/{foreign}/merge", json={"into_id": mine}).status_code == 404
     assert "Secret" not in a.client.get(URL).text
+
+
+def test_create_and_update_are_audited_with_field_names_only() -> None:
+    actor = register("au1@example.com")
+    sid = actor.client.post(URL, json={"name": "Audited Co", "notes": "secret note"}).json()["id"]
+    actor.client.patch(f"{URL}/{sid}", json={"notes": "other secret"})
+    actor.client.patch(f"{URL}/{sid}", json={"notes": "other secret"})  # no change: no event
+    with session_scope() as s:
+        rows = s.scalars(select(AuditEvent).where(AuditEvent.entity_id == UUID(sid))).all()
+        assert sorted(r.action for r in rows) == ["supplier_created", "supplier_updated"]
+        assert "secret" not in str([r.event_metadata for r in rows])
+        updated = next(r for r in rows if r.action == "supplier_updated")
+        assert updated.event_metadata == {"fields": ["notes"]}
+
+
+def _two_tender_org(email: str):
+    """Greenvale has quotations in two tenders; Sparkmore in the first. Returns
+    (actor, tender1, tender2, spark_id, green_id)."""
+    actor = register(email)
+    t1, t2 = make_tender(actor, "First"), make_tender(actor, "Second")
+    for name in QUOTES:
+        _quote(actor, t1, PACK02 / name)
+    _quote(actor, t2, GREENVALE_3)
+    by = _by_name(actor)
+    spark = next(s for n, s in by.items() if "park" in n)
+    green = next(s for n, s in by.items() if "reen" in n)
+    assert (spark["quotation_count"], green["quotation_count"]) == (1, 2)
+    return actor, t1, t2, spark["id"], green["id"]
+
+
+def test_multi_tender_merge_locks_every_tender_in_sorted_order(monkeypatch) -> None:
+    from app.api.routers import suppliers as router
+
+    actor, t1, t2, spark, green = _two_tender_org("mt1@example.com")
+    locked: list[UUID] = []
+    real = router.suppliers.lock_tender
+    monkeypatch.setattr(
+        router.suppliers, "lock_tender", lambda s, c, t: (locked.append(t), real(s, c, t))[1]
+    )
+    r = actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark})
+    assert r.status_code == 200, r.text
+    assert locked == sorted({UUID(t1), UUID(t2)}) and r.json()["quotation_count"] == 3
+
+
+def test_multi_tender_merge_waits_for_another_tenders_lock() -> None:
+    import threading
+
+    from app.kernel import OrgContext, Role
+    from app.modules.suppliers import public as sup
+
+    actor, t1, t2, spark, green = _two_tender_org("mt2@example.com")
+    ctx = OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
+    done: list[int] = []
+    thread = threading.Thread(
+        target=lambda: done.append(
+            actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark}).status_code
+        )
+    )
+    with session_scope() as holder:
+        sup.lock_tender(holder, ctx, UUID(t2))  # the second tender, as a decision would
+        thread.start()
+        thread.join(timeout=2)
+        assert thread.is_alive() and not done, "the merge must wait for the tender lock"
+    thread.join(timeout=30)
+    assert done == [200]
+
+
+def test_an_archived_second_tender_refuses_the_whole_merge() -> None:
+    actor, t1, t2, spark, green = _two_tender_org("mt3@example.com")
+    assert actor.client.post(f"{API}/tenders/{t2}/archive").status_code == 200
+    before = _match_suppliers()
+    r = actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "tender_archived"
+    counts = {s["id"]: s["quotation_count"] for s in actor.client.get(URL).json()}
+    assert counts == {spark: 1, green: 2} and _match_suppliers() == before
+
+
+def test_a_set_that_grows_while_locking_is_retried(monkeypatch) -> None:
+    import threading
+
+    from app.api.routers import suppliers as router
+
+    actor, t1, t2, spark, green = _two_tender_org("mt4@example.com")
+    t3 = make_tender(actor, "Third")
+    fired: list[int] = []
+    locked: list[UUID] = []
+    real = router.suppliers.lock_tender
+
+    def hook(session, ctx, tender_id):
+        locked.append(tender_id)
+        if not fired:  # a concurrent extraction attaches a quotation of a new tender
+            fired.append(1)
+            worker = threading.Thread(target=_quote, args=(actor, t3, GREENVALE_3))
+            worker.start()
+            worker.join(timeout=60)
+        real(session, ctx, tender_id)
+
+    monkeypatch.setattr(router.suppliers, "lock_tender", hook)
+    r = actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark})
+    assert r.status_code == 200, r.text
+    assert r.json()["quotation_count"] == 4  # the late quotation moved too
+    assert locked[-3:] == sorted({UUID(t1), UUID(t2), UUID(t3)}), "retry locks the grown set"
+    assert len(actor.client.get(URL).json()) == 1
+
+
+def test_a_set_that_keeps_growing_gives_try_again(monkeypatch) -> None:
+    from app.api.routers import suppliers as router
+
+    actor, t1, t2, spark, green = _two_tender_org("mt5@example.com")
+    real = router._affected
+    calls: list[int] = []
+
+    def growing(session, ctx, supplier_id):
+        calls.append(1)
+        return {**real(session, ctx, supplier_id), UUID(int=len(calls) + 99): False}
+
+    monkeypatch.setattr(router, "_affected", growing)
+    before = _match_suppliers()
+    r = actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "try_again", r.text
+    assert len(calls) == 6  # three attempts, two reads each
+    counts = {s["id"]: s["quotation_count"] for s in actor.client.get(URL).json()}
+    assert counts == {spark: 1, green: 2} and _match_suppliers() == before
+
+
+def test_an_integrity_error_during_the_move_is_try_again(monkeypatch) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    from app.modules.suppliers.repo import SupplierRepo
+
+    actor, t1, t2, spark, green = _two_tender_org("mt6@example.com")
+
+    def boom(self, supplier):
+        raise IntegrityError("delete", {}, Exception("fk"))
+
+    monkeypatch.setattr(SupplierRepo, "remove", boom)
+    r = actor.client.post(f"{URL}/{green}/merge", json={"into_id": spark})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "try_again", r.text
+    counts = {s["id"]: s["quotation_count"] for s in actor.client.get(URL).json()}
+    assert counts == {spark: 1, green: 2}  # the savepoint undid the move

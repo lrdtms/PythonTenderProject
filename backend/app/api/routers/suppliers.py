@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from app.api.deps import Ctx, DbSession
+from app.db.session import set_org
 from app.kernel import Conflict
 from app.modules.documents import public as documents
 from app.modules.suppliers import public as suppliers
@@ -38,18 +39,38 @@ def update_supplier(supplier_id: UUID, body: suppliers.SupplierPatch, ctx: Ctx, 
     return suppliers.update_supplier(session, ctx, supplier_id, body)
 
 
+def _affected(session, ctx, supplier_id: UUID) -> dict[UUID, bool]:
+    """tender id -> archived, for every tender holding a quotation of the supplier."""
+    out: dict[UUID, bool] = {}
+    for version_id in suppliers.tenders_of_supplier(session, ctx, supplier_id):
+        info = documents.processing_info(session, ctx, version_id)
+        out[info.tender_id] = info.tender_archived
+    return out
+
+
+MERGE_ATTEMPTS = 3
+
+
 @router.post("/{supplier_id}/merge", response_model=suppliers.SupplierDTO)
 def merge_supplier(supplier_id: UUID, body: suppliers.SupplierMerge, ctx: Ctx, session: DbSession):
-    """Merge this supplier into `into_id`; the source is deleted. Returns the target."""
-    infos = [
-        documents.processing_info(session, ctx, version_id)
-        for version_id in sorted(suppliers.tenders_of_supplier(session, ctx, supplier_id))
-    ]
-    if any(info.tender_archived for info in infos):
-        raise Conflict(
-            "A tender with this supplier's quotations is archived. Re-open it before merging.",
-            code="tender_archived",
-        )
-    for tender_id in sorted({info.tender_id for info in infos}):
-        suppliers.lock_tender(session, ctx, tender_id)
-    return suppliers.merge_suppliers(session, ctx, supplier_id, body.into_id)
+    """Merge this supplier into `into_id`; the source is deleted. Returns the target.
+
+    A concurrent extraction can attach a quotation of another tender to the source while we lock.
+    So: lock the tenders read, re-read, and if the set grew release everything (nothing is
+    written yet, so a rollback is safe) and start again, up to MERGE_ATTEMPTS times."""
+    for _ in range(MERGE_ATTEMPTS):
+        wanted = set(_affected(session, ctx, supplier_id))
+        for tender_id in sorted(wanted):
+            suppliers.lock_tender(session, ctx, tender_id)
+        now = _affected(session, ctx, supplier_id)
+        if set(now) <= wanted:
+            if any(now.values()):
+                raise Conflict(
+                    "A tender with this supplier's quotations is archived. Re-open it before "
+                    "merging.",
+                    code="tender_archived",
+                )
+            return suppliers.merge_suppliers(session, ctx, supplier_id, body.into_id)
+        session.rollback()  # releases the advisory transaction locks
+        set_org(session, ctx.organisation_id)
+    raise Conflict("The suppliers changed while merging. Try again.", code="try_again")

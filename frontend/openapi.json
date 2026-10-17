@@ -3376,7 +3376,7 @@
     },
     "/api/v1/suppliers/{supplier_id}/merge": {
       "post": {
-        "description": "Merge this supplier into `into_id`; the source is deleted. Returns the target.",
+        "description": "Merge this supplier into `into_id`; the source is deleted. Returns the target.\n\nA concurrent extraction can attach a quotation of another tender to the source while we lock.\nSo: lock the tenders read, re-read, and if the set grew release everything (nothing is\nwritten yet, so a rollback is safe) and start again, up to MERGE_ATTEMPTS times.",
         "operationId": "merge_supplier_api_v1_suppliers__supplier_id__merge_post",
         "parameters": [
           {

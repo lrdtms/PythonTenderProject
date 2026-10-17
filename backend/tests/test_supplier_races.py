@@ -132,3 +132,40 @@ def test_extraction_handlers_take_the_tender_lock(monkeypatch) -> None:
     _up(actor, tender_id, "boq.xlsx", "boq")
     _up(actor, tender_id, QUOTES[0], "quotation")
     assert len(locked) >= 2 and set(locked) == {UUID(tender_id)}
+
+
+def test_extract_boq_blocks_while_another_transaction_holds_the_tender_lock() -> None:
+    from app.modules.jobs.models import Job
+    from app.worker.runner import process_one
+    from tests.conftest import upload
+    from tests.test_matching_pipeline import PACK
+
+    actor = register("race5@example.com")
+    ctx = _ctx(actor)
+    tender_id = make_tender(actor)
+    upload(actor, tender_id, (PACK / "boq.xlsx").read_bytes(), "boq.xlsx", kind="boq")
+    assert process_one(handlers.HANDLERS)  # ingest; it queues extract_boq
+    finished: list[bool] = []
+    thread = threading.Thread(target=lambda: finished.append(process_one(handlers.HANDLERS)))
+    with session_scope() as holder:
+        suppliers.lock_tender(holder, ctx, UUID(tender_id))  # e.g. a match decision
+        thread.start()
+        thread.join(timeout=2)
+        assert thread.is_alive(), "extract_boq must wait for the tender lock"
+    thread.join(timeout=30)
+    assert finished == [True]
+    with session_scope() as s:
+        job = s.scalars(select(Job).where(Job.job_type == "extract_boq")).one()
+        assert job.status == "succeeded"
+
+
+def test_get_or_create_gives_try_again_when_the_twin_keeps_vanishing(monkeypatch) -> None:
+    import pytest
+
+    from app.kernel import Conflict
+
+    actor = register("race6@example.com")
+    monkeypatch.setattr(SupplierRepo, "by_key", lambda self, key: None)
+    with session_scope() as s, pytest.raises(Conflict) as err:
+        SupplierRepo(s, _ctx(actor)).get_or_create("Ghost", "ghost")
+    assert err.value.code == "try_again"

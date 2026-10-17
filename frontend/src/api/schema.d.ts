@@ -550,6 +550,10 @@ export interface paths {
         /**
          * Merge Supplier
          * @description Merge this supplier into `into_id`; the source is deleted. Returns the target.
+         *
+         *     A concurrent extraction can attach a quotation of another tender to the source while we lock.
+         *     So: lock the tenders read, re-read, and if the set grew release everything (nothing is
+         *     written yet, so a rollback is safe) and start again, up to MERGE_ATTEMPTS times.
          */
         post: operations["merge_supplier_api_v1_suppliers__supplier_id__merge_post"];
         delete?: never;

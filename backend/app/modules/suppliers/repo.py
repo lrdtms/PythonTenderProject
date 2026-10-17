@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 
 from app.db.scoped import ScopedRepository
 from app.kernel import Conflict
@@ -22,18 +23,20 @@ class SupplierRepo(ScopedRepository[Supplier]):
         return self.session.scalar(self._select().where(Supplier.name_key == name_key))
 
     def get_or_create(self, name: str, name_key: str) -> tuple[Supplier, bool]:
-        """Race-safe: a concurrent creator of the same key makes this call return its row."""
-        stmt = (
-            pg_insert(Supplier)
-            .values(organisation_id=self.ctx.organisation_id, name=name, name_key=name_key)
-            .on_conflict_do_nothing(index_elements=["organisation_id", "name_key"])
-            .returning(Supplier.id)
-        )
-        inserted = self.session.execute(stmt).scalar_one_or_none()
-        supplier = self.by_key(name_key)
-        if supplier is None:  # unreachable: the insert or a committed twin made it
-            raise RuntimeError("supplier vanished after get_or_create")
-        return supplier, inserted is not None
+        """Race-safe: a concurrent creator of the same key makes this call return its row. If the
+        twin that blocked the insert is deleted (a merge) before we read it, try once more."""
+        for _ in range(2):
+            stmt = (
+                pg_insert(Supplier)
+                .values(organisation_id=self.ctx.organisation_id, name=name, name_key=name_key)
+                .on_conflict_do_nothing(index_elements=["organisation_id", "name_key"])
+                .returning(Supplier.id)
+            )
+            inserted = self.session.execute(stmt).scalar_one_or_none()
+            supplier = self.by_key(name_key)
+            if supplier is not None:
+                return supplier, inserted is not None
+        raise Conflict("The suppliers changed. Try again.", code="try_again")
 
     def list_with_counts(self) -> list[tuple[Supplier, int]]:
         count = func.count(Quotation.id)
@@ -65,10 +68,15 @@ class SupplierRepo(ScopedRepository[Supplier]):
                 Supplier.id != supplier.id,
             )
         )
+        exists = Conflict("A supplier with this name already exists.", code="supplier_exists")
         if clash is not None:
-            raise Conflict("A supplier with this name already exists.", code="supplier_exists")
-        supplier.name, supplier.name_key = name, key
-        self.session.flush()
+            raise exists
+        try:  # a concurrent rename or create can still win the unique index
+            with self.session.begin_nested():
+                supplier.name, supplier.name_key = name, key
+                self.session.flush()
+        except IntegrityError:
+            raise exists from None
         return supplier
 
     def version_ids(self, supplier_id: UUID) -> set[UUID]:
