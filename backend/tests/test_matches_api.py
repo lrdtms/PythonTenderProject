@@ -369,3 +369,76 @@ def test_the_foreign_organisation_gets_404() -> None:
     assert other.client.get(f"{API}/tenders/{tender_id}/match-suggestions").status_code == 404
     assert _decide(other, s["id"], "confirm").status_code == 404
     assert other.client.post(f"{API}/tenders/{tender_id}/match").status_code == 404
+
+
+def _line_with_two_suppliers(lines: list[dict]) -> list[dict]:
+    for line in lines:
+        firsts: dict[str, dict] = {}
+        for s in line["suggestions"]:
+            firsts.setdefault(s["supplier"]["id"], s)
+        if len(firsts) >= 2:
+            return list(firsts.values())[:2]
+    raise AssertionError("the fixture needs a line with two suppliers")
+
+
+def _statuses(actor: Actor, tender_id: str) -> dict[str, dict]:
+    return {s["id"]: s for s in _flat(_get(actor, tender_id, limit=500))}
+
+
+def test_a_confirmed_match_of_a_replaced_quotation_is_released_not_a_dead_end() -> None:
+    actor, tender_id = _matched_org("ma16@example.com")
+    mine, theirs = _line_with_two_suppliers(_get(actor, tender_id, limit=500))
+    assert _decide(actor, mine["id"], "confirm").status_code == 200
+    assert _decide(actor, theirs["id"], "confirm").status_code == 200
+    with session_scope() as db:
+        old_version = str(
+            db.get(Quotation, UUID(mine["quotation_item"]["quotation_id"])).document_version_id
+        )
+    name = QUOTES[0] if "park" in mine["supplier"]["name"] else QUOTES[1]
+    _replace_quotation(actor, tender_id, name, old_version)
+    after = _statuses(actor, tender_id)
+    assert mine["id"] not in after  # the old row is gone, not blocking
+    assert after[theirs["id"]]["status"] == "confirmed"  # the other supplier is untouched
+    fresh = [
+        s for s in after.values()
+        if s["boq_item_id"] == mine["boq_item_id"] and s["supplier"]["id"] == mine["supplier"]["id"]
+    ]  # fmt: skip
+    assert fresh and all(s["status"] == "suggested" for s in fresh)
+    assert _decide(actor, fresh[0]["id"], "confirm").status_code == 200
+    with session_scope() as db:
+        events = db.scalars(
+            select(AuditEvent).where(AuditEvent.action == "match_released_stale")
+        ).all()
+        assert len(events) == 1 and events[0].event_metadata == {"count": 1}
+
+
+def _make_first_stale(first: str) -> None:
+    with session_scope() as db:
+        m = db.get(MatchSuggestion, UUID(first))
+        db.get(QuotationItem, m.quotation_item_id).review_status = "rejected"
+
+
+def test_confirming_releases_a_stale_confirmed_row_of_the_same_slot() -> None:
+    actor, tender_id = _matched_org("ma17@example.com")
+    first, second = _two_candidates(actor, tender_id)
+    assert _decide(actor, first, "confirm").status_code == 200
+    assert _decide(actor, second, "confirm").json()["error"]["code"] == "match_conflict"
+    _make_first_stale(first)
+    assert _decide(actor, second, "confirm").status_code == 200
+    with session_scope() as db:
+        assert db.get(MatchSuggestion, UUID(first)).status == "suggested"
+        assert db.get(MatchSuggestion, UUID(first)).decided_by is None
+
+
+def test_confirm_clear_releases_a_stale_confirmed_row_first() -> None:
+    actor, tender_id = _matched_org("ma18@example.com")
+    first, second = _two_candidates(actor, tender_id)
+    with session_scope() as db:
+        db.query(MatchSuggestion).filter(
+            MatchSuggestion.id.in_([UUID(first), UUID(second)])
+        ).update({"classification": "clear"})
+    assert _decide(actor, first, "confirm").status_code == 200
+    _make_first_stale(first)
+    r = actor.client.post(f"{API}/tenders/{tender_id}/match-suggestions/confirm-clear")
+    assert r.status_code == 200
+    assert _statuses(actor, tender_id)[second]["status"] == "confirmed"

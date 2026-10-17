@@ -190,6 +190,7 @@ def match_tender(
         )
         for i, q in pairs
     ]
+    release_stale_confirmed(session, ctx, [b.id for b in boq_lines], [q.id for q in quote_lines])
     existing = matches.for_items({b.id for b in boq_lines}, {q.id for q in quote_lines})
     decided = [m for m in existing if m.status != "suggested"]
     removed = matches.delete_suggested([m.id for m in existing if m.status == "suggested"])
@@ -360,6 +361,29 @@ def suggestion_tender_version(session: Session, ctx: OrgContext, suggestion_id: 
     return MatchRepo(session, ctx).tender_version_id(suggestion_id)
 
 
+def release_stale_confirmed(
+    session: Session,
+    ctx: OrgContext,
+    boq_ids: Collection[UUID],
+    current_quote_item_ids: Collection[UUID],
+) -> int:
+    """Call with the tender lock held. A confirmed match is stale when its quotation item is not
+    among the tender's current, non-rejected items; it would hold the (BoQ line, supplier) slot
+    while being hidden from every list. It goes back to `suggested`. Returns the count."""
+    released = MatchRepo(session, ctx).release_stale_confirmed(boq_ids, current_quote_item_ids)
+    if released:
+        audit.record(
+            session, ctx, "match_suggestion", None, "match_released_stale", {"count": released}
+        )
+    return released
+
+
+def _current_item_ids(
+    session: Session, ctx: OrgContext, version_ids: Collection[UUID]
+) -> set[UUID]:
+    return {i.id for i, _q in QuotationItemRepo(session, ctx).for_versions(version_ids)}
+
+
 _TARGET = {"confirm": "confirmed", "reject": "rejected", "reset": "suggested"}
 _AUDIT = {"confirm": "match_confirmed", "reject": "match_rejected", "reset": "match_reset"}
 
@@ -387,6 +411,13 @@ def decide(
             "This suggestion belongs to an older version. Reload the list.", code="stale_match"
         )
     target = _TARGET[action]
+    if action == "confirm" and m.status != target:
+        release_stale_confirmed(
+            session,
+            ctx,
+            current_boq_ids,
+            _current_item_ids(session, ctx, current_quote_version_ids),
+        )
     if m.status != target:
         if action == "confirm" and repo.other_confirmed(m):
             raise Conflict(
@@ -426,6 +457,9 @@ def confirm_clear(
     supplier or another row confirmed in this call took the slot (counted as `skipped`)."""
     ctx.require(Permission.REVIEW_DATA)
     repo = MatchRepo(session, ctx)
+    release_stale_confirmed(
+        session, ctx, current_boq_ids, _current_item_ids(session, ctx, current_quote_version_ids)
+    )
     rows = repo.joined(current_boq_ids, current_quote_version_ids, "suggested", "clear")
     rows.sort(key=lambda r: (r[0].boq_item_id.int, r[0].supplier_id.int, -float(r[0].score),
                              r[0].id.int))  # fmt: skip

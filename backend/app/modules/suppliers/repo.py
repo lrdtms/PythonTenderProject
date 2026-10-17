@@ -410,6 +410,27 @@ class MatchRepo(ScopedRepository[MatchSuggestion]):
         )
         return {(b, s) for b, s in self.session.execute(stmt).all()}
 
+    def release_stale_confirmed(
+        self, boq_ids: Collection[UUID], current_quote_item_ids: Collection[UUID]
+    ) -> int:
+        """Set confirmed matches of the given (current) BoQ lines whose quotation item is not in
+        the current set back to `suggested`, clearing the decision. Returns how many."""
+        if not boq_ids:
+            return 0
+        stmt = (
+            update(MatchSuggestion)
+            .where(
+                MatchSuggestion.organisation_id == self.ctx.organisation_id,
+                MatchSuggestion.status == "confirmed",
+                MatchSuggestion.boq_item_id.in_(boq_ids),
+            )
+            .values(status="suggested", decided_by=None, decided_at=None)
+            .execution_options(synchronize_session="fetch")
+        )
+        if current_quote_item_ids:
+            stmt = stmt.where(MatchSuggestion.quotation_item_id.not_in(current_quote_item_ids))
+        return int(self.session.execute(stmt).rowcount or 0)  # type: ignore[attr-defined]
+
     def other_confirmed(self, suggestion: MatchSuggestion) -> bool:
         stmt = select(MatchSuggestion.id).where(
             MatchSuggestion.organisation_id == self.ctx.organisation_id,

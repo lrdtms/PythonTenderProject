@@ -141,3 +141,66 @@ def test_the_tender_lock_can_be_taken_twice_in_one_transaction() -> None:
         repo = MatchRepo(qc.session, qc.ctx)
         repo.lock_tender(qc.tender_id)
         repo.lock_tender(qc.tender_id)
+
+
+def _confirm(qc: QuotationContext, row: MatchSuggestion) -> None:
+    row.status, row.decided_by, row.decided_at = "confirmed", qc.ctx.user_id, datetime.now(UTC)
+    qc.session.flush()
+
+
+def _released_events(qc: QuotationContext) -> list:
+    from app.modules.audit.models import AuditEvent
+
+    stmt = select(AuditEvent).where(AuditEvent.action == "match_released_stale")
+    return list(qc.session.scalars(stmt))
+
+
+def test_a_confirmed_match_of_a_quotation_that_is_no_longer_current_is_released() -> None:
+    with quotation_context(versions=2, with_boq=True, quotation_rows=ROWS) as qc:
+        _run(qc)
+        rows = _rows(qc, "suggested")
+        mine = rows[0]
+        theirs = next(
+            r
+            for r in rows
+            if r.boq_item_id == mine.boq_item_id and r.supplier_id != mine.supplier_id
+        )
+        _confirm(qc, mine)
+        _confirm(qc, theirs)
+        keep = [
+            v for v, s in zip(qc.versions, qc.supplier_ids, strict=True) if s == theirs.supplier_id
+        ]
+        _run(qc, versions=keep)  # my supplier's version is superseded
+        qc.session.expire_all()
+        assert qc.session.get(MatchSuggestion, mine.id) is None  # released, then replaced
+        assert qc.session.get(MatchSuggestion, theirs.id).status == "confirmed"
+        assert [e.event_metadata for e in _released_events(qc)] == [{"count": 1}]
+        assert not [r for r in _rows(qc) if r.supplier_id == mine.supplier_id]
+
+
+def test_a_live_confirmed_match_is_not_released() -> None:
+    with quotation_context(versions=2, with_boq=True, quotation_rows=ROWS) as qc:
+        _run(qc)
+        mine = _rows(qc, "suggested")[0]
+        _confirm(qc, mine)
+        _run(qc)
+        assert qc.session.get(MatchSuggestion, mine.id).status == "confirmed"
+        assert _released_events(qc) == []
+
+
+def test_release_never_touches_another_organisations_rows() -> None:
+    from uuid import uuid4
+
+    from app.kernel import OrgContext, Role
+
+    with quotation_context(versions=1, with_boq=True, quotation_rows=ROWS) as qc:
+        _run(qc)
+        mine = _rows(qc, "suggested")[0]
+        _confirm(qc, mine)
+        stranger = OrgContext(uuid4(), uuid4(), Role.ADMIN)
+        assert (
+            MatchRepo(qc.session, stranger).release_stale_confirmed({mine.boq_item_id}, set()) == 0
+        )
+        qc.session.expire_all()
+        assert qc.session.get(MatchSuggestion, mine.id).status == "confirmed"
+        assert MatchRepo(qc.session, qc.ctx).release_stale_confirmed({mine.boq_item_id}, set()) == 1
