@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { documentsQueryOptions } from "@/api/documents";
 import { ApiError } from "@/api/errors";
-import { useBoqItems, useRequirements, versionQueryOptions } from "@/api/review";
+import { useBoqItems, useQuotationItems, useRequirements, versionQueryOptions } from "@/api/review";
 import { tenderQueryOptions } from "@/api/tenders";
 import { useCan } from "@/components/auth-gate";
 import { BoqRow } from "@/components/review/boq-row";
+import { QuotationPanel } from "@/components/review/quotation-panel";
+import { QuotationRow } from "@/components/review/quotation-row";
 import { RequirementRow } from "@/components/review/requirement-row";
 import type { ReplacedInfo, RowCommand } from "@/components/review/row-shell";
 import { SourceViewer, type Source } from "@/components/source/source-viewer";
@@ -44,8 +47,15 @@ export function ReviewScreen() {
   const canReview = useCan("review_data");
   const tender = useQuery({ ...tenderQueryOptions(tenderId), enabled: valid });
   const version = useQuery({ ...versionQueryOptions(versionId), enabled: valid });
-  const requirements = useRequirements(versionId, valid && !!version.data);
-  const boq = useBoqItems(versionId, valid && !!version.data);
+  // The document kind decides the layout. A stale cache that lacks this version falls back to the
+  // requirements and BoQ view.
+  const documents = useQuery({ ...documentsQueryOptions(tenderId), enabled: valid });
+  const kind = documents.data?.find((d) => d.current_version?.id === versionId)?.kind;
+  const isQuotation = kind === "quotation";
+  const kindKnown = valid && !documents.isPending;
+  const requirements = useRequirements(versionId, kindKnown && !!version.data && !isQuotation);
+  const boq = useBoqItems(versionId, kindKnown && !!version.data && !isQuotation);
+  const quotes = useQuotationItems(versionId, kindKnown && !!version.data && isQuotation);
 
   // The checklist links here with ?row=<requirement id>. User picks are remembered per link, so a
   // new link (same screen, kept alive by Next) is not shadowed by an earlier pick.
@@ -83,7 +93,7 @@ export function ReviewScreen() {
     if (linkedFound) document.getElementById(`row-${linkedRow}`)?.scrollIntoView?.({ block: "nearest" });
   }, [linkedFound, linkedRow]);
 
-  const list = tab === "requirements" ? requirements : boq;
+  const list = isQuotation ? quotes : tab === "requirements" ? requirements : boq;
   const [command, setCommand] = useState<RowCommand | undefined>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [replaced, setReplaced] = useState<string | null>(null);
@@ -136,7 +146,7 @@ export function ReviewScreen() {
   }, [rows, selectedId, canReview, archived, editingId]);
 
   if (!valid) return <NotFound tenderId={tenderId} />;
-  if (version.isPending) return <p role="status" className="text-sm text-zinc-500">Loading document…</p>;
+  if (version.isPending || documents.isPending) return <p role="status" className="text-sm text-zinc-500">Loading document…</p>;
   if (!version.data) {
     if (version.error instanceof ApiError && version.error.isNotFound) return <NotFound tenderId={tenderId} />;
     return (
@@ -218,12 +228,20 @@ export function ReviewScreen() {
         ))}
       </div>
 
+      {isQuotation ? <QuotationPanel tenderId={tenderId} versionId={versionId} archived={archived} /> : null}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div className={pane === "rows" ? "" : "hidden lg:block"}>
-          <div role="tablist" className="mb-3 flex gap-1 border-b border-zinc-300 dark:border-zinc-700">
-            {tabButton("requirements", "Requirements", countLabel(requirements.rows.length, requirements.hasNextPage))}
-            {tabButton("boq", "BoQ lines", countLabel(boq.rows.length, boq.hasNextPage))}
-          </div>
+          {isQuotation ? (
+            <h2 className="mb-3 border-b border-zinc-300 pb-2 text-sm font-medium dark:border-zinc-700">
+              Quotation items ({countLabel(quotes.rows.length, quotes.hasNextPage)})
+            </h2>
+          ) : (
+            <div role="tablist" className="mb-3 flex gap-1 border-b border-zinc-300 dark:border-zinc-700">
+              {tabButton("requirements", "Requirements", countLabel(requirements.rows.length, requirements.hasNextPage))}
+              {tabButton("boq", "BoQ lines", countLabel(boq.rows.length, boq.hasNextPage))}
+            </div>
+          )}
           {list.isPending ? <p role="status" className="text-sm text-zinc-500">Loading rows…</p> : null}
           {list.isError ? (
             <p role="alert" className="text-sm text-red-700 dark:text-red-300">
@@ -239,8 +257,26 @@ export function ReviewScreen() {
               .
             </p>
           ) : null}
-          <ul className="space-y-2" aria-label={tab === "requirements" ? "Requirements" : "BoQ lines"}>
-            {tab === "requirements"
+          <ul className="space-y-2" aria-label={isQuotation ? "Quotation items" : tab === "requirements" ? "Requirements" : "BoQ lines"}>
+            {isQuotation
+              ? quotes.rows.map((row) => (
+                  <QuotationRow
+                    key={row.id}
+                    row={row}
+                    versionId={versionId}
+                    selected={row.id === selectedId}
+                    onSelect={() => {
+                      setSelectedId(row.id);
+                      setPane("source");
+                    }}
+                    archived={archived}
+                    command={command}
+                    editing={editingId === row.id}
+                    onEditingChange={(open) => setEditingId(open ? row.id : null)}
+                    onReplaced={onReplaced}
+                  />
+                ))
+              : tab === "requirements"
               ? requirements.rows.map((row) => (
                   <RequirementRow
                     key={row.id}

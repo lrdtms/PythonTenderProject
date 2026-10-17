@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ids, makeBoqItem, makePageDetail, makeRequirement, makeTender, makeVersion } from "@/test/fixtures";
+import { ids, makeBoqItem, makeDocument, makePage, makePageDetail, makeQuotation, makeQuotationItem, makeRequirement, makeSupplier, makeTender, makeVersion } from "@/test/fixtures";
 import { callsTo, errorBody, meWith, mockApi, renderSignedIn, respond } from "@/test/render";
 
 const search = vi.hoisted(() => ({ row: null as string | null }));
@@ -34,6 +34,8 @@ function routes(over: Record<string, () => Response | Promise<Response>> = {}) {
   return {
     [`GET /api/v1/tenders/${ids.tender}`]: () => respond(200, makeTender()),
     [`GET /api/v1/document-versions/${V}`]: () => respond(200, makeVersion()),
+    [`GET /api/v1/tenders/${ids.tender}/documents`]: () =>
+      respond(200, [makeDocument({ kind: "tender_document", current_version: makeVersion() })]),
     [`GET /api/v1/document-versions/${V}/requirements`]: () =>
       respond(200, [
         makeRequirement({ id: "q1", description: "First requirement", page_number: 1, quote_start: 10, quote_end: 53 }),
@@ -247,5 +249,91 @@ describe("ReviewScreen", () => {
     mockApi(routes(), estimator);
     renderSignedIn(<ReviewScreen />);
     expect(await screen.findByText(/linked requirement is no longer in this document/)).toBeInTheDocument();
+  });
+
+  describe("a quotation version", () => {
+    const Q = ids.version;
+    const quoteRoutes = (over: Record<string, () => Response | Promise<Response>> = {}, format = "pdf") =>
+      routes({
+        [`GET /api/v1/document-versions/${V}`]: () => respond(200, makeVersion({ file_format: format })),
+        [`GET /api/v1/tenders/${ids.tender}/documents`]: () =>
+          respond(200, [makeDocument({ kind: "quotation", current_version: makeVersion({ id: Q, file_format: format }) })]),
+        [`GET /api/v1/tenders/${ids.tender}/quotations`]: () => respond(200, [makeQuotation({ document_version_id: Q })]),
+        "GET /api/v1/suppliers": () => respond(200, [makeSupplier()]),
+        [`GET /api/v1/document-versions/${V}/quotation-items`]: () =>
+          respond(200, [
+            makeQuotationItem({ id: "i1", description: "LED panel quote", page_number: 2 }),
+            makeQuotationItem({ id: "i2", description: "Cable quote", page_number: 1 }),
+          ]),
+        ...over,
+      });
+
+    it("shows the panel and the items, with no Requirements or BoQ tabs", async () => {
+      mockApi(quoteRoutes(), estimator);
+      renderSignedIn(<ReviewScreen />);
+      expect(await screen.findByText("LED panel quote")).toBeInTheDocument();
+      expect(await screen.findByText("Bright Sparks")).toBeInTheDocument();
+      expect(screen.getByText("Quotation items (2)")).toBeInTheDocument();
+      expect(screen.queryByRole("tab")).toBeNull();
+    });
+
+    it("jumps a PDF quotation item to its page", async () => {
+      mockApi(quoteRoutes(), estimator);
+      renderSignedIn(<ReviewScreen />);
+      await userEvent.click(await screen.findByText("LED panel quote"));
+      expect(await screen.findByTestId("pdf")).toHaveTextContent("pdf page 2");
+    });
+
+    it("loads the sheet grid for an xlsx item's cell range", async () => {
+      mockApi(
+        quoteRoutes(
+          {
+            [`GET /api/v1/document-versions/${V}/quotation-items`]: () =>
+              respond(200, [makeQuotationItem({ id: "i1", description: "Sheet row", page_number: null, sheet: "Quote", cell_range: "A6:B6" })]),
+            [`GET /api/v1/document-versions/${V}/pages`]: () => respond(200, [makePage({ page_number: 1, label: "Quote" })]),
+            [`GET /api/v1/document-versions/${V}/pages/1`]: () =>
+              respond(200, makePageDetail({ label: "Quote", text: "", tables: [{ kind: "sheet", first_row: 5, rows: [["x", "y"], ["z", "w"]] }] })),
+          },
+          "xlsx",
+        ),
+        estimator,
+      );
+      renderSignedIn(<ReviewScreen />);
+      await userEvent.click(await screen.findByText("Sheet row"));
+      expect(await screen.findByRole("table")).toBeInTheDocument();
+      expect(document.querySelectorAll("td[data-cited]").length).toBeGreaterThan(0);
+    });
+
+    it("confirms the selected item with c for an estimator", async () => {
+      const fetchMock = mockApi(
+        quoteRoutes({ "POST /api/v1/quotation-items/i1/confirm": () => respond(200, makeQuotationItem({ id: "i1", review_status: "confirmed" })) }),
+        estimator,
+      );
+      renderSignedIn(<ReviewScreen />);
+      await userEvent.click(await screen.findByText("LED panel quote"));
+      await userEvent.keyboard("c");
+      await waitFor(() => expect(callsTo(fetchMock, "POST", "/api/v1/quotation-items/i1/confirm")).toHaveLength(1));
+    });
+
+    it("gives a reviewer no controls", async () => {
+      mockApi(quoteRoutes(), reviewer);
+      renderSignedIn(<ReviewScreen />);
+      await userEvent.click(await screen.findByText("LED panel quote"));
+      await screen.findByText("Bright Sparks");
+      expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Edit details" })).toBeNull();
+    });
+  });
+
+  it("keeps today's behaviour for a BoQ document", async () => {
+    mockApi(
+      routes({
+        [`GET /api/v1/tenders/${ids.tender}/documents`]: () => respond(200, [makeDocument({ kind: "boq", current_version: makeVersion() })]),
+      }),
+      estimator,
+    );
+    renderSignedIn(<ReviewScreen />);
+    expect(await screen.findByText("First requirement")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /BoQ lines/ })).toBeInTheDocument();
   });
 });

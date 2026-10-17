@@ -33,7 +33,7 @@ export function DocumentCard({ document, tenderId, archived }: Props) {
       {version && (version.processing_status === "ready" || version.processing_status === "ready_with_warnings") ? (
         <p className="text-sm">
           <Link href={`/tenders/${tenderId}/review/${version.id}`} className="underline">
-            Review extracted data
+            {document.kind === "quotation" ? "Review quotation" : "Review extracted data"}
           </Link>
         </p>
       ) : null}

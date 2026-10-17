@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { type ReviewKind, type ReviewVars, useReviewMutation } from "@/api/review";
-import type { BoqPatch, RequirementPatch } from "@/api/types";
+import type { BoqPatch, QuotationItemPatch, RequirementPatch } from "@/api/types";
 import { useCan } from "@/components/auth-gate";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
@@ -20,14 +20,14 @@ export type RowMeta = {
 };
 
 export type EditorApi = {
-  save: (patch: BoqPatch | RequirementPatch) => void;
+  save: (patch: BoqPatch | RequirementPatch | QuotationItemPatch) => void;
   cancel: () => void;
   saving: boolean;
   error: string | null;
 };
 
 /** What the screen is told when a write found its row gone. */
-export type ReplacedInfo = { patch?: BoqPatch | RequirementPatch };
+export type ReplacedInfo = { patch?: BoqPatch | RequirementPatch | QuotationItemPatch };
 
 type Props = {
   kind: ReviewKind;
