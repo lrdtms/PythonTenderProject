@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -16,10 +16,14 @@ from app.kernel import Conflict, OrgContext, Permission, ValidationFailed
 from app.modules.audit import public as audit
 
 from . import matching
-from .models import Quotation, Supplier
+from .models import Quotation, QuotationItem, Supplier
 from .repo import MatchRepo, QuotationItemRepo, QuotationRepo, SupplierRepo
 from .schemas import (
     MatchResult,
+    QuotationDTO,
+    QuotationItemDTO,
+    QuotationItemPatch,
+    QuotationPatch,
     StoreResult,
     SupplierCreate,
     SupplierDTO,
@@ -299,3 +303,171 @@ def merge_suppliers(
 def lock_tender(session: Session, ctx: OrgContext, tender_id: UUID) -> None:
     """Serialise matching, match decisions, extraction and merges for one tender."""
     MatchRepo(session, ctx).lock_tender(tender_id)
+
+
+# --- quotations and their items (API side) -----------------------------------------------------
+
+
+def _quotation_dto(q: Quotation, supplier_name: str, count: int) -> QuotationDTO:
+    return QuotationDTO(
+        id=q.id, document_version_id=q.document_version_id, supplier_id=q.supplier_id,
+        supplier_name=supplier_name, reference=q.reference, quote_date=q.quote_date,
+        valid_until=q.valid_until, currency=q.currency, prices_include_vat=q.prices_include_vat,
+        flags=list(q.flags), item_count=count, created_at=q.created_at,
+    )  # fmt: skip
+
+
+def list_quotations(
+    session: Session, ctx: OrgContext, version_ids: Sequence[UUID]
+) -> list[QuotationDTO]:
+    ctx.require(Permission.READ)
+    rows = QuotationRepo(session, ctx).list_for_versions(list(version_ids))
+    return [_quotation_dto(q, name, n) for q, name, n in rows]
+
+
+def get_quotation_tender_version(session: Session, ctx: OrgContext, quotation_id: UUID) -> UUID:
+    """The document version of a quotation, so the router can resolve and lock its tender."""
+    ctx.require(Permission.REVIEW_DATA)
+    return QuotationRepo(session, ctx).get(quotation_id).document_version_id
+
+
+def update_quotation(
+    session: Session, ctx: OrgContext, quotation_id: UUID, patch: QuotationPatch
+) -> QuotationDTO:
+    """Call with the tender lock held. Switching the supplier moves the quotation's matches too."""
+    ctx.require(Permission.REVIEW_DATA)
+    repo = QuotationRepo(session, ctx)
+    quotation = repo.get(quotation_id)
+    changed: list[str] = []
+    for name in sorted(patch.model_fields_set):
+        value = getattr(patch, name)
+        if value == getattr(quotation, name):
+            continue
+        if name == "supplier_id":
+            suppliers_repo = SupplierRepo(session, ctx)
+            suppliers_repo.get(value)  # NotFound for a supplier of another organisation
+            if repo.confirmed_boq_ids(quotation_id) & suppliers_repo.confirmed_boq_ids(value):
+                raise Conflict(
+                    "The new supplier already has a confirmed match for the same BoQ line. "
+                    "Reject one of them first.",
+                    code="match_conflict",
+                )
+            try:  # the tender lock prevents a concurrent change; if one still lands, undo
+                with session.begin_nested():
+                    quotation.supplier_id = value
+                    repo.move_matches(quotation_id, value)
+                    session.flush()
+            except IntegrityError:
+                raise Conflict("The suppliers changed. Try again.", code="try_again") from None
+        else:
+            setattr(quotation, name, value)
+        changed.append(name)
+    if changed:
+        fields = ("reference", "quote_date", "valid_until", "currency", "prices_include_vat")
+        quotation.flags = _header_flags(
+            "NO_SUPPLIER_NAME" in quotation.flags, {k: getattr(quotation, k) for k in fields}
+        )
+        session.flush()
+        audit.record(
+            session, ctx, "quotation", quotation.id, "quotation_updated", {"fields": changed}
+        )
+    name, count = repo.with_supplier_name(quotation)
+    return _quotation_dto(quotation, name, count)
+
+
+def _item_dto(item: QuotationItem) -> QuotationItemDTO:
+    return QuotationItemDTO(
+        id=item.id, quotation_id=item.quotation_id, document_version_id=item.document_version_id,
+        run_id=item.run_id, position=item.position, description=item.description, sku=item.sku,
+        unit=item.unit,
+        quantity=None if item.quantity is None else str(item.quantity),
+        unit_price=None if item.unit_price is None else str(item.unit_price),
+        raw_unit=item.raw_unit, raw_quantity=item.raw_quantity, raw_price=item.raw_price,
+        flags=list(item.flags), page_number=item.page_number, sheet=item.sheet,
+        cell_range=item.cell_range, review_status=item.review_status,
+        corrected_value=item.corrected_value, original_value=dict(item.original_value or {}),
+        reviewed_by=item.reviewed_by, reviewed_at=item.reviewed_at,
+    )  # fmt: skip
+
+
+def list_quotation_items(
+    session: Session, ctx: OrgContext, version_id: UUID, limit: int = 200, offset: int = 0
+) -> list[QuotationItemDTO]:
+    ctx.require(Permission.READ)
+    limit = max(1, min(limit, 1000))
+    rows = QuotationItemRepo(session, ctx).for_version(version_id, limit, max(0, offset))
+    return [_item_dto(i) for i in rows]
+
+
+def quotation_item_version(session: Session, ctx: OrgContext, item_id: UUID) -> UUID:
+    """The version an item belongs to, so the caller can take the locks first."""
+    ctx.require(Permission.REVIEW_DATA)
+    return QuotationItemRepo(session, ctx).version_id_of(item_id)
+
+
+def _apply_item(row: QuotationItem, patch: QuotationItemPatch) -> dict[str, Any]:
+    changes: dict[str, Any] = {}
+    for name in patch.model_fields_set:
+        new: Any = getattr(patch, name)
+        if name in ("quantity", "unit_price") and new is not None:
+            new = Decimal(new)
+            if name == "unit_price" and new <= 0:
+                raise ValidationFailed("The unit price must be above zero. Clear it instead.")
+        if new == getattr(row, name):
+            continue
+        setattr(row, name, new)
+        changes[name] = str(new) if isinstance(new, Decimal) else new
+    flags = list(row.flags)
+    if "quantity" in changes:
+        flags = [
+            f for f in flags if f not in ("missing_quantity", "quantity_unparsed", "zero_quantity")
+        ]
+        if row.quantity is None:
+            flags.append("missing_quantity")
+        elif row.quantity == 0:
+            flags.append("zero_quantity")
+    if "unit_price" in changes:
+        price_flags = ("missing_price", "price_unparsed", "zero_price", "negative_price")
+        flags = [f for f in flags if f not in price_flags]
+        if row.unit_price is None:
+            flags.append("missing_price")
+    if "quantity" in changes or "unit_price" in changes:
+        flags = [f for f in flags if f != "ambiguous_separator"]  # a person has read the figure
+    row.flags = flags  # a new list, so the JSONB change is detected
+    return changes
+
+
+def review_quotation_item(
+    session: Session,
+    ctx: OrgContext,
+    item_id: UUID,
+    action: Literal["confirm", "reject", "correct"],
+    patch: QuotationItemPatch | None = None,
+) -> QuotationItemDTO:
+    """Call with the tender and extraction locks held. An item a re-run deleted since the caller
+    looked it up is `row_replaced`."""
+    ctx.require(Permission.REVIEW_DATA)
+    row = QuotationItemRepo(session, ctx).fresh(item_id)
+    if row is None:
+        raise Conflict(
+            "This line was replaced by a newer extraction. Reload the list.", code="row_replaced"
+        )
+    fields: list[str] = []
+    if action == "correct":
+        if patch is None:
+            raise ValidationFailed("No changes were given.")
+        changes = _apply_item(row, patch)
+        if not changes:
+            return _item_dto(row)
+        row.corrected_value = {**(row.corrected_value or {}), **changes}
+        row.review_status = "corrected"
+        fields = sorted(changes)
+    else:
+        row.review_status = "confirmed" if action == "confirm" else "rejected"
+    row.reviewed_by, row.reviewed_at = ctx.user_id, datetime.now(UTC)
+    audit.record(
+        session, ctx, "quotation_item", row.id, f"review_{row.review_status}",
+        {"status": row.review_status, "fields": fields},
+    )  # fmt: skip
+    session.flush()
+    return _item_dto(row)

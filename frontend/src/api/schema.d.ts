@@ -228,6 +228,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/document-versions/{version_id}/quotation-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Version Quotation Items */
+        get: operations["version_quotation_items_api_v1_document_versions__version_id__quotation_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/document-versions/{version_id}/requirements": {
         parameters: {
             query?: never;
@@ -451,6 +468,74 @@ export interface paths {
         patch: operations["change_role_api_v1_members__membership_id__role_patch"];
         trace?: never;
     };
+    "/api/v1/quotation-items/{quotation_item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Correct Quotation Item */
+        patch: operations["correct_quotation_item_api_v1_quotation_items__quotation_item_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/quotation-items/{quotation_item_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Quotation Item */
+        post: operations["confirm_quotation_item_api_v1_quotation_items__quotation_item_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotation-items/{quotation_item_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Quotation Item */
+        post: operations["reject_quotation_item_api_v1_quotation_items__quotation_item_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotations/{quotation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Quotation */
+        patch: operations["update_quotation_api_v1_quotations__quotation_id__patch"];
+        trace?: never;
+    };
     "/api/v1/requirements/{requirement_id}": {
         parameters: {
             query?: never;
@@ -627,6 +712,26 @@ export interface paths {
         put?: never;
         /** Upload Document */
         post: operations["upload_document_api_v1_tenders__tender_id__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenders/{tender_id}/quotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tender Quotations
+         * @description Quotations of the current version of each quotation document in this tender.
+         */
+        get: operations["tender_quotations_api_v1_tenders__tender_id__quotations_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -969,6 +1074,148 @@ export interface components {
             text: string;
             /** Text Source */
             text_source: string;
+        };
+        /** QuotationDTO */
+        QuotationDTO: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string | null;
+            /**
+             * Document Version Id
+             * Format: uuid
+             */
+            document_version_id: string;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Count */
+            item_count: number;
+            /** Prices Include Vat */
+            prices_include_vat: boolean | null;
+            /** Quote Date */
+            quote_date: string | null;
+            /** Reference */
+            reference: string | null;
+            /**
+             * Supplier Id
+             * Format: uuid
+             */
+            supplier_id: string;
+            /** Supplier Name */
+            supplier_name: string;
+            /** Valid Until */
+            valid_until: string | null;
+        };
+        /** QuotationItemDTO */
+        QuotationItemDTO: {
+            /** Cell Range */
+            cell_range: string | null;
+            /** Corrected Value */
+            corrected_value: {
+                [key: string]: unknown;
+            } | null;
+            /** Description */
+            description: string;
+            /**
+             * Document Version Id
+             * Format: uuid
+             */
+            document_version_id: string;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Original Value
+             * @default {}
+             */
+            original_value: {
+                [key: string]: unknown;
+            };
+            /** Page Number */
+            page_number: number | null;
+            /** Position */
+            position: number;
+            /** Quantity */
+            quantity: string | null;
+            /**
+             * Quotation Id
+             * Format: uuid
+             */
+            quotation_id: string;
+            /** Raw Price */
+            raw_price: string | null;
+            /** Raw Quantity */
+            raw_quantity: string | null;
+            /** Raw Unit */
+            raw_unit: string | null;
+            /** Review Status */
+            review_status: string;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name?: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Sheet */
+            sheet: string | null;
+            /** Sku */
+            sku: string | null;
+            /** Unit */
+            unit: string | null;
+            /** Unit Price */
+            unit_price: string | null;
+        };
+        /**
+         * QuotationItemPatch
+         * @description The fields a reviewer may change. Absent means unchanged; null clears a nullable field.
+         *     Decimals are JSON strings, never numbers.
+         */
+        QuotationItemPatch: {
+            /** Description */
+            description?: string | null;
+            /** Quantity */
+            quantity?: string | null;
+            /** Sku */
+            sku?: string | null;
+            /** Unit */
+            unit?: string | null;
+            /** Unit Price */
+            unit_price?: string | null;
+        };
+        /**
+         * QuotationPatch
+         * @description Absent means unchanged; null clears a header field. The supplier cannot be cleared.
+         */
+        QuotationPatch: {
+            /** Currency */
+            currency?: string | null;
+            /** Prices Include Vat */
+            prices_include_vat?: boolean | null;
+            /** Quote Date */
+            quote_date?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Supplier Id */
+            supplier_id?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
         };
         /** RegisterRequest */
         RegisterRequest: {
@@ -1738,6 +1985,40 @@ export interface operations {
             };
         };
     };
+    version_quotation_items_api_v1_document_versions__version_id__quotation_items_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotationItemDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     requirements_api_v1_document_versions__version_id__requirements_get: {
         parameters: {
             query?: {
@@ -2165,6 +2446,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_quotation_item_api_v1_quotation_items__quotation_item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quotation_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuotationItemPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotationItemDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_quotation_item_api_v1_quotation_items__quotation_item_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quotation_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotationItemDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_quotation_item_api_v1_quotation_items__quotation_item_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quotation_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotationItemDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_quotation_api_v1_quotations__quotation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quotation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuotationPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotationDTO"];
                 };
             };
             /** @description Validation Error */
@@ -2643,6 +3056,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tender_quotations_api_v1_tenders__tender_id__quotations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotationDTO"][];
                 };
             };
             /** @description Validation Error */

@@ -220,6 +220,21 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         assert repos["QuotationRepo"].for_version(version_b) is None
         quotation_b = b_ids["QuotationRepo"][0]
         assert repos["QuotationItemRepo"].for_quotation(quotation_b) == []
+        item_b = b_ids["QuotationItemRepo"][0]
+        assert repos["QuotationRepo"].list_for_versions([version_b]) == []
+        assert repos["QuotationRepo"].list_for_versions([]) == []
+        assert repos["QuotationRepo"].confirmed_boq_ids(quotation_b) == set()
+        assert repos["QuotationItemRepo"].for_version(version_b, 50, 0) == []
+        with pytest.raises(NotFound):
+            repos["QuotationItemRepo"].version_id_of(item_b)
+        assert repos["QuotationItemRepo"].fresh(item_b) is None
+        mine_c = repos["QuotationRepo"].find()[0]
+        name_c, count_c = repos["QuotationRepo"].with_supplier_name(mine_c)
+        assert name_c == "Charlie supplies" and count_c == 1
+        assert [n for _, n, _ in repos["QuotationRepo"].list_for_versions(
+            [mine_c.document_version_id])] == ["Charlie supplies"]  # fmt: skip
+        # a scoped write aimed at B's quotation moves none of B's matches
+        repos["QuotationRepo"].move_matches(quotation_b, mine_c.supplier_id)
         assert repos["QuotationItemRepo"].reviewed_or_pinned(quotation_b) == []
         repos["QuotationItemRepo"].delete_replaceable(quotation_b, [])
         match_b = b_ids["MatchRepo"][0]
@@ -250,3 +265,9 @@ def test_repositories_never_return_another_organisations_rows() -> None:
             assert s.scalars(select(model.id).where(model.organisation_id == org_b)).all()
         version = REPOSITORIES["VersionRepo"].model
         assert s.scalar(select(version.is_current).where(version.id == version_b)) is True
+        match_supplier = s.scalar(
+            select(MatchSuggestion.supplier_id).where(MatchSuggestion.organisation_id == org_b)
+        )
+        assert match_supplier == s.scalar(
+            select(suppliers_model.id).where(suppliers_model.organisation_id == org_b)
+        )  # the move aimed at B's quotation changed nothing

@@ -57,6 +57,10 @@ REQUESTS = {
     ("PATCH", "/api/v1/requirements/{requirement_id}"): lambda: {
         "json": {"description": "hijacked"}
     },
+    ("PATCH", "/api/v1/quotations/{quotation_id}"): lambda: {"json": {"reference": "hijacked"}},
+    ("PATCH", "/api/v1/quotation-items/{quotation_item_id}"): lambda: {
+        "json": {"description": "hijacked"}
+    },
     ("PATCH", "/api/v1/suppliers/{supplier_id}"): lambda: {"json": {"notes": "hijacked"}},
     ("POST", "/api/v1/suppliers/{supplier_id}/merge"): lambda: {
         "json": {"into_id": "00000000-0000-0000-0000-000000000001"}
@@ -106,6 +110,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         known["version_id"],
         "seeded-b-line",
         "seeded-b-rule",
+        "seeded-b-quote-line",
     )
 
     routes = _routes_with_params()

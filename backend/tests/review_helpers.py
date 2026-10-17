@@ -91,14 +91,50 @@ def seed_review_rows(actor: Actor, version_id: str, job_id: str) -> dict[str, st
 
 
 def seed_supplier_rows(actor: Actor) -> dict[str, str]:
-    """Give an organisation one supplier (no quotation), for sweeps of the supplier routes."""
+    """Give an organisation one supplier, quotation and quotation item (no worker job), for
+    sweeps of the supplier and quotation routes. Needs the organisation's first tender document
+    version: it gets a `quotation` run that borrows its ingest job's id."""
     from uuid import UUID
+
+    from sqlalchemy import select
 
     from app.db.session import session_scope
     from app.kernel import OrgContext, Role
+    from app.modules.documents.models import DocumentVersion
+    from app.modules.jobs.models import Job
+    from app.modules.pipeline.models import ExtractionRun
+    from app.modules.suppliers.models import QuotationItem
+    from app.modules.suppliers.public import store_quotation
     from app.modules.suppliers.repo import SupplierRepo
 
     ctx = OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
     with session_scope() as s:
         supplier, _ = SupplierRepo(s, ctx).get_or_create("Seeded B Supplies", "seeded b supplies")
-        return {"supplier_id": str(supplier.id)}
+        version_id = s.scalar(
+            select(DocumentVersion.id).where(DocumentVersion.organisation_id == ctx.organisation_id)
+        )
+        job_id = s.scalar(
+            select(Job.id).where(
+                Job.organisation_id == ctx.organisation_id, Job.subject_id == version_id
+            )
+        )
+        run = ExtractionRun(
+            organisation_id=ctx.organisation_id,
+            document_version_id=version_id,
+            job_id=job_id,
+            kind="quotation",
+        )
+        s.add(run)
+        s.flush()
+        stored = store_quotation(
+            s, ctx, version_id, run.id, {"supplier_name": "Seeded B Supplies"},
+            [{"description": "seeded-b-quote-line", "source_order": 0}], "file",
+        )  # fmt: skip
+        item_id = s.scalar(
+            select(QuotationItem.id).where(QuotationItem.organisation_id == ctx.organisation_id)
+        )
+        return {
+            "supplier_id": str(supplier.id),
+            "quotation_id": str(stored.quotation_id),
+            "quotation_item_id": str(item_id),
+        }

@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
 from app.db.scoped import ScopedRepository
-from app.kernel import Conflict
+from app.kernel import Conflict, NotFound
 
 from .models import MatchSuggestion, Quotation, QuotationItem, Supplier
 
@@ -121,9 +121,114 @@ class QuotationRepo(ScopedRepository[Quotation]):
             self._select().where(Quotation.document_version_id == version_id)
         )
 
+    def list_for_versions(self, version_ids: Sequence[UUID]) -> list[tuple[Quotation, str, int]]:
+        """Quotations of the given versions with the supplier name and item count, in the order
+        of the versions given, then creation time."""
+        if not version_ids:
+            return []
+        org = self.ctx.organisation_id
+        count = (
+            select(func.count(QuotationItem.id))
+            .where(
+                QuotationItem.organisation_id == org,
+                QuotationItem.quotation_id == Quotation.id,
+            )
+            .correlate(Quotation)
+            .scalar_subquery()
+        )
+        stmt = (
+            select(Quotation, Supplier.name, count)
+            .join(
+                Supplier,
+                (Supplier.organisation_id == Quotation.organisation_id)
+                & (Supplier.id == Quotation.supplier_id),
+            )
+            .where(Quotation.organisation_id == org, Quotation.document_version_id.in_(version_ids))
+        )
+        order = {v: n for n, v in enumerate(version_ids)}
+        rows = [(q, name, int(n)) for q, name, n in self.session.execute(stmt).all()]
+        return sorted(rows, key=lambda r: (order[r[0].document_version_id], r[0].created_at))
+
+    def with_supplier_name(self, quotation: Quotation) -> tuple[str, int]:
+        """Supplier name and item count of a quotation already loaded."""
+        org = self.ctx.organisation_id
+        name = self.session.scalar(
+            select(Supplier.name).where(
+                Supplier.organisation_id == org, Supplier.id == quotation.supplier_id
+            )
+        )
+        count = self.session.scalar(
+            select(func.count(QuotationItem.id)).where(
+                QuotationItem.organisation_id == org, QuotationItem.quotation_id == quotation.id
+            )
+        )
+        return name or "", int(count or 0)
+
+    def move_matches(self, quotation_id: UUID, supplier_id: UUID) -> None:
+        """Point every match of the quotation's items at the supplier."""
+        org = self.ctx.organisation_id
+        items = select(QuotationItem.id).where(
+            QuotationItem.organisation_id == org, QuotationItem.quotation_id == quotation_id
+        )
+        self.session.execute(
+            update(MatchSuggestion)
+            .where(
+                MatchSuggestion.organisation_id == org,
+                MatchSuggestion.quotation_item_id.in_(items),
+            )
+            .values(supplier_id=supplier_id)
+        )
+
+    def confirmed_boq_ids(self, quotation_id: UUID) -> set[UUID]:
+        """BoQ lines with a confirmed match to one of the quotation's items."""
+        org = self.ctx.organisation_id
+        stmt = (
+            select(MatchSuggestion.boq_item_id)
+            .join(
+                QuotationItem,
+                (QuotationItem.organisation_id == MatchSuggestion.organisation_id)
+                & (QuotationItem.id == MatchSuggestion.quotation_item_id),
+            )
+            .where(
+                MatchSuggestion.organisation_id == org,
+                MatchSuggestion.status == "confirmed",
+                QuotationItem.quotation_id == quotation_id,
+            )
+        )
+        return set(self.session.scalars(stmt))
+
 
 class QuotationItemRepo(ScopedRepository[QuotationItem]):
     model = QuotationItem
+
+    def for_version(self, version_id: UUID, limit: int, offset: int) -> Sequence[QuotationItem]:
+        stmt = (
+            self._select()
+            .where(QuotationItem.document_version_id == version_id)
+            .order_by(QuotationItem.source_order, QuotationItem.position, QuotationItem.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return self.session.scalars(stmt).all()
+
+    def version_id_of(self, item_id: UUID) -> UUID:
+        version_id = self.session.scalar(
+            select(QuotationItem.document_version_id).where(
+                QuotationItem.organisation_id == self.ctx.organisation_id,
+                QuotationItem.id == item_id,
+            )
+        )
+        if version_id is None:
+            raise NotFound("QuotationItem not found")
+        return version_id
+
+    def fresh(self, item_id: UUID) -> QuotationItem | None:
+        """Re-read the row after taking the extraction lock; None when a re-run deleted it."""
+        return self.session.scalar(
+            self._select()
+            .where(QuotationItem.id == item_id)
+            .execution_options(populate_existing=True)
+        )
 
     def for_quotation(self, quotation_id: UUID) -> Sequence[QuotationItem]:
         stmt = (
