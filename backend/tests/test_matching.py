@@ -13,7 +13,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from app.modules.suppliers import matching as m
-from app.modules.suppliers.matching_config import ACCESSORY_WORDS, MatchConfig
+from app.modules.suppliers.matching_config import ACCESSORY_WORDS, DISCRIMINATING_WORDS, MatchConfig
 
 SUP_A, SUP_B = uuid4(), uuid4()
 
@@ -786,7 +786,113 @@ def test_vetoes_never_add_clears_and_never_move_scores(boqs: list[str], quotes: 
     clear_on = {(s.boq_id, s.quote_id) for s in on if s.classification == "clear"}
     clear_off = {(s.boq_id, s.quote_id) for s in off if s.classification == "clear"}
     assert clear_on <= clear_off
-    vetoes = {"text_differs", "spec_one_sided", "accessory_word", "negation"}
+    vetoes = {
+        "text_differs",
+        "spec_one_sided",
+        "accessory_word",
+        "negation",
+        "number_differs",
+        "defining_word_missing",
+    }
     for s in on:
         if vetoes & set(s.evidence["warnings"]):
             assert s.classification != "clear"
+
+
+# --- overall review: numbers on one side only, and defining words the quote omits --------------
+
+NUMBER_PROBES = [
+    ("LED panel 600 x 600 40 W", "LED panel 1200 x 600 40 W"),
+    ("RCD 63 A 4-pole 30 mA", "RCD 63 A 4-pole"),
+    ("2 x 58 W fluorescent fitting", "58 W fluorescent fitting"),
+    ("58 W fluorescent fitting", "2 x 58 W fluorescent fitting"),
+]
+
+
+@pytest.mark.parametrize(("b", "q"), NUMBER_PROBES)
+def test_a_number_on_one_side_only_is_never_clear(b: str, q: str) -> None:
+    out = m.suggest([boq(b)], [quote(q)])
+    assert all(s.classification != "clear" for s in out)
+    assert all("number_differs" in s.evidence["warnings"] for s in out)
+    off = m.suggest([boq(b)], [quote(q)], config=replace(m.DEFAULT, clear_vetoes=False))
+    assert [(s.score, s.rank) for s in out] == [(s.score, s.rank) for s in off]
+
+
+def test_repeated_numbers_do_not_collapse() -> None:
+    assert m.number_multiset("LED panel 600 x 600 40 W") == ("40", "600", "600")
+    assert m.number_multiset("LED panel 1200 x 600 40 W") == ("1200", "40", "600")
+
+
+@pytest.mark.parametrize(
+    ("b", "q"),
+    [
+        ("3-core 2.5 mm2 cable", "3C+E 2.5mm² cable"),
+        ("Floodlight 1 500 W", "Floodlight 1500 W"),
+        ("Cable 2,5 mm2", "Cable 2.5 mm2"),
+        ("Distribution board 12-way", "DB 12 way"),
+    ],
+)
+def test_number_veto_ignores_notation(b: str, q: str) -> None:
+    assert "number_differs" not in _warnings(b, q)
+
+
+DEFINING_PROBES = [
+    ("Earth leakage circuit breaker 63 A 4-pole", "Circuit breaker 63 A 4-pole"),
+    ("Emergency LED bulkhead 10 W IP65", "LED bulkhead 10 W IP65"),
+    ("LED downlight 10 W dimmable", "LED downlight 10 W"),
+    ("Stainless steel cable tray 300 mm", "Steel cable tray 300 mm"),
+    ("Hot dip galvanised cable ladder 300 mm", "Cable ladder 300 mm"),
+    ("Socket outlet 16 A double switched", "Socket outlet 16 A double"),
+    ("Distribution board 12-way flush", "Distribution board 12-way"),
+    ("Circuit breaker 63 A 4-pole", "Earth leakage circuit breaker 63 A 4-pole"),
+]
+
+
+@pytest.mark.parametrize(("b", "q"), DEFINING_PROBES)
+def test_a_missing_defining_word_is_never_clear(b: str, q: str) -> None:
+    out = m.suggest([boq(b)], [quote(q)])
+    assert out and all(s.classification != "clear" for s in out)
+    off = m.suggest([boq(b)], [quote(q)], config=replace(m.DEFAULT, clear_vetoes=False))
+    assert [(s.score, s.rank) for s in out] == [(s.score, s.rank) for s in off]
+
+
+@pytest.mark.parametrize(
+    ("b", "q"),
+    [
+        ("Earth leakage circuit breaker 63 A 4-pole", "ELCB 63 A 4-pole"),
+        ("Luminaire 36 W recessed", "Light fitting 36 W recessed"),
+        ("Cable tray 300 mm hot dip galv", "Cable tray 300 mm hot dip galvanised"),
+        ("Supply and install LED downlight 10 W dimmable", "LED downlight 10 W dimmable"),
+    ],
+)
+def test_defining_words_on_both_sides_stay_clear(b: str, q: str) -> None:
+    [s] = m.suggest([boq(b)], [quote(q)])
+    assert s.classification == "clear", s.evidence["warnings"]
+
+
+def test_defining_word_warning_name() -> None:
+    assert "defining_word_missing" in _warnings("LED downlight 10 W dimmable", "LED downlight 10 W")
+
+
+@pytest.mark.parametrize("word", sorted(DISCRIMINATING_WORDS))
+def test_every_discriminating_word_vetoes_when_one_sided(word: str) -> None:
+    assert "defining_word_missing" in _warnings("Widget 10 A", f"Widget {word} 10 A")
+    assert "defining_word_missing" in _warnings(f"Widget {word} 10 A", "Widget 10 A")
+
+
+def test_strict_mode_vetoes_any_one_sided_word() -> None:
+    strict = replace(m.DEFAULT, one_sided_word_veto=True)
+    b, q = "Widget alpha 10 A", "Widget alpha heavy 10 A"
+    [loose] = m.suggest([boq(b)], [quote(q)])
+    [tight] = m.suggest([boq(b)], [quote(q)], config=strict)
+    assert loose.classification == "clear"
+    assert tight.classification == "ambiguous"
+    assert "word_one_sided" in tight.evidence["warnings"]
+    assert (loose.score, loose.rank) == (tight.score, tight.rank)
+    assert m.DEFAULT.one_sided_word_veto is False
+
+
+def test_new_vetoes_are_off_when_vetoes_are_off() -> None:
+    cfg = replace(m.DEFAULT, clear_vetoes=False, one_sided_word_veto=True)
+    [s] = m.suggest([boq("LED downlight 10 W dimmable")], [quote("LED downlight 10 W")], config=cfg)
+    assert "defining_word_missing" not in s.evidence["warnings"]

@@ -19,6 +19,7 @@ from .matching_config import (
     ALIASES,
     CANONICAL_UNITS,
     DEFAULT,
+    DISCRIMINATING_WORDS,
     NEGATION_WORDS,
     STOPWORDS,
     MatchConfig,
@@ -214,7 +215,25 @@ def _stem(word: str) -> str:
     return word[:-1] if len(word) > 3 and word.endswith("s") else word
 
 
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+_PREFIXED_CODE = re.compile(
+    r"(?<![a-z0-9])(?:sku|part|code|pn|p/n)\s*[-:#]?\s*([a-z0-9][a-z0-9-]*)"
+)
+
+
+def number_multiset(text: str) -> tuple[str, ...]:
+    """Every number in the description, repeats kept, sorted: `600 x 600 40 W` -> 40, 600, 600.
+
+    Space-grouped thousands before a unit (`1 500 W`) are joined first, so they read as one number.
+    A set of words loses repeats (`600 x 600` == `1200 x 600`) and a one-sided number; this keeps
+    both."""
+    low = _PREFIXED_CODE.sub(" ", _normalise(text))  # `SKU-4453` names a catalogue, not a size
+    low = _GROUPED.sub(lambda m: m.group(1) + re.sub(r"\s", "", m.group(2)) + " " + m.group(3), low)
+    return tuple(sorted(_norm_number(n) for n in _NUMBER.findall(low)))
+
+
 _ACCESSORY_STEMS = frozenset(_stem(w) for w in ACCESSORY_WORDS)
+_DISCRIMINATING_STEMS = frozenset(_stem(w) for w in DISCRIMINATING_WORDS)
 _NEGATION = re.compile(
     r"(?<![a-z0-9])(?:" + "|".join(re.escape(w) for w in NEGATION_WORDS) + r")(?![a-z0-9])"
 )
@@ -233,9 +252,6 @@ def _text_similarity(a: frozenset[str], b: frozenset[str]) -> float:
     return (dice + seq) / 2
 
 
-_PREFIXED_CODE = re.compile(
-    r"(?<![a-z0-9])(?:sku|part|code|pn|p/n)\s*[-:#]?\s*([a-z0-9][a-z0-9-]*)"
-)
 _MIXED_CODE = re.compile(r"(?<![a-z0-9-])([a-z0-9]+(?:-[a-z0-9]+)*)(?![a-z0-9])")
 _PREFIX_HEAD = re.compile(r"^(?:sku|part|code|pn)-")
 _BARE_UNIT = re.compile(r"^(?:m2|m3|mm2)$")
@@ -269,6 +285,7 @@ class _Prepared:
     spec_pairs: frozenset[tuple[str, str]]
     quals: dict[str, frozenset[str]]
     core_notation: frozenset[str]  # which spellings were used: "word" (3-core), "plus" (3C+E)
+    numbers: tuple[str, ...] = ()  # every number, repeats kept
     negated: bool = False
     unit: str | None = None  # canonical unit, computed once per line
 
@@ -295,6 +312,7 @@ def _prepare(description: str, sku: str | None = None, unit: str | None = None) 
         pairs,
         qualifier_tokens(description),
         _core_notation(_normalise(description)),
+        number_multiset(description),
         bool(_NEGATION.search(_normalise(description))),
         canon_unit(unit),
     )
@@ -339,7 +357,9 @@ def _known_unit(raw: str | None) -> str | None:
     return unit if unit in CANONICAL_UNITS else None
 
 
-def _vetoes(boq_p: _Prepared, quote_p: _Prepared, spec_detail: dict[str, Any]) -> tuple[str, ...]:
+def _vetoes(
+    boq_p: _Prepared, quote_p: _Prepared, spec_detail: dict[str, Any], cfg: MatchConfig = DEFAULT
+) -> tuple[str, ...]:
     """Reasons a pair must not be `clear` even though it scores well: the score never moves.
 
     The spec parser reads only a few kinds, so two products that differ in an unread word (Type B
@@ -354,6 +374,13 @@ def _vetoes(boq_p: _Prepared, quote_p: _Prepared, spec_detail: dict[str, Any]) -
         out.append("accessory_word")
     if boq_p.negated or quote_p.negated:
         out.append("negation")
+    if boq_p.numbers != quote_p.numbers:
+        out.append("number_differs")  # 600 x 600 vs 1200 x 600; a number only one side states
+    differing = boq_p.tokens ^ quote_p.tokens
+    if differing & _DISCRIMINATING_STEMS:
+        out.append("defining_word_missing")  # emergency, dimmable, stainless ... on one side only
+    elif cfg.one_sided_word_veto and differing:
+        out.append("word_one_sided")
     return tuple(out)
 
 
@@ -400,7 +427,7 @@ def _score_pair(
             and quote_p.core_notation
             and boq_p.core_notation != quote_p.core_notation
         ),
-        _vetoes(boq_p, quote_p, spec_detail) if cfg.clear_vetoes else (),
+        _vetoes(boq_p, quote_p, spec_detail, cfg) if cfg.clear_vetoes else (),
     )
 
 

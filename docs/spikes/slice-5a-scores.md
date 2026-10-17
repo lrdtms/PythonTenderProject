@@ -98,3 +98,18 @@ Evaluation honesty. The generator makes every trap by changing one value of a ki
 Qualifiers are read from the whole description, not from the item noun: `Cable copper 4 mm2 3C+E` against `Cable aluminium 4 mm2 3C+E with copper tinned screen` shares the word `copper`, so no qualifier conflict arises, and the new `text_differs` veto does not block it either (only the quote has extra words), so this pair is still `clear` at 0.81. This is a known remaining gap. The opposite one-sided trade-off also remains: a quote that names a qualifier (`steel`) where the BoQ line names none is not a conflict, so it can still be clear.
 
 Later additions to the vetoes and remaining gaps. Space-grouped values before a unit are ambiguous (`2 100 W` is 2100 W or 2 x 100 W), so both readings are kept as values of that kind: a pair that reads them differently is multi-value and never clear, and the same spelling on both sides still compares equal. A `type` spec kind reads `Type A` / `Type AC` / `Type B` (the word `a` is a stopword, so it needs its own kind); different types conflict and a type on one side only is `spec_one_sided`. `not` and `non` (so `non-dimmable`) are negation words (`no` is deliberately not: it is a unit). Remaining by-design one-sided classes: a feature named on one side only that the parser and vetoes do not read, e.g. `with photocell`, or `20 A SP MCB` against `20 A MCB`, is a one-sided extra and can still be clear when the other side says nothing about it; the vetoes catch differences stated on both sides (or a parsed kind on one side), not omissions. After these additions the clear counts are unchanged (43 committed, 89 hold-out), top_accuracy 1.000, wrong_clear 0.
+
+## Overall review: number and defining-word vetoes
+
+Two more clear-only vetoes (scores and ranks do not move; warnings are shown in the evidence):
+
+- `number_differs`: the multiset of numbers in the two descriptions must be equal (repeats kept, spec spans included, space-grouped thousands joined, `SKU-` style codes ignored). This catches `600 x 600` against `1200 x 600` (a set of words collapsed the two 600s), `RCD 63 A 4-pole 30 mA` against `RCD 63 A 4-pole`, and `2 x 58 W` against `58 W`.
+- `defining_word_missing`: a word from `DISCRIMINATING_WORDS` (emergency, earth, leakage, dimmable, stainless, galvanised, switched, flush, double, bulkhead, ... aliases are expanded first, so `ELCB` reaches `earth` / `leakage`) on one side only. This catches `Earth leakage circuit breaker` against `Circuit breaker`, `LED downlight 10 W dimmable` against `LED downlight 10 W`, and the other probes of the review.
+- Strict mode, `MatchConfig.one_sided_word_veto = True` (off by default): any word on one side only blocks clear (warning `word_one_sided`), for owners who prefer more clicks to any risk.
+
+| Set | clear, before | clear, default (both new vetoes) | clear, strict | top_accuracy | wrong_clear | ambiguous clear |
+|---|---|---|---|---|---|---|
+| Committed packs | 43 | 43 | 23 | 1.000 in all three | 0 | 0 |
+| Hold-out seed 43 | 89 | 89 | 52 | 1.000 in all three | 0 | 0 |
+
+The default vocabulary mode costs no clear on either set (no word of the list costs one on this data), so it is on by default. Strict mode costs 20 of 43 and 37 of 89 clears: the synthetic quotations routinely add words (`heavy duty`, brand and descriptive extras) that strict mode treats as differences. Numbers inside a bracketed `[SKU-1234]` reference are ignored because the BoQ never carries them; a code in the description without a `sku/part/code/pn` prefix still counts as a number.

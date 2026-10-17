@@ -67,6 +67,21 @@ ACCESSORY_WORDS: frozenset[str] = frozenset(
     }
 )
 
+# Product-defining words (electrical trade): a BoQ line that names one and a quote that omits it
+# (or the reverse) is a different product, whatever the rest says. Matched after aliases are
+# expanded, so `ELCB` reaches `earth` / `leakage` and `MCB` reaches `miniature`. Clear-only veto.
+DISCRIMINATING_WORDS: frozenset[str] = frozenset(
+    {
+        "emergency", "earth", "leakage", "residual", "miniature", "moulded",
+        "stainless", "galvanised", "armoured", "unarmoured", "swa",
+        "fire", "rated", "weatherproof", "waterproof",
+        "switched", "flush", "surface", "recessed", "pendant", "bulkhead", "floodlight",
+        "indoor", "outdoor", "dimmable", "battery", "maintained",
+        "single", "double", "twin", "triple",
+        "rcbo", "rccb", "isolator", "contactor", "relay", "timer", "sensor", "photocell",
+    }
+)  # fmt: skip
+
 # A description that says it leaves something out is not an exact statement of the item.
 NEGATION_WORDS: tuple[str, ...] = (
     "excluding",
@@ -99,6 +114,8 @@ class MatchConfig:
     clear_text_min: float = 0.5  # a clear match needs real word overlap, not just matching specs
     top_n: int = 3
     clear_vetoes: bool = True  # text/spec/accessory/negation vetoes on `clear` (never on score)
+    # Strict mode: any word on one side only blocks `clear` (more clicks, fewer wrong clears).
+    one_sided_word_veto: bool = False
 
 
 DEFAULT = MatchConfig()
