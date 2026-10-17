@@ -75,6 +75,8 @@ NEGATION_WORDS: tuple[str, ...] = (
     "except",
     "not included",
     "less",
+    "not",
+    "non",
 )
 
 # The values of extraction's UNIT_CANON: the only unit strings the evidence may carry.

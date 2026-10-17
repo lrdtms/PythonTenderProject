@@ -89,8 +89,9 @@ class EvalReport:
         )
         lines.append(
             f"exact_spec_on_trap_items={self.exact_spec_on_trap_items} (excused from the counts "
-            "above: a clear offered for a ground-truth trap item whose text and every spec kind "
-            "equal a real BoQ line, so the trap label is an artefact): "
+            "above: a clear offered for a ground-truth trap item whose spec kinds all "
+            "agree with a real BoQ line (under the 3-core == 3C+E convention) and whose text is "
+            "above the clear floor, so the trap label is an artefact): "
             + (", ".join(self.excused) if self.excused else "none")
         )
         if self.skipped:

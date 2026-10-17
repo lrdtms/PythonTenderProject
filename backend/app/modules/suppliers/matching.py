@@ -67,9 +67,10 @@ _VALUE_UNIT = re.compile(
 _N_BY_S = re.compile(r"(?<![a-z\d.,])(\d+)\s*x\s*(\d+(?:[.,]\d+)?)\s*mm2(?![a-z0-9])")
 # `1 500 W`, `1 200 mm`: space-grouped thousands before a unit.
 _UNITS = r"(?:ka|kv|kw|kva|mm2|mm|hz|va|a|v|w)"
-_GROUPED = re.compile(
-    r"(?<![\d.,])(\d{1,3})((?:[ \u00a0]\d{3})+)(?=\s*" + _UNITS + r"(?![a-z0-9]))"
-)
+# Ambiguous (`2 100 W` is 2100 W or 2 x 100 W): both readings are kept, never one guessed.
+_GROUPED = re.compile(r"(?<![\d.,])(\d{1,3})((?:[ \u00a0]\d{3})+)\s*(" + _UNITS + r")(?![a-z0-9])")
+# `Type B`, `Type AC` (RCD / MCB classes); `a` is a stopword, so it needs its own kind.
+_TYPE = re.compile(r"(?<![a-z0-9])type\s+(?!(?:of|to|in|on|or|an)\b)([a-z]{1,2})\b")
 _CORES = re.compile(r"(\d+)\s*c\s*\+\s*e(?![a-z0-9])")
 _CORE_WORD = re.compile(r"(?<![a-z0-9])(\d+)[\s-]*core(?![a-z0-9])")  # "4-core" == "4C+E"
 _IP = re.compile(r"(?<![a-z0-9])ip\s?(\d{2})(?![a-z0-9])")
@@ -92,6 +93,13 @@ def spec_tokens(text: str) -> dict[str, frozenset[str]]:
         kinds["core"].add(f"{cores}c+e")
         kinds["mm2"].add(_norm_number(section))
     low = _N_BY_S.sub(" ", low)
+    for lead, groups, unit in _GROUPED.findall(low):
+        digits = re.sub(r"\s", "", groups)
+        kinds[unit].update((lead + digits, digits[-3:]))
+    low = _GROUPED.sub(" ", low)
+    for t in _TYPE.findall(low):
+        kinds["type"].add(t)
+    low = _TYPE.sub(" ", low)
     for number, unit in _VALUE_UNIT.findall(low):
         kinds[unit].add(_norm_number(number))
     for n in (*_CORES.findall(low), *_CORE_WORD.findall(low)):
@@ -104,12 +112,11 @@ def spec_tokens(text: str) -> dict[str, frozenset[str]]:
     return {k: frozenset(v) for k, v in kinds.items()}
 
 
-_SPEC_SPANS = (_N_BY_S, _VALUE_UNIT, _CORES, _CORE_WORD, _IP, *_STRUCT.values())
+_SPEC_SPANS = (_N_BY_S, _GROUPED, _TYPE, _VALUE_UNIT, _CORES, _CORE_WORD, _IP, *_STRUCT.values())
 
 
 def _normalise(text: str) -> str:
-    low = text.lower().replace("²", "2").replace("³", "3")
-    return _GROUPED.sub(lambda g: g.group(1) + re.sub(r"\s", "", g.group(2)), low)
+    return text.lower().replace("²", "2").replace("³", "3")
 
 
 def _strip_specs(low: str) -> str:

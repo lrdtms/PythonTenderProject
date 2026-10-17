@@ -666,12 +666,93 @@ def test_a_value_glued_to_a_preceding_word_is_not_a_spec() -> None:
     assert m.spec_tokens("1,5 mm2")["mm2"] == {"1.5"}
 
 
-def test_space_grouped_thousands_before_a_unit_are_joined() -> None:
-    assert m.spec_tokens("Floodlight 1 500 W")["w"] == {"1500"}
-    assert m.spec_tokens("Trunking 1 200 mm")["mm"] == {"1200"}
+def test_space_grouped_thousands_yield_both_readings() -> None:
+    # `2 100 W` may be 2100 W or a quantity 2 of 100 W: never guess one reading.
+    assert m.spec_tokens("Floodlight 1 500 W")["w"] == {"1500", "500"}
+    assert m.spec_tokens("Trunking 1 200 mm")["mm"] == {"1200", "200"}
+    assert m.spec_tokens("Supply 2 100 W floodlights")["w"] == {"2100", "100"}
+    assert m.spec_tokens("Floodlight 12 500 W")["w"] == {"12500", "500"}
     assert m.spec_tokens("Floodlight 500 W")["w"] == {"500"}
-    assert m.spec_tokens("Floodlight 12 500 W")["w"] == {"12500"}
     assert m.spec_tokens("3 phase 500 W")["w"] == {"500"}  # not a thousands group
+
+
+@pytest.mark.parametrize(
+    ("b", "q"),
+    [
+        ("Floodlight 2 100 W", "Floodlight 2100 W"),
+        ("Floodlight 2 100 W", "Floodlight 100 W"),
+        ("Floodlight 1 500 W", "Floodlight 1500 W"),
+        ("Floodlight 1 500 W", "Floodlight 500 W"),
+        ("Supply 2 100 W floodlights", "Floodlight 2100 W"),
+    ],
+)
+def test_an_ambiguous_grouped_value_is_never_clear(b: str, q: str) -> None:
+    line, offer = boq(b), quote(q)
+    out = m.suggest([line], [offer])
+    assert all(s.classification != "clear" for s in out)
+    off = m.suggest([line], [offer], config=replace(m.DEFAULT, clear_vetoes=False))
+    assert [(s.score, s.rank) for s in out] == [(s.score, s.rank) for s in off]
+
+
+def test_the_same_grouped_spelling_on_both_sides_is_comparable() -> None:
+    [s] = m.suggest([boq("Floodlight 2 100 W")], [quote("Floodlight 2 100 W")])
+    assert s.classification == "clear"
+
+
+@pytest.mark.parametrize(
+    ("b", "q"),
+    [
+        ("RCD 63 A 4-pole 30 mA Type A", "RCD 63 A 4-pole 30 mA Type B"),
+        ("MCB 20 A Type B", "MCB 20 A Type A"),
+        ("RCD 63 A 30 mA Type AC", "RCD 63 A 30 mA Type A"),
+        ("MCB 20 A Type C", "MCB 20 A Type D"),
+        ("MCB 20 A Type C", "MCB 20 A"),
+        ("MCB 20 A", "MCB 20 A Type C"),
+    ],
+)
+def test_the_type_kind_separates_device_types(b: str, q: str) -> None:
+    [s] = m.suggest([boq(b)], [quote(q)])
+    assert s.classification != "clear"
+
+
+def test_type_is_a_spec_kind_and_does_not_eat_ordinary_words() -> None:
+    assert m.spec_tokens("MCB Type B")["type"] == {"b"}
+    assert m.spec_tokens("RCD TYPE AC 30 mA")["type"] == {"ac"}
+    assert "type" not in m.spec_tokens("Cable of the type of PVC")
+    assert "type" not in m.spec_tokens("Type 2 surge arrester")
+    assert "type" not in m.spec_tokens("Type A1 thing")
+    ev = m.suggest([boq("MCB 20 A Type B")], [quote("MCB 20 A Type C")])
+    assert ev == [] or "type" in ev[0].evidence["spec"]["conflicts"]
+    one = m.suggest([boq("MCB 20 A")], [quote("MCB 20 A Type C")])[0]
+    assert one.evidence["spec"]["quote_only"] == ["type"]
+    assert "spec_one_sided" in one.evidence["warnings"]
+
+
+def test_a_same_type_genuine_pair_stays_clear() -> None:
+    [s] = m.suggest(
+        [boq("RCD 63 A 4-pole 30 mA Type A")],
+        [quote("Residual current device 63 A 4-pole 30 mA Type A")],
+    )
+    assert s.classification == "clear"
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Cable 4 mm2 armoured", "Cable 4 mm2 not armoured"),
+        ("Downlight 10 W dimmable", "Downlight 10 W non-dimmable"),
+        ("Downlight 10 W dimmable", "Downlight 10 W non dimmable"),
+    ],
+)
+def test_not_and_non_are_negations(a: str, b: str) -> None:
+    for x, y in ((a, b), (b, a)):
+        [s] = m.suggest([boq(x)], [quote(y)])
+        assert "negation" in s.evidence["warnings"] and s.classification != "clear"
+
+
+def test_no_is_a_unit_not_a_negation() -> None:
+    assert "negation" not in _warnings("Lamp 58 W", "Lamp 58 W no")
+    assert "negation" not in _warnings("Lamp 58 W nonsense", "Lamp 58 W")
 
 
 def test_n_by_s_reads_as_cores_and_cross_section() -> None:
