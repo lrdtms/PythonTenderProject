@@ -62,6 +62,8 @@ Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md):
 
 - **Checklist mandatory-status filter is client-side** (the API has no such parameter), so it applies to loaded pages only; the page says so while it is active and more pages exist.
 
+- **Comparison page summary counts cover loaded lines only** (the API has no totals), and the list fetches 100 BoQ lines per page; "Load more lines" reads the rest.
+
 - **Members page:** own-row and last-admin protections live on the server only (the UI shows its refusals); resetting your own password ends your own sessions too, and the page warns about it.
 
 ## Slice 1 and Slice 2 (deferred review minors)

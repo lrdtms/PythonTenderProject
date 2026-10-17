@@ -1,0 +1,214 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useMemo, useState } from "react";
+
+import { ApiError } from "@/api/errors";
+import { useConfirmClear, useMatchLines, useRunMatching } from "@/api/matches";
+import { quotationsQueryOptions } from "@/api/quotations";
+import { tenderQueryOptions } from "@/api/tenders";
+import type { MatchLine as MatchLineData } from "@/api/types";
+import { useCan } from "@/components/auth-gate";
+import { matchErrorText } from "@/lib/match-text";
+
+import { MatchLine } from "./match-line";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SELECT = "rounded border bg-transparent p-1 text-sm";
+const BUTTON = "rounded border px-3 py-1 text-sm disabled:opacity-50";
+
+type Section = { name: string | null; lines: MatchLineData[] };
+
+/** Consecutive lines with the same section share a heading, so the API order is kept. */
+function groupBySection(lines: MatchLineData[]): Section[] {
+  const out: Section[] = [];
+  for (const line of lines) {
+    const last = out.at(-1);
+    if (last && last.name === line.boq.section) last.lines.push(line);
+    else out.push({ name: line.boq.section, lines: [line] });
+  }
+  return out;
+}
+
+export function ComparisonView() {
+  const { id } = useParams<{ id: string }>();
+  const valid = typeof id === "string" && UUID.test(id);
+  const canReviewData = useCan("review_data");
+  const [classification, setClassification] = useState("");
+  const [status, setStatus] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [onlyWithSuggestions, setOnlyWithSuggestions] = useState(false);
+
+  const tender = useQuery({ ...tenderQueryOptions(id), enabled: valid });
+  const quotations = useQuery({ ...quotationsQueryOptions(id), enabled: valid && !!tender.data });
+  const list = useMatchLines(
+    id,
+    {
+      classification: classification || undefined,
+      status: status || undefined,
+      supplierId: supplierId || undefined,
+      onlyWithSuggestions: onlyWithSuggestions || undefined,
+    },
+    valid && !!tender.data,
+  );
+  const confirmClear = useConfirmClear(id);
+  const run = useRunMatching(id);
+
+  const suppliers = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const q of quotations.data ?? []) map.set(q.supplier_id, q.supplier_name);
+    return [...map].map(([value, name]) => ({ id: value, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [quotations.data]);
+
+  if (!valid || (tender.error instanceof ApiError && tender.error.isNotFound)) {
+    return (
+      <div role="alert">
+        <p className="mb-2">This tender was not found.</p>
+        <Link href="/tenders" className="underline">
+          Back to tenders
+        </Link>
+      </div>
+    );
+  }
+  if (tender.isPending) return <p role="status" className="text-sm text-zinc-500">Loading tender…</p>;
+  if (!tender.data) {
+    return (
+      <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+        Could not load the tender.
+      </p>
+    );
+  }
+
+  const canReview = canReviewData && tender.data.status !== "archived";
+  const lines = list.lines;
+  const all = lines.flatMap((l) => l.suggestions);
+  const clearOpen = all.filter((s) => s.classification === "clear" && s.status === "suggested").length;
+  const withClear = lines.filter((l) => l.suggestions.some((s) => s.classification === "clear")).length;
+  const needing = lines.filter((l) => l.suggestions.some((s) => s.classification !== "clear")).length;
+  const confirmed = all.filter((s) => s.status === "confirmed").length;
+  const filtered = !!(classification || status || supplierId || onlyWithSuggestions);
+  const sections = groupBySection(lines);
+
+  return (
+    <section>
+      <p className="mb-2 text-sm">
+        <Link href={`/tenders/${id}`} className="underline">
+          ← Back to the tender
+        </Link>
+      </p>
+      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Supplier comparison: {tender.data.title}</h1>
+      <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+        Each line of the bill of quantities with the supplier quotes that may fit it, in the order the quotes were read.
+        Prices are shown as quoted; confirm the match you want to use.
+      </p>
+
+      <p className="mb-3 text-sm" aria-live="polite">
+        Loaded: {lines.length} {lines.length === 1 ? "line" : "lines"} · {withClear} with a clear match · {needing} needing a decision ·{" "}
+        {confirmed} confirmed{list.hasNextPage ? " (more lines are not loaded yet)" : ""}
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-end gap-3" role="group" aria-label="Filters">
+        <label className="text-sm">
+          <span className="mr-1 font-medium">Classification</span>
+          <select value={classification} onChange={(e) => setClassification(e.target.value)} className={SELECT}>
+            <option value="">All</option>
+            <option value="clear">Clear match</option>
+            <option value="ambiguous">Needs a decision</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mr-1 font-medium">Status</span>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={SELECT}>
+            <option value="">All</option>
+            <option value="suggested">Suggested</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mr-1 font-medium">Supplier</span>
+          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={SELECT}>
+            <option value="">All</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-sm">
+          <input type="checkbox" checked={onlyWithSuggestions} onChange={(e) => setOnlyWithSuggestions(e.target.checked)} />
+          Only lines with a suggestion
+        </label>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {canReview ? (
+          <>
+            <button
+              type="button"
+              disabled={clearOpen === 0 || confirmClear.isPending}
+              onClick={() => confirmClear.mutate()}
+              className={BUTTON}
+            >
+              Confirm all clear matches ({clearOpen})
+            </button>
+            <button type="button" disabled={run.isPending} onClick={() => run.mutate()} className={BUTTON}>
+              Run matching again
+            </button>
+          </>
+        ) : null}
+        <button type="button" disabled={list.isFetching} onClick={() => void list.refetch()} className={BUTTON}>
+          Refresh
+        </button>
+      </div>
+      <div aria-live="polite" className="mb-3 text-sm">
+        {confirmClear.data ? <p>{`Confirmed ${confirmClear.data.confirmed}, skipped ${confirmClear.data.skipped}`}</p> : null}
+        {run.isSuccess ? <p>Matching started. Use Refresh in a moment to see the new suggestions.</p> : null}
+      </div>
+      {confirmClear.error || run.error ? (
+        <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">
+          {matchErrorText(confirmClear.error ?? run.error)}
+        </p>
+      ) : null}
+
+      {list.isPending ? <p role="status" className="text-sm text-zinc-500">Loading lines…</p> : null}
+      {list.isError ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          Could not load the lines.
+        </p>
+      ) : null}
+      {list.isSuccess && lines.length === 0 ? (
+        <p className="text-sm">
+          {filtered
+            ? "No lines match these filters."
+            : "There are no matches to compare yet. Upload a bill of quantities and supplier quotations, then run matching."}
+        </p>
+      ) : null}
+
+      {sections.map((section, i) => (
+        <section key={`${i}-${section.name ?? ""}`} className="mb-6">
+          <h2 className="mb-2 text-lg font-medium">{section.name ?? "No section"}</h2>
+          <ul className="space-y-3">
+            {section.lines.map((line) => (
+              <MatchLine key={line.boq.id} line={line} tenderId={id} canReview={canReview} />
+            ))}
+          </ul>
+        </section>
+      ))}
+
+      {list.hasNextPage ? (
+        <button
+          type="button"
+          disabled={list.isFetchingNextPage}
+          onClick={() => void list.fetchNextPage()}
+          className={BUTTON}
+        >
+          Load more lines
+        </button>
+      ) : null}
+    </section>
+  );
+}

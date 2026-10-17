@@ -16,7 +16,7 @@ export type MatchFilters = {
 type Pages = InfiniteData<MatchLine[]>;
 
 /** Pages are counted in BoQ lines (not suggestions). A short page is the last one. */
-export function useMatchLines(tenderId: string, filters: MatchFilters) {
+export function useMatchLines(tenderId: string, filters: MatchFilters, enabled = true) {
   const query = useInfiniteQuery({
     queryKey: ["matches", tenderId, filters] as const,
     queryFn: ({ pageParam, signal }) =>
@@ -35,6 +35,7 @@ export function useMatchLines(tenderId: string, filters: MatchFilters) {
     initialPageParam: 0,
     getNextPageParam: (last, all) => (last.length < MATCH_PAGE_SIZE ? undefined : all.length * MATCH_PAGE_SIZE),
     staleTime: 0,
+    enabled,
   });
   const lines: MatchLine[] = query.data?.pages.flat() ?? [];
   return { ...query, lines };

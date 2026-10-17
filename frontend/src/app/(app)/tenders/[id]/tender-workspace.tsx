@@ -78,6 +78,10 @@ export function TenderWorkspace() {
         <Link href={`/tenders/${id}/checklist`} className="underline">
           Requirements checklist
         </Link>
+        {" · "}
+        <Link href={`/tenders/${id}/suppliers`} className="underline">
+          Compare suppliers
+        </Link>
       </p>
 
       {!archived ? <UploadForm tenderId={id} /> : null}
