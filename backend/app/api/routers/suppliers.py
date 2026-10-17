@@ -58,6 +58,8 @@ def merge_supplier(supplier_id: UUID, body: suppliers.SupplierMerge, ctx: Ctx, s
     A concurrent extraction can attach a quotation of another tender to the source while we lock.
     So: lock the tenders read, re-read, and if the set grew release everything (nothing is
     written yet, so a rollback is safe) and start again, up to MERGE_ATTEMPTS times."""
+    suppliers.tenders_of_supplier(session, ctx, supplier_id)  # role and source before any lock
+    suppliers.get_supplier(session, ctx, body.into_id)  # NotFound for an unknown target
     for _ in range(MERGE_ATTEMPTS):
         wanted = set(_affected(session, ctx, supplier_id))
         for tender_id in sorted(wanted):

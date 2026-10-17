@@ -179,6 +179,60 @@ def test_archive_waits_for_the_tender_lock() -> None:
     assert actor.client.get(f"/api/v1/tenders/{tender_id}").json()["status"] == "archived"
 
 
+def _request_while_locked(actor, ctx, tender_id: str, method: str, path: str, body=None) -> int:
+    """Send a request from another thread while a transaction holds the tender lock.
+
+    Returns the status; fails when the request is still waiting after 3 seconds."""
+    out: list[int] = []
+    thread = threading.Thread(
+        target=lambda: out.append(actor.client.request(method, path, json=body).status_code)
+    )
+    with session_scope() as holder:
+        suppliers.lock_tender(holder, ctx, UUID(tender_id))
+        thread.start()
+        thread.join(timeout=3)
+        assert not thread.is_alive(), f"{method} {path} waited on a lock it may not take"
+    thread.join(timeout=30)
+    return out[0]
+
+
+def test_archive_refuses_foreign_and_reviewer_callers_without_waiting() -> None:
+    from tests.conftest import add_member
+
+    owner = register("race8@example.com")
+    ctx = _ctx(owner)
+    tender_id = make_tender(owner)
+    path = f"/api/v1/tenders/{tender_id}/archive"
+    foreign = register("race8b@example.com")
+    assert _request_while_locked(foreign, ctx, tender_id, "POST", path) == 404
+    reviewer = add_member(owner, "race8c@example.com", "reviewer")
+    assert _request_while_locked(reviewer, ctx, tender_id, "POST", path) == 403
+
+
+def test_other_write_routes_refuse_unauthorised_callers_without_waiting() -> None:
+    from uuid import uuid4
+
+    from tests.conftest import add_member
+
+    owner = register("race9@example.com")
+    ctx = _ctx(owner)
+    tender_id = make_tender(owner)
+    foreign = register("race9b@example.com")
+    reviewer = add_member(owner, "race9c@example.com", "reviewer")
+    routes = [
+        ("POST", f"/api/v1/quotation-items/{uuid4()}/confirm", None),
+        ("PATCH", f"/api/v1/quotations/{uuid4()}", {"currency": "ZAR"}),
+        ("POST", f"/api/v1/match-suggestions/{uuid4()}/confirm", None),
+        ("POST", f"/api/v1/tenders/{tender_id}/match-suggestions/confirm-clear", None),
+        ("POST", f"/api/v1/suppliers/{uuid4()}/merge", {"into_id": str(uuid4())}),
+    ]
+    for method, path, body in routes:
+        status = _request_while_locked(foreign, ctx, tender_id, method, path, body)
+        assert status == 404, (method, path, status)
+        status = _request_while_locked(reviewer, ctx, tender_id, method, path, body)
+        assert status == 403, (method, path, status)
+
+
 def test_get_or_create_gives_try_again_when_the_twin_keeps_vanishing(monkeypatch) -> None:
     import pytest
 
