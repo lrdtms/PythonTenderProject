@@ -30,16 +30,25 @@ export function CandidateRow({
   suggestion,
   tenderId,
   canReview,
+  busy = false,
 }: {
   suggestion: MatchSuggestion;
   tenderId: string;
   canReview: boolean;
+  busy?: boolean;
 }) {
   const { confirm, reject, reset } = useDecideMatch(tenderId);
   const s = suggestion;
   const q = s.quotation_item;
-  const pending = confirm.isPending || reject.isPending || reset.isPending;
+  const pending = busy || confirm.isPending || reject.isPending || reset.isPending;
   const error = confirm.error ?? reject.error ?? reset.error;
+  // One error source per row: starting any action clears the others' results first.
+  const act = (m: { mutate: (id: string) => void }) => {
+    confirm.reset();
+    reject.reset();
+    reset.reset();
+    m.mutate(s.id);
+  };
   const warnings = warningCodes(s.evidence);
   const evidence = evidenceSummary(s.evidence);
   const canConfirm = s.status === "suggested" || s.status === "rejected";
@@ -91,17 +100,17 @@ export function CandidateRow({
       {canReview ? (
         <div className="mt-2 flex flex-wrap gap-2 md:mt-0">
           {canConfirm ? (
-            <button type="button" disabled={pending} onClick={() => confirm.mutate(s.id)} className={BUTTON}>
+            <button type="button" disabled={pending} onClick={() => act(confirm)} className={BUTTON}>
               Confirm
             </button>
           ) : null}
           {canReject ? (
-            <button type="button" disabled={pending} onClick={() => reject.mutate(s.id)} className={BUTTON}>
+            <button type="button" disabled={pending} onClick={() => act(reject)} className={BUTTON}>
               Reject
             </button>
           ) : null}
           {canReset ? (
-            <button type="button" disabled={pending} onClick={() => reset.mutate(s.id)} className={BUTTON}>
+            <button type="button" disabled={pending} onClick={() => act(reset)} className={BUTTON}>
               Reset
             </button>
           ) : null}

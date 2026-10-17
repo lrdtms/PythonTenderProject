@@ -139,9 +139,62 @@ describe("CandidateRow", () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ["matches", ids.tender] });
   });
 
+  it("clears an old error when another action succeeds", async () => {
+    mockApi(
+      {
+        [`POST /api/v1/match-suggestions/${SID}/confirm`]: () => respond(409, errorBody("match_conflict", "conflict")),
+        [`POST /api/v1/match-suggestions/${SID}/reject`]: () => respond(200, makeMatchSuggestion({ status: "rejected" })),
+      },
+      estimator,
+    );
+    mount({});
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+    await screen.findByRole("alert");
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("shows the newest error, not the older one", async () => {
+    mockApi(
+      {
+        [`POST /api/v1/match-suggestions/${SID}/confirm`]: () => respond(409, errorBody("match_conflict", "conflict")),
+        [`POST /api/v1/match-suggestions/${SID}/reject`]: () => respond(409, errorBody("try_again", "again")),
+      },
+      estimator,
+    );
+    mount({});
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+    await screen.findByText(/already confirmed/);
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    expect(await screen.findByText("Something changed at the same time. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/already confirmed/)).toBeNull();
+  });
+
+  it("disables the actions while the page is busy", async () => {
+    mockApi({}, estimator);
+    renderSignedIn(
+      <ul>
+        <CandidateRow suggestion={makeMatchSuggestion()} tenderId={ids.tender} canReview busy />
+      </ul>,
+    );
+    expect(await screen.findByRole("button", { name: "Confirm" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
+  });
+
   it("never uses ranking words", async () => {
     mockApi({}, estimator);
-    mount({ status: "confirmed" });
+    mount({
+      status: "confirmed",
+      score: 0.91,
+      classification: "ambiguous",
+      evidence: {
+        warnings: ["unit_mismatch", "quote_shared", "accessory_word"],
+        signals: { text: 0.8, spec: 0.6 },
+        unit: { state: "mismatch" },
+        spec: { matched: ["voltage"], conflicts: ["power"], boq_only: ["colour"], quote_only: ["ip_rating"] },
+        valid_until: "2026-12-31",
+      },
+    });
     await screen.findByText("Bright Sparks");
     expect(document.body.textContent).not.toMatch(/cheapest|lowest|\bbest\b/i);
   });

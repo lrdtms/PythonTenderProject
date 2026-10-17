@@ -2,7 +2,17 @@ import type { MatchLine as MatchLineData } from "@/api/types";
 
 import { CandidateRow } from "./candidate-row";
 
-export function MatchLine({ line, tenderId, canReview }: { line: MatchLineData; tenderId: string; canReview: boolean }) {
+export function MatchLine({
+  line,
+  tenderId,
+  canReview,
+  busy,
+}: {
+  line: MatchLineData;
+  tenderId: string;
+  canReview: boolean;
+  busy?: boolean;
+}) {
   const b = line.boq;
   return (
     <li className="rounded border border-zinc-300 p-3 dark:border-zinc-700">
@@ -18,7 +28,7 @@ export function MatchLine({ line, tenderId, canReview }: { line: MatchLineData; 
       ) : (
         <ul className="space-y-2">
           {line.suggestions.map((s) => (
-            <CandidateRow key={s.id} suggestion={s} tenderId={tenderId} canReview={canReview} />
+            <CandidateRow key={s.id} suggestion={s} tenderId={tenderId} canReview={canReview} busy={busy} />
           ))}
         </ul>
       )}

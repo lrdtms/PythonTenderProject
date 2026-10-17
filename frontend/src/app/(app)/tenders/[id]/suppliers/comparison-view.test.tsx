@@ -172,8 +172,87 @@ describe("ComparisonView", () => {
     mockApi(routes(), estimator);
     renderSignedIn(<ComparisonView />);
     const summary = await screen.findByText(/Loaded: 3 lines/);
-    expect(summary).toHaveTextContent("1 with a clear match");
-    expect(summary).toHaveTextContent("1 needing a decision");
+    expect(summary).toHaveTextContent("2 awaiting a decision");
     expect(summary).toHaveTextContent("0 confirmed");
+    expect(summary).toHaveTextContent("1 with no supplier match");
+  });
+
+  function statefulRoutes(extra: Record<string, () => Response | Promise<Response>> = {}) {
+    let done = false;
+    const status = () => (done ? "confirmed" : "suggested");
+    return routes({
+      [`GET ${LIST}`]: () =>
+        respond(200, [line(1, "A", [sug(1, { status: status() })]), line(2, "A", [sug(2, { status: status() })])]),
+      [`POST ${CONFIRM_CLEAR}`]: () => {
+        done = true;
+        return respond(200, { confirmed: 5, skipped: 1 });
+      },
+      ...extra,
+    });
+  }
+
+  it("updates the summary and the confirm-all count after confirm-all, and shows the server counts", async () => {
+    const fetchMock = mockApi(statefulRoutes(), estimator);
+    renderSignedIn(<ComparisonView />);
+    const button = await screen.findByRole("button", { name: "Confirm all clear matches (2)" });
+    expect(screen.getByText(/2 awaiting a decision/)).toBeInTheDocument();
+    expect(screen.getByText("Confirms every clear match in this tender, including lines not shown.")).toBeInTheDocument();
+    await userEvent.click(button);
+    expect(await screen.findByText("Confirmed 5, skipped 1")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Confirm all clear matches (0)" })).toBeDisabled();
+    expect(screen.getByText(/0 awaiting a decision/)).toHaveTextContent("2 confirmed");
+    expect(callsTo(fetchMock, "POST", CONFIRM_CLEAR)).toHaveLength(1);
+  });
+
+  it("disables candidate actions while confirm-all runs", async () => {
+    let release: (r: Response) => void = () => {};
+    mockApi(statefulRoutes({ [`POST ${CONFIRM_CLEAR}`]: () => new Promise<Response>((r) => (release = r)) }), estimator);
+    renderSignedIn(<ComparisonView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm all clear matches (2)" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Confirm" })[0]).toBeDisabled());
+    release(respond(200, { confirmed: 2, skipped: 0 }));
+    await screen.findByText("Confirmed 2, skipped 0");
+  });
+
+  it("shows a match conflict on that candidate only and does not reload the list", async () => {
+    const fetchMock = mockApi(
+      statefulRoutes({
+        [`POST /api/v1/match-suggestions/${ID(102)}/confirm`]: () => respond(409, errorBody("match_conflict", "conflict")),
+      }),
+      estimator,
+    );
+    renderSignedIn(<ComparisonView />);
+    const buttons = await screen.findAllByRole("button", { name: "Confirm" });
+    await userEvent.click(buttons[1]);
+    expect(await screen.findByRole("alert")).toHaveTextContent("already confirmed");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Confirm" })[0]).toBeEnabled();
+    expect(callsTo(fetchMock, "GET", LIST)).toHaveLength(1);
+  });
+
+  it("says matching started, and clears it when confirm-all starts", async () => {
+    mockApi(statefulRoutes({ [`POST /api/v1/tenders/${ids.tender}/match`]: () => respond(202, { id: ids.job }) }), estimator);
+    renderSignedIn(<ComparisonView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Run matching again" }));
+    expect(await screen.findByText(/Matching started/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Confirm all clear matches/ }));
+    await screen.findByText("Confirmed 5, skipped 1");
+    expect(screen.queryByText(/Matching started/)).toBeNull();
+  });
+
+  it("shows the current error only", async () => {
+    mockApi(
+      statefulRoutes({
+        [`POST ${CONFIRM_CLEAR}`]: () => respond(409, errorBody("tender_archived", "archived")),
+        [`POST /api/v1/tenders/${ids.tender}/match`]: () => respond(409, errorBody("try_again", "again")),
+      }),
+      estimator,
+    );
+    renderSignedIn(<ComparisonView />);
+    await userEvent.click(await screen.findByRole("button", { name: /Confirm all clear matches/ }));
+    await screen.findByText("This tender is archived, so it is read-only.");
+    await userEvent.click(screen.getByRole("button", { name: "Run matching again" }));
+    expect(await screen.findByText("Something changed at the same time. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText("This tender is archived, so it is read-only.")).toBeNull();
   });
 });

@@ -85,9 +85,12 @@ export function ComparisonView() {
   const lines = list.lines;
   const all = lines.flatMap((l) => l.suggestions);
   const clearOpen = all.filter((s) => s.classification === "clear" && s.status === "suggested").length;
-  const withClear = lines.filter((l) => l.suggestions.some((s) => s.classification === "clear")).length;
-  const needing = lines.filter((l) => l.suggestions.some((s) => s.classification !== "clear")).length;
-  const confirmed = all.filter((s) => s.status === "confirmed").length;
+  const awaiting = lines.filter(
+    (l) => l.suggestions.some((x) => x.status === "suggested") && !l.suggestions.some((x) => x.status === "confirmed"),
+  ).length;
+  const confirmed = lines.filter((l) => l.suggestions.some((x) => x.status === "confirmed")).length;
+  const noMatch = lines.filter((l) => l.suggestions.length === 0).length;
+  const busy = confirmClear.isPending || run.isPending;
   const filtered = !!(classification || status || supplierId || onlyWithSuggestions);
   const sections = groupBySection(lines);
 
@@ -105,8 +108,7 @@ export function ComparisonView() {
       </p>
 
       <p className="mb-3 text-sm" aria-live="polite">
-        Loaded: {lines.length} {lines.length === 1 ? "line" : "lines"} · {withClear} with a clear match · {needing} needing a decision ·{" "}
-        {confirmed} confirmed{list.hasNextPage ? " (more lines are not loaded yet)" : ""}
+        Loaded: {lines.length} {lines.length === 1 ? "line" : "lines"} · {awaiting} awaiting a decision · {confirmed} confirmed · {noMatch} with no supplier match{list.hasNextPage ? " (more lines are not loaded yet)" : ""}
       </p>
 
       <div className="mb-3 flex flex-wrap items-end gap-3" role="group" aria-label="Filters">
@@ -149,13 +151,21 @@ export function ComparisonView() {
           <>
             <button
               type="button"
-              disabled={clearOpen === 0 || confirmClear.isPending}
-              onClick={() => confirmClear.mutate()}
+              disabled={clearOpen === 0 || busy}
+              onClick={() => {
+                run.reset();
+                confirmClear.mutate();
+              }}
               className={BUTTON}
             >
               Confirm all clear matches ({clearOpen})
             </button>
-            <button type="button" disabled={run.isPending} onClick={() => run.mutate()} className={BUTTON}>
+            <button type="button" disabled={busy}
+              onClick={() => {
+                confirmClear.reset();
+                run.mutate();
+              }}
+              className={BUTTON}>
               Run matching again
             </button>
           </>
@@ -164,6 +174,11 @@ export function ComparisonView() {
           Refresh
         </button>
       </div>
+      {canReview ? (
+        <p className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">
+          Confirms every clear match in this tender, including lines not shown.
+        </p>
+      ) : null}
       <div aria-live="polite" className="mb-3 text-sm">
         {confirmClear.data ? <p>{`Confirmed ${confirmClear.data.confirmed}, skipped ${confirmClear.data.skipped}`}</p> : null}
         {run.isSuccess ? <p>Matching started. Use Refresh in a moment to see the new suggestions.</p> : null}
@@ -193,7 +208,7 @@ export function ComparisonView() {
           <h2 className="mb-2 text-lg font-medium">{section.name ?? "No section"}</h2>
           <ul className="space-y-3">
             {section.lines.map((line) => (
-              <MatchLine key={line.boq.id} line={line} tenderId={id} canReview={canReview} />
+              <MatchLine key={line.boq.id} line={line} tenderId={id} canReview={canReview} busy={busy} />
             ))}
           </ul>
         </section>

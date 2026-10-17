@@ -90,11 +90,10 @@ export function useConfirmClear(tenderId: string) {
   });
 }
 
-/** Starts a matching job (202). The page's Refresh button re-reads the lines once it finishes. */
+/** Starts a matching job (202). The job runs in the background, so nothing is reloaded here; the page's
+ * Refresh button re-reads the lines once it finishes. */
 export function useRunMatching(tenderId: string) {
-  const client = useQueryClient();
   return useMutation({
     mutationFn: () => post<Job>(`/api/v1/tenders/${tenderId}/match`),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["matches", tenderId] }),
   });
 }
