@@ -135,6 +135,25 @@ describe("ReviewScreen", () => {
     expect(await screen.findByText("This document was not found.")).toBeInTheDocument();
   });
 
+  it("shows the could-not-load alert with a retry when the documents list fails", async () => {
+    let fail = true;
+    const fetchMock = mockApi(
+      routes({
+        [`GET /api/v1/tenders/${ids.tender}/documents`]: () =>
+          fail ? respond(500, errorBody("internal", "boom")) : respond(200, [makeDocument({ kind: "tender_document", current_version: makeVersion() })]),
+      }),
+      estimator,
+    );
+    renderSignedIn(<ReviewScreen />);
+    expect(await screen.findByText("Could not load the document.")).toBeInTheDocument();
+    const path = `/api/v1/tenders/${ids.tender}/documents`;
+    const before = callsTo(fetchMock, "GET", path).length;
+    fail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(callsTo(fetchMock, "GET", path).length).toBeGreaterThan(before));
+    expect(await screen.findByText("First requirement")).toBeInTheDocument();
+  });
+
   it("shows a screen-level notice and reloads from offset 0 when a write finds its row replaced", async () => {
     const fetchMock = mockApi(
       routes({ "POST /api/v1/requirements/q1/confirm": () => respond(404, errorBody("not_found", "gone")) }),
@@ -313,6 +332,15 @@ describe("ReviewScreen", () => {
       await userEvent.click(await screen.findByText("LED panel quote"));
       await userEvent.keyboard("c");
       await waitFor(() => expect(callsTo(fetchMock, "POST", "/api/v1/quotation-items/i1/confirm")).toHaveLength(1));
+    });
+
+    it("shows no controls for an archived tender", async () => {
+      mockApi(quoteRoutes({ [`GET /api/v1/tenders/${ids.tender}`]: () => respond(200, makeTender({ status: "archived" })) }), estimator);
+      renderSignedIn(<ReviewScreen />);
+      await userEvent.click(await screen.findByText("LED panel quote"));
+      await screen.findByText("Bright Sparks");
+      expect(screen.getByText(/archived and read-only/)).toBeInTheDocument();
+      for (const name of ["Edit details", "Edit", "Confirm", "Reject"]) expect(screen.queryByRole("button", { name })).toBeNull();
     });
 
     it("gives a reviewer no controls", async () => {

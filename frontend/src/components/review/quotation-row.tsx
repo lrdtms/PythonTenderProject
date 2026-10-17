@@ -98,8 +98,11 @@ export function QuotationRow({ row, versionId, selected, onSelect, archived = fa
   const original = (row.original_value ?? {}) as Record<string, string | null | undefined>;
   const changedKeys = row.review_status === "corrected" && row.corrected_value ? Object.keys(row.corrected_value) : [];
   const norm = (v: string | null | undefined) => plain(v ?? null);
-  const was = (field: "quantity" | "unit_price" | "unit") =>
-    changedKeys.includes(field) && norm(original[field]) !== norm(row[field]) ? ` (was ${dash(norm(original[field]))})` : "";
+  // Compare normalised, but show the original exactly as stored; only a quantity is shown stripped.
+  const was = (field: "quantity" | "unit_price" | "unit") => {
+    if (!changedKeys.includes(field) || norm(original[field]) === norm(row[field])) return "";
+    return ` (was ${dash(field === "quantity" ? norm(original[field]) : original[field])})`;
+  };
   const originalDescription =
     changedKeys.includes("description") && original.description && original.description !== row.description ? original.description : null;
   return (

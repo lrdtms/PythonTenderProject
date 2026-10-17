@@ -123,11 +123,17 @@ export function QuotationPanel({ tenderId, versionId, archived }: Props) {
   const canReview = useCan("review_data") && !archived;
   const quotations = useQuery(quotationsQueryOptions(tenderId));
   const [editing, setEditing] = useState(false);
+  // A different document version means a fresh start: close the form (adjusting state during render).
+  const [seenVersion, setSeenVersion] = useState(versionId);
+  if (seenVersion !== versionId) {
+    setSeenVersion(versionId);
+    setEditing(false);
+  }
 
   if (quotations.isPending) return <p role="status" className="mb-3 text-sm text-zinc-500">Loading quotation…</p>;
   if (quotations.isError) return <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">Could not load the quotation details.</p>;
   const quotation = quotations.data.find((q) => q.document_version_id === versionId);
-  if (!quotation) return null;
+  if (!quotation) return <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">No quotation details for this document yet.</p>;
 
   const missing = (value: string | null) => (value ? formatDate(value) || value : "not given");
   return (
@@ -156,7 +162,7 @@ export function QuotationPanel({ tenderId, versionId, archived }: Props) {
           ))}
         </ul>
       ) : null}
-      {editing ? <QuotationForm quotation={quotation} onClose={() => setEditing(false)} /> : null}
+      {editing ? <QuotationForm key={quotation.id} quotation={quotation} onClose={() => setEditing(false)} /> : null}
     </section>
   );
 }

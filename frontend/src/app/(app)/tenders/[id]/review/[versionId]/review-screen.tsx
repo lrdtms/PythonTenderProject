@@ -147,12 +147,19 @@ export function ReviewScreen() {
 
   if (!valid) return <NotFound tenderId={tenderId} />;
   if (version.isPending || documents.isPending) return <p role="status" className="text-sm text-zinc-500">Loading document…</p>;
-  if (!version.data) {
+  if (!version.data || (documents.isError && !documents.data)) {
     if (version.error instanceof ApiError && version.error.isNotFound) return <NotFound tenderId={tenderId} />;
     return (
       <div role="alert">
         <p className="mb-2">Could not load the document.</p>
-        <button type="button" onClick={() => void version.refetch()} className="rounded border px-3 py-1 text-sm">
+        <button
+          type="button"
+          onClick={() => {
+            if (!version.data) void version.refetch();
+            if (!documents.data) void documents.refetch();
+          }}
+          className="rounded border px-3 py-1 text-sm"
+        >
           Try again
         </button>
       </div>

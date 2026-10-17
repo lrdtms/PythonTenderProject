@@ -95,7 +95,27 @@ describe("QuotationRow", () => {
       corrected_value: { unit_price: "130.0000" },
       original_value: { unit_price: "125.5000" },
     });
-    expect(await screen.findByText(/\(was 125\.5\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/Price 130\.0000 \(was 125\.5000\)/)).toBeInTheDocument();
+  });
+
+  it("refuses a price with five decimals and sends nothing", async () => {
+    const fetchMock = mockApi({ [`PATCH ${PATH}`]: () => respond(200, makeQuotationItem({ id: "i1" })) });
+    renderRow();
+    await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const price = screen.getByLabelText("Unit price");
+    await userEvent.clear(price);
+    await userEvent.type(price, "1.23456");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    await userEvent.type(price, "{Enter}");
+    expect(callsTo(fetchMock, "PATCH", PATH)).toHaveLength(0);
+  });
+
+  it("shows no controls on an archived tender", async () => {
+    mockApi({});
+    renderRow({}, true);
+    expect(await screen.findByText("Unreviewed")).toBeInTheDocument();
+    for (const name of ["Edit", "Confirm", "Reject"]) expect(screen.queryByRole("button", { name })).toBeNull();
   });
 
   it("marks a row replaced by a re-run on 404", async () => {

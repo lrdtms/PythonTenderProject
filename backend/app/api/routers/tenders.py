@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from app.api.deps import Ctx, DbSession
+from app.modules.suppliers import public as suppliers
 from app.modules.tenders import public as tenders
 
 router = APIRouter(prefix="/api/v1/tenders", tags=["tenders"])
@@ -34,4 +35,6 @@ def update_tender(tender_id: UUID, body: tenders.TenderUpdate, ctx: Ctx, session
 
 @router.post("/{tender_id}/archive", response_model=tenders.TenderDTO)
 def archive_tender(tender_id: UUID, ctx: Ctx, session: DbSession):
+    # Wait for any match decision or extraction on this tender first.
+    suppliers.lock_tender(session, ctx, tender_id)
     return tenders.archive_tender(session, ctx, tender_id)

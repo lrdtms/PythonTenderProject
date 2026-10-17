@@ -231,11 +231,24 @@ def test_an_archived_tender_refuses_review_writes() -> None:
     assert _match_jobs(tid) == jobs_before
 
 
-def test_a_row_deleted_before_the_write_is_row_replaced() -> None:
-    admin, _, _ = quote_version()
+def test_a_row_replaced_by_a_rerun_between_resolve_and_write_is_row_replaced() -> None:
+    from app.modules.documents import public as documents
+    from app.modules.pipeline import public as pipeline
+    from app.modules.suppliers.models import QuotationItem
+
+    admin, _, vid = quote_version()
+    item_id = UUID(_item(admin, vid, "Cable 4mm")["id"])
     ctx = OrgContext(UUID(admin.me["user_id"]), UUID(admin.org_id), Role.ADMIN)
-    with session_scope() as s, pytest.raises(Conflict) as exc:
-        suppliers.review_quotation_item(s, ctx, uuid4(), "confirm")
+    with session_scope() as s:
+        assert suppliers.quotation_item_version(s, ctx, item_id) == UUID(vid)
+        # A re-run replaces the row in another transaction after the version was resolved.
+        with session_scope() as other:
+            other.delete(other.get(QuotationItem, item_id))
+        info = documents.processing_info(s, ctx, UUID(vid))
+        suppliers.lock_tender(s, ctx, info.tender_id)
+        pipeline.lock_runs(s, ctx, UUID(vid), "quotation")
+        with pytest.raises(Conflict) as exc:
+            suppliers.review_quotation_item(s, ctx, item_id, "confirm")
     assert exc.value.code == "row_replaced"
 
 

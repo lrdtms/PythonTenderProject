@@ -159,6 +159,26 @@ def test_extract_boq_blocks_while_another_transaction_holds_the_tender_lock() ->
         assert job.status == "succeeded"
 
 
+def test_archive_waits_for_the_tender_lock() -> None:
+    actor = register("race7@example.com")
+    ctx = _ctx(actor)
+    tender_id = make_tender(actor)
+    responses: list[int] = []
+    thread = threading.Thread(
+        target=lambda: responses.append(
+            actor.client.post(f"/api/v1/tenders/{tender_id}/archive").status_code
+        )
+    )
+    with session_scope() as holder:
+        suppliers.lock_tender(holder, ctx, UUID(tender_id))  # e.g. a match decision in flight
+        thread.start()
+        thread.join(timeout=2)
+        assert thread.is_alive(), "archiving must wait for the tender lock"
+    thread.join(timeout=30)
+    assert responses == [200]
+    assert actor.client.get(f"/api/v1/tenders/{tender_id}").json()["status"] == "archived"
+
+
 def test_get_or_create_gives_try_again_when_the_twin_keeps_vanishing(monkeypatch) -> None:
     import pytest
 

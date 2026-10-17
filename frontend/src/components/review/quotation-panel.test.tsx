@@ -2,6 +2,9 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { QueryClientProvider } from "@tanstack/react-query";
+
+import { AuthGate } from "@/components/auth-gate";
 import { formatDate } from "@/lib/format";
 import { ids, makeQuotation, makeSupplier } from "@/test/fixtures";
 import { callsTo, errorBody, meWith, mockApi, renderSignedIn, respond } from "@/test/render";
@@ -99,6 +102,56 @@ describe("QuotationPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(callsTo(fetchMock, "PATCH", QPATH)).toHaveLength(1));
     expect(bodyOf(fetchMock)).toEqual({ prices_include_vat: null });
+  });
+
+  it("sends true, false and null for the three VAT choices", async () => {
+    for (const [label, start, expected] of [
+      ["Prices include VAT", false, true],
+      ["Prices exclude VAT", true, false],
+      ["VAT not stated", false, null],
+    ] as const) {
+      const fetchMock = mockApi(
+        routes(makeQuotation({ document_version_id: ids.version, prices_include_vat: start }), {
+          [`PATCH ${QPATH}`]: () => respond(200, makeQuotation()),
+        }),
+      );
+      const view = renderPanel();
+      await userEvent.click(await screen.findByRole("button", { name: "Edit details" }));
+      await userEvent.click(screen.getByRole("radio", { name: label }));
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(callsTo(fetchMock, "PATCH", QPATH)).toHaveLength(1));
+      expect(bodyOf(fetchMock)).toEqual({ prices_include_vat: expected });
+      view.unmount();
+    }
+  });
+
+  it("says so when there is no quotation record for the version", async () => {
+    mockApi(routes(makeQuotation({ document_version_id: OTHER })));
+    renderPanel();
+    expect(await screen.findByText("No quotation details for this document yet.")).toBeInTheDocument();
+  });
+
+  it("shows the new quotation's values when the version changes while the form is open", async () => {
+    const second = makeQuotation({ id: "00000000-0000-4000-8000-000000000099", document_version_id: OTHER, reference: "Q-200", supplier_name: "Volt Traders" });
+    const first = makeQuotation({ document_version_id: ids.version });
+    mockApi({
+      [`GET /api/v1/tenders/${ids.tender}/quotations`]: () => respond(200, [first, second]),
+      "GET /api/v1/suppliers": () => respond(200, [makeSupplier()]),
+    });
+    const view = renderPanel();
+    await userEvent.click(await screen.findByRole("button", { name: "Edit details" }));
+    expect(screen.getByLabelText("Reference")).toHaveValue("Q-100");
+    view.rerender(
+      <QueryClientProvider client={view.client}>
+        <AuthGate>
+          <QuotationPanel tenderId={ids.tender} versionId={OTHER} archived={false} />
+        </AuthGate>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Volt Traders", { selector: "h2" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Reference")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Edit details" }));
+    expect(screen.getByLabelText("Reference")).toHaveValue("Q-200");
   });
 
   it("shows the mapped match_conflict message and keeps the form open", async () => {
