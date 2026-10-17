@@ -263,6 +263,7 @@ class _Prepared:
     quals: dict[str, frozenset[str]]
     core_notation: frozenset[str]  # which spellings were used: "word" (3-core), "plus" (3C+E)
     negated: bool = False
+    unit: str | None = None  # canonical unit, computed once per line
 
 
 def _core_notation(low: str) -> frozenset[str]:
@@ -274,7 +275,7 @@ def _core_notation(low: str) -> frozenset[str]:
     return frozenset(out)
 
 
-def _prepare(description: str, sku: str | None = None) -> _Prepared:
+def _prepare(description: str, sku: str | None = None, unit: str | None = None) -> _Prepared:
     specs = spec_tokens(description)
     codes = _codes(description)
     if sku and sku.strip():
@@ -288,6 +289,7 @@ def _prepare(description: str, sku: str | None = None) -> _Prepared:
         qualifier_tokens(description),
         _core_notation(_normalise(description)),
         bool(_NEGATION.search(_normalise(description))),
+        canon_unit(unit),
     )
 
 
@@ -318,8 +320,7 @@ class _Scored:
         return self.unit_state == "mismatch"
 
 
-def _unit_state(boq_unit: str | None, quote_unit: str | None) -> str:
-    a, b = canon_unit(boq_unit), canon_unit(quote_unit)
+def _unit_state(a: str | None, b: str | None) -> str:
     if not a or not b:
         return "unknown"
     return "equal" if a == b else "mismatch"
@@ -356,7 +357,7 @@ def _score_pair(
         boq_p.specs, quote_p.specs, _qualifier_conflicts(boq_p.quals, quote_p.quals)
     )
     text_score = _text_similarity(boq_p.tokens, quote_p.tokens)
-    state = _unit_state(boq.unit, quote.unit)
+    state = _unit_state(boq_p.unit, quote_p.unit)
     unit_score = {"equal": 1.0, "mismatch": 0.0, "unknown": 0.5}[state]
     code_hit = bool(boq_p.codes & quote_p.codes)
     conflict = bool(spec_detail["conflicts"])
@@ -484,12 +485,12 @@ def suggest(
     suppliers = []
     for supplier_id in sorted(by_supplier, key=str):
         qs = sorted(by_supplier[supplier_id], key=lambda q: str(q.id))
-        prepared = [_prepare(q.description, q.sku) for q in qs]
+        prepared = [_prepare(q.description, q.sku, q.unit) for q in qs]
         suppliers.append((supplier_id, qs, prepared, _build_index(prepared)))
     groups: list[tuple[BoqLine, UUID, list[_Scored]]] = []
     fits: dict[UUID, list[tuple[UUID, float]]] = defaultdict(list)  # quote -> (boq id, neutral)
     for line in boq:
-        line_p = _prepare(line.description)
+        line_p = _prepare(line.description, None, line.unit)
         if not line_p.tokens and not line_p.specs and not line_p.quals:
             continue
         for supplier_id, qs, prepared, index in suppliers:

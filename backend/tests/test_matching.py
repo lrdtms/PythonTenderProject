@@ -458,8 +458,18 @@ def test_narrowing_never_drops_a_pair_that_reaches_ambiguous_min(monkeypatch) ->
     assert any(full)
 
 
-def test_three_hundred_by_three_hundred_is_fast() -> None:
+def test_three_hundred_by_three_hundred_narrows_pairs(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import time
+
+    calls = 0
+    real = m._score_pair
+
+    def counting(*args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(m, "_score_pair", counting)
 
     rng = random.Random(3)  # noqa: S311
     words = [f"item{i}" for i in range(60)] + ["cable", "board", "led", "light", "conduit"]
@@ -487,8 +497,11 @@ def test_three_hundred_by_three_hundred_is_fast() -> None:
     ]
     start = time.perf_counter()
     m.suggest(lines, qs)
-    # O(n^2) regression guard; runs ~4.4 s here, so the bound leaves room for slow machines
-    assert time.perf_counter() - start < 10
+    elapsed = time.perf_counter() - start
+    # Deterministic guard (seeded fixture): narrowing scores ~45% of the 300 x 300 pairs; a
+    # regression that stops narrowing scores all 90,000.
+    assert calls < 52_200, calls  # measured 45,343 of 90,000, plus ~15% headroom
+    assert elapsed < 60  # hang guard only; the call count is the real regression test
 
 
 @settings(max_examples=80, deadline=None)
