@@ -15,7 +15,7 @@ from .models import AuditEvent
 # can never reach the audit trail by accident.
 SAFE_METADATA_KEYS = frozenset(
     {"reason", "role", "old_role", "new_role", "status", "old_status", "new_status", "fields",
-     "target_user_id", "count", "kind", "filename", "source_id", "into_id"}
+     "target_user_id", "count", "kind", "filename", "source_id", "into_id", "confirmed", "skipped"}
 )  # fmt: skip
 
 

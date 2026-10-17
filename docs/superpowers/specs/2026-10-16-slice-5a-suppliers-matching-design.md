@@ -89,13 +89,13 @@ Flat under `/api/v1`, org-scoped (unknown or other-organisation id gives 404, wh
 | `GET /suppliers`, `GET`/`PATCH /suppliers/{id}`, `POST /suppliers`, `POST /suppliers/{id}/merge` | List, rename and annotate, create by hand, merge a duplicate into another (moves its quotations; re-keys `name_key`) |
 | `GET /tenders/{id}/quotations` | Quotations of the tender's current document versions with supplier and header |
 | `PATCH /quotations/{id}` | Supplier (switch to an existing one), reference, dates, currency, `prices_include_vat` |
-| `GET /quotations/{id}/items`, `GET /document-versions/{id}/quotation-items` | Paged lists (`limit`/`offset`, `source_order`) |
+| `GET /document-versions/{id}/quotation-items` | Paged list (`limit`/`offset`, `source_order`). There is no `GET /quotations/{id}/items`: the version route covers it |
 | `PATCH`, `POST confirm`, `POST reject` on `/quotation-items/{id}` | Review writes; `unit_price` and `quantity` are decimal strings like BoQ |
-| `GET /tenders/{id}/match-suggestions` | Filters `status`, `classification`, `supplier_id`, `boq_item_id`; includes the BoQ line, quotation item, supplier and evidence in one DTO |
-| `POST /match-suggestions/{id}/confirm`, `/reject` | Records reviewer and time; 409 `match_conflict` if another candidate from the same supplier is already confirmed for that BoQ line (reject or unconfirm it first) |
-| `POST /match-suggestions/{id}/reset` | Back to `suggested` (a reviewer may change their mind) |
-| `POST /tenders/{id}/match-suggestions/confirm-clear` | Confirms only `clear`, `suggested` rows that do not collide; returns counts confirmed and skipped |
-| `POST /tenders/{id}/match` | Enqueue matching (202 + job); 409 `tender_archived` |
+| `GET /tenders/{id}/match-suggestions` | A list grouped by BoQ line: one entry per current, non-rejected BoQ line with its `suggestions` (empty when none), each with supplier, quotation item (current versions, non-rejected items only) and evidence. Filters `status`, `classification`, `supplier_id`, `only_with_suggestions`; `limit` (1-500, default 100) and `offset` page the BoQ lines. Order is BoQ order, supplier name, rank; there is no price sort or filter by design |
+| `POST /match-suggestions/{id}/confirm`, `/reject` | Records reviewer (`decided_by`, with `decided_by_name`) and time; 409 `match_conflict` if another candidate from the same supplier is already confirmed for that BoQ line (reject or reset it first); 409 `stale_match` if the suggestion's quotation version or BoQ line is no longer current. Repeating the current state changes nothing. Takes the tender lock |
+| `POST /match-suggestions/{id}/reset` | Back to `suggested` and clears the decider and time (a reviewer may change their mind); 409 `stale_match` as above |
+| `POST /tenders/{id}/match-suggestions/confirm-clear` | Confirms only `suggested`, `clear` rows of current BoQ lines and quotation items; a row whose (BoQ line, supplier) already has a confirmed match, or that collides with a row confirmed in the same call, is counted in `skipped`. Returns `{confirmed, skipped}`; ambiguous rows are never touched |
+| `POST /tenders/{id}/match` | Enqueue matching (202 + job; the active job is returned when one is queued or running); needs `review_data`; 409 `tender_archived`. A BoQ line edit or rejection and a quotation item edit or rejection queue it too |
 
 Archived tenders refuse every write with 409 `tender_archived`, as in Slice 4.
 

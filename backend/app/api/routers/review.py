@@ -12,6 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.deps import Ctx, DbSession
+from app.api.matching_trigger import enqueue_match
 from app.api.reviewers import with_reviewer_names
 from app.kernel import Conflict
 from app.kernel.vocab import REQUIREMENT_TYPES
@@ -36,6 +37,8 @@ def _boq(session, ctx, item_id: UUID, action, patch=None):
     _writable(session, ctx, version_id)
     pipeline.lock_runs(session, ctx, version_id, "boq")
     dto = estimating.review_item(session, ctx, item_id, action, patch)
+    if action in ("correct", "reject"):  # matching reads the BoQ text and skips rejected lines
+        enqueue_match(session, ctx, documents.processing_info(session, ctx, version_id).tender_id)
     return with_reviewer_names(session, ctx, [dto])[0]
 
 

@@ -142,6 +142,56 @@ class QuotationItemDTO(BaseModel):
     reviewed_at: datetime | None = None
 
 
+class MatchSupplierRef(BaseModel):
+    id: UUID
+    name: str
+
+
+class MatchBoqRef(BaseModel):
+    id: UUID
+    item_no: str | None
+    section: str | None
+    description: str
+    unit: str | None
+    quantity: str | None
+
+
+class MatchQuoteRef(BaseModel):
+    id: UUID
+    quotation_id: UUID
+    description: str
+    sku: str | None
+    unit: str | None
+    quantity: str | None
+    unit_price: str | None
+    valid_until: date | None
+
+
+class MatchSuggestionDTO(BaseModel):
+    id: UUID
+    status: str
+    classification: str
+    rank: int
+    score: float
+    evidence: dict[str, Any]
+    supplier: MatchSupplierRef
+    quotation_item: MatchQuoteRef
+    boq_item_id: UUID
+    decided_by: UUID | None = None
+    decided_by_name: str | None = None
+    decided_at: datetime | None = None
+
+
+class MatchLineDTO(BaseModel):
+    boq: MatchBoqRef
+    suggestions: list[MatchSuggestionDTO]
+
+
+class ConfirmClearResult(BaseModel):
+    confirmed: int
+    skipped: int
+
+
 DecimalText = Annotated[str, StringConstraints(pattern=r"^-?\d{1,14}(\.\d{1,4})?$")]
 
 

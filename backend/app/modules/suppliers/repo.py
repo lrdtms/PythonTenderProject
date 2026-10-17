@@ -321,6 +321,105 @@ class MatchRepo(ScopedRepository[MatchSuggestion]):
             owner = {"organisation_id": self.ctx.organisation_id}
             self.session.execute(insert(MatchSuggestion), [{**r, **owner} for r in rows])
 
+    def _joined(self):
+        return (
+            select(MatchSuggestion, QuotationItem, Quotation, Supplier)
+            .join(
+                QuotationItem,
+                (QuotationItem.organisation_id == MatchSuggestion.organisation_id)
+                & (QuotationItem.id == MatchSuggestion.quotation_item_id),
+            )
+            .join(
+                Quotation,
+                (Quotation.organisation_id == QuotationItem.organisation_id)
+                & (Quotation.id == QuotationItem.quotation_id),
+            )
+            .join(
+                Supplier,
+                (Supplier.organisation_id == MatchSuggestion.organisation_id)
+                & (Supplier.id == MatchSuggestion.supplier_id),
+            )
+            .where(MatchSuggestion.organisation_id == self.ctx.organisation_id)
+        )
+
+    def joined(
+        self,
+        boq_ids: Collection[UUID],
+        quote_version_ids: Collection[UUID],
+        status: str | None = None,
+        classification: str | None = None,
+        supplier_id: UUID | None = None,
+    ) -> list[tuple[MatchSuggestion, QuotationItem, Quotation, Supplier]]:
+        """Suggestions of the given BoQ lines whose quotation item is in a given (current)
+        version and not rejected, with item, quotation and supplier. Unordered."""
+        if not boq_ids or not quote_version_ids:
+            return []
+        stmt = self._joined().where(
+            MatchSuggestion.boq_item_id.in_(boq_ids),
+            QuotationItem.document_version_id.in_(quote_version_ids),
+            QuotationItem.review_status != "rejected",
+        )
+        if status is not None:
+            stmt = stmt.where(MatchSuggestion.status == status)
+        if classification is not None:
+            stmt = stmt.where(MatchSuggestion.classification == classification)
+        if supplier_id is not None:
+            stmt = stmt.where(MatchSuggestion.supplier_id == supplier_id)
+        return [tuple(r) for r in self.session.execute(stmt).all()]  # type: ignore[misc]
+
+    def joined_one(
+        self, suggestion_id: UUID
+    ) -> tuple[MatchSuggestion, QuotationItem, Quotation, Supplier]:
+        """One suggestion, re-read from the database (call after taking the tender lock)."""
+        stmt = (
+            self._joined()
+            .where(MatchSuggestion.id == suggestion_id)
+            .execution_options(populate_existing=True)
+        )
+        row = self.session.execute(stmt).first()
+        if row is None:
+            raise NotFound("MatchSuggestion not found")
+        return tuple(row)  # type: ignore[return-value]
+
+    def tender_version_id(self, suggestion_id: UUID) -> UUID:
+        """The document version of the suggestion's quotation item."""
+        version_id = self.session.scalar(
+            select(QuotationItem.document_version_id)
+            .join(
+                MatchSuggestion,
+                (MatchSuggestion.organisation_id == QuotationItem.organisation_id)
+                & (MatchSuggestion.quotation_item_id == QuotationItem.id),
+            )
+            .where(
+                MatchSuggestion.organisation_id == self.ctx.organisation_id,
+                MatchSuggestion.id == suggestion_id,
+            )
+        )
+        if version_id is None:
+            raise NotFound("MatchSuggestion not found")
+        return version_id
+
+    def confirmed_slots(self, boq_ids: Collection[UUID]) -> set[tuple[UUID, UUID]]:
+        """(BoQ line, supplier) pairs that already have a confirmed match."""
+        if not boq_ids:
+            return set()
+        stmt = select(MatchSuggestion.boq_item_id, MatchSuggestion.supplier_id).where(
+            MatchSuggestion.organisation_id == self.ctx.organisation_id,
+            MatchSuggestion.status == "confirmed",
+            MatchSuggestion.boq_item_id.in_(boq_ids),
+        )
+        return {(b, s) for b, s in self.session.execute(stmt).all()}
+
+    def other_confirmed(self, suggestion: MatchSuggestion) -> bool:
+        stmt = select(MatchSuggestion.id).where(
+            MatchSuggestion.organisation_id == self.ctx.organisation_id,
+            MatchSuggestion.boq_item_id == suggestion.boq_item_id,
+            MatchSuggestion.supplier_id == suggestion.supplier_id,
+            MatchSuggestion.status == "confirmed",
+            MatchSuggestion.id != suggestion.id,
+        )
+        return self.session.scalar(stmt) is not None
+
     def decided_boq_item_ids(self) -> set[UUID]:
         stmt = (
             select(MatchSuggestion.boq_item_id)

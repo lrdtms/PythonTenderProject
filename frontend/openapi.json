@@ -361,6 +361,24 @@
         "title": "ChangeRoleRequest",
         "type": "object"
       },
+      "ConfirmClearResult": {
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "confirmed",
+          "skipped"
+        ],
+        "title": "ConfirmClearResult",
+        "type": "object"
+      },
       "CreateMemberRequest": {
         "properties": {
           "email": {
@@ -637,6 +655,287 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "MatchBoqRef": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item No"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "item_no",
+          "section",
+          "description",
+          "unit",
+          "quantity"
+        ],
+        "title": "MatchBoqRef",
+        "type": "object"
+      },
+      "MatchLineDTO": {
+        "properties": {
+          "boq": {
+            "$ref": "#/components/schemas/MatchBoqRef"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/MatchSuggestionDTO"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "boq",
+          "suggestions"
+        ],
+        "title": "MatchLineDTO",
+        "type": "object"
+      },
+      "MatchQuoteRef": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "quotation_id": {
+            "format": "uuid",
+            "title": "Quotation Id",
+            "type": "string"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          }
+        },
+        "required": [
+          "id",
+          "quotation_id",
+          "description",
+          "sku",
+          "unit",
+          "quantity",
+          "unit_price",
+          "valid_until"
+        ],
+        "title": "MatchQuoteRef",
+        "type": "object"
+      },
+      "MatchSuggestionDTO": {
+        "properties": {
+          "boq_item_id": {
+            "format": "uuid",
+            "title": "Boq Item Id",
+            "type": "string"
+          },
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decided_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Name"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "quotation_item": {
+            "$ref": "#/components/schemas/MatchQuoteRef"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "supplier": {
+            "$ref": "#/components/schemas/MatchSupplierRef"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "classification",
+          "rank",
+          "score",
+          "evidence",
+          "supplier",
+          "quotation_item",
+          "boq_item_id"
+        ],
+        "title": "MatchSuggestionDTO",
+        "type": "object"
+      },
+      "MatchSupplierRef": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "MatchSupplierRef",
         "type": "object"
       },
       "MeDTO": {
@@ -3366,6 +3665,135 @@
         ]
       }
     },
+    "/api/v1/match-suggestions/{suggestion_id}/confirm": {
+      "post": {
+        "operationId": "confirm_suggestion_api_v1_match_suggestions__suggestion_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "suggestion_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Suggestion Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchSuggestionDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Suggestion",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/api/v1/match-suggestions/{suggestion_id}/reject": {
+      "post": {
+        "operationId": "reject_suggestion_api_v1_match_suggestions__suggestion_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "suggestion_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Suggestion Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchSuggestionDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Suggestion",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/api/v1/match-suggestions/{suggestion_id}/reset": {
+      "post": {
+        "operationId": "reset_suggestion_api_v1_match_suggestions__suggestion_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "suggestion_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Suggestion Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchSuggestionDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Suggestion",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
     "/api/v1/me": {
       "get": {
         "operationId": "get_me_api_v1_me_get",
@@ -4497,6 +4925,231 @@
         "summary": "Upload Document",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/api/v1/tenders/{tender_id}/match": {
+      "post": {
+        "description": "Queue the tender's matching job (the active one when one is queued or running).",
+        "operationId": "match_tender_api_v1_tenders__tender_id__match_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tender_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tender Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Match Tender",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/api/v1/tenders/{tender_id}/match-suggestions": {
+      "get": {
+        "operationId": "match_suggestions_api_v1_tenders__tender_id__match_suggestions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tender_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tender Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "suggested",
+                    "confirmed",
+                    "rejected"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "classification",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "clear",
+                    "ambiguous"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Classification"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supplier_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "only_with_suggestions",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Only With Suggestions",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchLineDTO"
+                  },
+                  "title": "Response Match Suggestions Api V1 Tenders  Tender Id  Match Suggestions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Match Suggestions",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/api/v1/tenders/{tender_id}/match-suggestions/confirm-clear": {
+      "post": {
+        "operationId": "confirm_clear_api_v1_tenders__tender_id__match_suggestions_confirm_clear_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tender_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tender Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmClearResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Clear",
+        "tags": [
+          "matches"
         ]
       }
     },

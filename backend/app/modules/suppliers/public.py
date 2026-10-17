@@ -2,7 +2,13 @@
 
 from .matching import BoqLine as BoqInput
 from .schemas import (
+    ConfirmClearResult,
+    MatchBoqRef,
+    MatchLineDTO,
+    MatchQuoteRef,
     MatchResult,
+    MatchSuggestionDTO,
+    MatchSupplierRef,
     QuotationDTO,
     QuotationItemDTO,
     QuotationItemPatch,
@@ -14,7 +20,9 @@ from .schemas import (
     SupplierPatch,
 )
 from .service import (
+    confirm_clear,
     create_supplier,
+    decide,
     decided_boq_item_ids,
     get_quotation_tender_version,
     get_supplier,
@@ -28,12 +36,24 @@ from .service import (
     quotation_item_version,
     review_quotation_item,
     store_quotation,
+    suggestion_tender_version,
+    suggestions_for,
     tenders_of_supplier,
     update_quotation,
     update_supplier,
 )
 
 __all__ = [
+    "ConfirmClearResult",
+    "MatchBoqRef",
+    "MatchLineDTO",
+    "MatchQuoteRef",
+    "MatchSuggestionDTO",
+    "MatchSupplierRef",
+    "confirm_clear",
+    "decide",
+    "suggestion_tender_version",
+    "suggestions_for",
     "BoqInput",
     "MatchResult",
     "QuotationDTO",

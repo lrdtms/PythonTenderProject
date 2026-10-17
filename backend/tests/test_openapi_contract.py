@@ -24,5 +24,11 @@ def test_the_review_routes_are_in_the_contract() -> None:
         "/api/v1/boq-items/{boq_item_id}",
         "/api/v1/requirements/{requirement_id}/confirm",
         "/api/v1/tenders/{tender_id}/requirements",
+        "/api/v1/tenders/{tender_id}/match-suggestions",
+        "/api/v1/tenders/{tender_id}/match-suggestions/confirm-clear",
+        "/api/v1/tenders/{tender_id}/match",
+        "/api/v1/match-suggestions/{suggestion_id}/confirm",
+        "/api/v1/match-suggestions/{suggestion_id}/reject",
+        "/api/v1/match-suggestions/{suggestion_id}/reset",
     ):
         assert path in paths, path

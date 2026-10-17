@@ -61,7 +61,7 @@ REQUESTS = {
     ("PATCH", "/api/v1/quotation-items/{quotation_item_id}"): lambda: {
         "json": {"description": "hijacked"}
     },
-    ("PATCH", "/api/v1/suppliers/{supplier_id}"): lambda: {"json": {"notes": "hijacked"}},
+    ("PATCH", "/api/v1/suppliers/{supplier_id}"): lambda: {"json": {"name": "hijacked"}},
     ("POST", "/api/v1/suppliers/{supplier_id}/merge"): lambda: {
         "json": {"into_id": "00000000-0000-0000-0000-000000000001"}
     },
@@ -111,6 +111,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "seeded-b-line",
         "seeded-b-rule",
         "seeded-b-quote-line",
+        "Seeded B Supplies",
     )
 
     routes = _routes_with_params()
@@ -142,6 +143,10 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "extraction",
         "boq-items",
         "requirements",
+        "suppliers",
+        "quotations",
+        "quotation-items",
+        "match-suggestions",
     ):
         assert any(needle in p for p in paths), f"no {needle} route was swept"
 

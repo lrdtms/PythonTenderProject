@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Literal
@@ -16,10 +16,14 @@ from app.kernel import Conflict, OrgContext, Permission, ValidationFailed
 from app.modules.audit import public as audit
 
 from . import matching
-from .models import Quotation, QuotationItem, Supplier
+from .models import MatchSuggestion, Quotation, QuotationItem, Supplier
 from .repo import MatchRepo, QuotationItemRepo, QuotationRepo, SupplierRepo
 from .schemas import (
+    ConfirmClearResult,
+    MatchQuoteRef,
     MatchResult,
+    MatchSuggestionDTO,
+    MatchSupplierRef,
     QuotationDTO,
     QuotationItemDTO,
     QuotationItemPatch,
@@ -303,6 +307,145 @@ def merge_suppliers(
 def lock_tender(session: Session, ctx: OrgContext, tender_id: UUID) -> None:
     """Serialise matching, match decisions, extraction and merges for one tender."""
     MatchRepo(session, ctx).lock_tender(tender_id)
+
+
+# --- match suggestions (API side) --------------------------------------------------------------
+
+
+def _suggestion_dto(
+    m: MatchSuggestion, item: QuotationItem, quotation: Quotation, supplier: Supplier
+) -> MatchSuggestionDTO:
+    return MatchSuggestionDTO(
+        id=m.id, status=m.status, classification=m.classification,
+        rank=int((m.evidence or {}).get("rank", 0)), score=float(m.score),
+        evidence=dict(m.evidence or {}),
+        supplier=MatchSupplierRef(id=supplier.id, name=supplier.name),
+        quotation_item=MatchQuoteRef(
+            id=item.id, quotation_id=quotation.id, description=item.description, sku=item.sku,
+            unit=item.unit,
+            quantity=None if item.quantity is None else str(item.quantity),
+            unit_price=None if item.unit_price is None else str(item.unit_price),
+            valid_until=quotation.valid_until,
+        ),
+        boq_item_id=m.boq_item_id, decided_by=m.decided_by, decided_at=m.decided_at,
+    )  # fmt: skip
+
+
+def suggestions_for(
+    session: Session,
+    ctx: OrgContext,
+    boq_ids: Sequence[UUID],
+    quote_version_ids: Sequence[UUID],
+    status: str | None = None,
+    classification: str | None = None,
+    supplier_id: UUID | None = None,
+) -> list[MatchSuggestionDTO]:
+    """Suggestions for the given BoQ lines (current quotation versions, non-rejected items only),
+    ordered by the BoQ order given, then supplier name, then rank. Never ordered by price."""
+    ctx.require(Permission.READ)
+    rows = MatchRepo(session, ctx).joined(
+        boq_ids, quote_version_ids, status, classification, supplier_id
+    )
+    order = {b: n for n, b in enumerate(boq_ids)}
+    dtos = [(order[m.boq_item_id], _suggestion_dto(m, i, q, s)) for m, i, q, s in rows]
+    dtos.sort(key=lambda t: (t[0], t[1].supplier.name.lower(), t[1].supplier.id.int,
+                             t[1].rank, t[1].id.int))  # fmt: skip
+    return [d for _, d in dtos]
+
+
+def suggestion_tender_version(session: Session, ctx: OrgContext, suggestion_id: UUID) -> UUID:
+    """The document version of the suggestion's quotation item, so the router can resolve and
+    lock its tender."""
+    ctx.require(Permission.REVIEW_DATA)
+    return MatchRepo(session, ctx).tender_version_id(suggestion_id)
+
+
+_TARGET = {"confirm": "confirmed", "reject": "rejected", "reset": "suggested"}
+_AUDIT = {"confirm": "match_confirmed", "reject": "match_rejected", "reset": "match_reset"}
+
+
+def decide(
+    session: Session,
+    ctx: OrgContext,
+    suggestion_id: UUID,
+    action: Literal["confirm", "reject", "reset"],
+    current_quote_version_ids: Collection[UUID],
+    current_boq_ids: Collection[UUID],
+) -> MatchSuggestionDTO:
+    """Call with the tender lock held. 409 `stale_match` when the suggestion's quotation version or
+    BoQ line is no longer current; 409 `match_conflict` when confirming would give the BoQ line a
+    second confirmed match for the same supplier. Repeating the current state changes nothing."""
+    ctx.require(Permission.REVIEW_DATA)
+    repo = MatchRepo(session, ctx)
+    m, item, quotation, supplier = repo.joined_one(suggestion_id)
+    if (
+        item.document_version_id not in current_quote_version_ids
+        or m.boq_item_id not in current_boq_ids
+        or item.review_status == "rejected"
+    ):
+        raise Conflict(
+            "This suggestion belongs to an older version. Reload the list.", code="stale_match"
+        )
+    target = _TARGET[action]
+    if m.status != target:
+        if action == "confirm" and repo.other_confirmed(m):
+            raise Conflict(
+                "This BoQ line already has a confirmed match for this supplier. "
+                "Reject or reset that one first.",
+                code="match_conflict",
+            )
+        try:  # the unique index is the last word if a writer slipped past the lock
+            with session.begin_nested():
+                m.status = target
+                m.decided_by, m.decided_at = (
+                    (None, None) if action == "reset" else (ctx.user_id, datetime.now(UTC))
+                )
+                session.flush()
+        except IntegrityError:
+            session.refresh(m)
+            raise Conflict(
+                "This BoQ line already has a confirmed match for this supplier.",
+                code="match_conflict",
+            ) from None
+        audit.record(
+            session, ctx, "match_suggestion", m.id, _AUDIT[action],
+            {"status": target},
+        )  # fmt: skip
+    return _suggestion_dto(m, item, quotation, supplier)
+
+
+def confirm_clear(
+    session: Session,
+    ctx: OrgContext,
+    tender_id: UUID,
+    current_quote_version_ids: Collection[UUID],
+    current_boq_ids: Collection[UUID],
+) -> ConfirmClearResult:
+    """Call with the tender lock held. Confirms every undecided `clear` suggestion of a current
+    BoQ line and quotation item, except where the BoQ line already has a confirmed match for the
+    supplier or another row confirmed in this call took the slot (counted as `skipped`)."""
+    ctx.require(Permission.REVIEW_DATA)
+    repo = MatchRepo(session, ctx)
+    rows = repo.joined(current_boq_ids, current_quote_version_ids, "suggested", "clear")
+    rows.sort(key=lambda r: (r[0].boq_item_id.int, r[0].supplier_id.int, -float(r[0].score),
+                             r[0].id.int))  # fmt: skip
+    taken = repo.confirmed_slots(current_boq_ids)
+    confirmed = skipped = 0
+    now = datetime.now(UTC)
+    for m, _item, _quotation, _supplier in rows:
+        slot = (m.boq_item_id, m.supplier_id)
+        if slot in taken:
+            skipped += 1
+            continue
+        taken.add(slot)
+        m.status, m.decided_by, m.decided_at = "confirmed", ctx.user_id, now
+        confirmed += 1
+    session.flush()
+    audit.record(
+        session, ctx, "tender", tender_id, "match_confirm_clear",
+        {"confirmed": confirmed, "skipped": skipped},
+    )  # fmt: skip
+    return ConfirmClearResult(confirmed=confirmed, skipped=skipped)
 
 
 # --- quotations and their items (API side) -----------------------------------------------------

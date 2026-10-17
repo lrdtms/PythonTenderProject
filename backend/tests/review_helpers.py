@@ -92,8 +92,8 @@ def seed_review_rows(actor: Actor, version_id: str, job_id: str) -> dict[str, st
 
 def seed_supplier_rows(actor: Actor) -> dict[str, str]:
     """Give an organisation one supplier, quotation and quotation item (no worker job), for
-    sweeps of the supplier and quotation routes. Needs the organisation's first tender document
-    version: it gets a `quotation` run that borrows its ingest job's id."""
+    sweeps of the supplier, quotation and match routes. Needs the organisation's first tender
+    document version and a BoQ line (`seed_review_rows` first): it gets a `quotation` run that borrows its ingest job's id."""
     from uuid import UUID
 
     from sqlalchemy import select
@@ -101,9 +101,10 @@ def seed_supplier_rows(actor: Actor) -> dict[str, str]:
     from app.db.session import session_scope
     from app.kernel import OrgContext, Role
     from app.modules.documents.models import DocumentVersion
+    from app.modules.estimating.models import BoqItem
     from app.modules.jobs.models import Job
     from app.modules.pipeline.models import ExtractionRun
-    from app.modules.suppliers.models import QuotationItem
+    from app.modules.suppliers.models import MatchSuggestion, QuotationItem
     from app.modules.suppliers.public import store_quotation
     from app.modules.suppliers.repo import SupplierRepo
 
@@ -133,8 +134,17 @@ def seed_supplier_rows(actor: Actor) -> dict[str, str]:
         item_id = s.scalar(
             select(QuotationItem.id).where(QuotationItem.organisation_id == ctx.organisation_id)
         )
+        boq_id = s.scalar(select(BoqItem.id).where(BoqItem.organisation_id == ctx.organisation_id))
+        match = MatchSuggestion(
+            organisation_id=ctx.organisation_id, boq_item_id=boq_id, quotation_item_id=item_id,
+            supplier_id=supplier.id, score=0.9, classification="clear",
+            evidence={"rank": 1, "warnings": []},
+        )  # fmt: skip
+        s.add(match)
+        s.flush()
         return {
             "supplier_id": str(supplier.id),
             "quotation_id": str(stored.quotation_id),
             "quotation_item_id": str(item_id),
+            "suggestion_id": str(match.id),
         }

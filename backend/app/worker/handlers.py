@@ -233,6 +233,7 @@ def _tender_inputs(
 def match_suppliers(
     session: Session, ctx: OrgContext, job: jobs.ClaimedJob, progress: ProgressFn
 ) -> list[dict[str, Any]]:
+    suppliers.lock_tender(session, ctx, job.subject_id)  # before the reads, so they are current
     if tenders.get_tender(session, ctx, job.subject_id).status == "archived":
         raise ProcessingFailed("TENDER_ARCHIVED", "The tender is archived.")
     boq_lines, quote_versions, closing = _tender_inputs(session, ctx, job.subject_id)

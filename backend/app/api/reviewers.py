@@ -17,6 +17,23 @@ class _Reviewed(Protocol):
     reviewed_by_name: str | None
 
 
+class _Decided(Protocol):
+    decided_by: UUID | None
+    decided_by_name: str | None
+
+
+def with_decider_names[T: _Decided](
+    session: Session, ctx: OrgContext, dtos: Sequence[T]
+) -> list[T]:
+    """Same as `with_reviewer_names`, for match decisions (`decided_by`)."""
+    ids = {d.decided_by for d in dtos if d.decided_by}
+    names = identity.member_names(session, ctx, ids) if ids else {}
+    for dto in dtos:
+        if dto.decided_by:
+            dto.decided_by_name = names.get(dto.decided_by)
+    return list(dtos)
+
+
 def with_reviewer_names[T: _Reviewed](
     session: Session, ctx: OrgContext, dtos: Sequence[T]
 ) -> list[T]:

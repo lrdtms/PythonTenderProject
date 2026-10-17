@@ -365,6 +365,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/match-suggestions/{suggestion_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Suggestion */
+        post: operations["confirm_suggestion_api_v1_match_suggestions__suggestion_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/match-suggestions/{suggestion_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Suggestion */
+        post: operations["reject_suggestion_api_v1_match_suggestions__suggestion_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/match-suggestions/{suggestion_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Suggestion */
+        post: operations["reset_suggestion_api_v1_match_suggestions__suggestion_id__reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -718,6 +769,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenders/{tender_id}/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Match Tender
+         * @description Queue the tender's matching job (the active one when one is queued or running).
+         */
+        post: operations["match_tender_api_v1_tenders__tender_id__match_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenders/{tender_id}/match-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Match Suggestions */
+        get: operations["match_suggestions_api_v1_tenders__tender_id__match_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenders/{tender_id}/match-suggestions/confirm-clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Clear */
+        post: operations["confirm_clear_api_v1_tenders__tender_id__match_suggestions_confirm_clear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenders/{tender_id}/quotations": {
         parameters: {
             query?: never;
@@ -882,6 +987,13 @@ export interface components {
         ChangeRoleRequest: {
             role: components["schemas"]["Role"];
         };
+        /** ConfirmClearResult */
+        ConfirmClearResult: {
+            /** Confirmed */
+            confirmed: number;
+            /** Skipped */
+            skipped: number;
+        };
         /** CreateMemberRequest */
         CreateMemberRequest: {
             /**
@@ -994,6 +1106,98 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** MatchBoqRef */
+        MatchBoqRef: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item No */
+            item_no: string | null;
+            /** Quantity */
+            quantity: string | null;
+            /** Section */
+            section: string | null;
+            /** Unit */
+            unit: string | null;
+        };
+        /** MatchLineDTO */
+        MatchLineDTO: {
+            boq: components["schemas"]["MatchBoqRef"];
+            /** Suggestions */
+            suggestions: components["schemas"]["MatchSuggestionDTO"][];
+        };
+        /** MatchQuoteRef */
+        MatchQuoteRef: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Quantity */
+            quantity: string | null;
+            /**
+             * Quotation Id
+             * Format: uuid
+             */
+            quotation_id: string;
+            /** Sku */
+            sku: string | null;
+            /** Unit */
+            unit: string | null;
+            /** Unit Price */
+            unit_price: string | null;
+            /** Valid Until */
+            valid_until: string | null;
+        };
+        /** MatchSuggestionDTO */
+        MatchSuggestionDTO: {
+            /**
+             * Boq Item Id
+             * Format: uuid
+             */
+            boq_item_id: string;
+            /** Classification */
+            classification: string;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /** Decided By Name */
+            decided_by_name?: string | null;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            quotation_item: components["schemas"]["MatchQuoteRef"];
+            /** Rank */
+            rank: number;
+            /** Score */
+            score: number;
+            /** Status */
+            status: string;
+            supplier: components["schemas"]["MatchSupplierRef"];
+        };
+        /** MatchSupplierRef */
+        MatchSupplierRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** MeDTO */
         MeDTO: {
@@ -2256,6 +2460,99 @@ export interface operations {
             };
         };
     };
+    confirm_suggestion_api_v1_match_suggestions__suggestion_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchSuggestionDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_suggestion_api_v1_match_suggestions__suggestion_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchSuggestionDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_suggestion_api_v1_match_suggestions__suggestion_id__reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchSuggestionDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_me_api_v1_me_get: {
         parameters: {
             query?: never;
@@ -3056,6 +3353,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_tender_api_v1_tenders__tender_id__match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_suggestions_api_v1_tenders__tender_id__match_suggestions_get: {
+        parameters: {
+            query?: {
+                status?: ("suggested" | "confirmed" | "rejected") | null;
+                classification?: ("clear" | "ambiguous") | null;
+                supplier_id?: string | null;
+                only_with_suggestions?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchLineDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_clear_api_v1_tenders__tender_id__match_suggestions_confirm_clear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmClearResult"];
                 };
             };
             /** @description Validation Error */
