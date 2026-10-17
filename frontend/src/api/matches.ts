@@ -1,6 +1,7 @@
 import { type InfiniteData, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { get, post } from "./client";
+import { ApiError } from "./errors";
 import type { ConfirmClearResult, Job, MatchLine, MatchSuggestion } from "./types";
 
 export const MATCH_PAGE_SIZE = 100;
@@ -39,10 +40,13 @@ export function useMatchLines(tenderId: string, filters: MatchFilters) {
   return { ...query, lines };
 }
 
+const RELOAD_CODES = new Set(["stale_match", "row_replaced", "try_again"]);
+
 type Decision = "confirm" | "reject" | "reset";
 
 /** Confirm, reject and reset. The cached suggestion is replaced by the server's answer on success;
- * nothing is changed optimistically, so a refused decision (409) leaves the list as it was. */
+ * nothing is changed optimistically. A success is followed by a background refresh; a refusal that means the
+ * list is out of date (stale_match, row_replaced, try_again) reloads it; match_conflict leaves it as it was. */
 export function useDecideMatch(tenderId: string) {
   const client = useQueryClient();
   const make = (action: Decision) => ({
@@ -61,6 +65,13 @@ export function useDecideMatch(tenderId: string) {
             }
           : old,
       );
+      // Background refresh so sibling suggestions and the line state stay right.
+      void client.invalidateQueries({ queryKey: ["matches", tenderId] });
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError && RELOAD_CODES.has(error.code)) {
+        void client.invalidateQueries({ queryKey: ["matches", tenderId] });
+      }
     },
   });
   const confirm = useMutation(make("confirm"));

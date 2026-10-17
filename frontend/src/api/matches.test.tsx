@@ -18,6 +18,7 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 
+const SUPPLIER = "00000000-0000-4000-8000-000000000030";
 const LIST = `/api/v1/tenders/${ids.tender}/match-suggestions`;
 
 function setup() {
@@ -61,13 +62,13 @@ describe("useMatchLines", () => {
     await waitFor(() => expect(result.current.lines).toHaveLength(1));
     expect(urls(fetchMock)[0].has("status")).toBe(false);
     rerender({
-      f: { status: "confirmed", classification: "clear", supplierId: ids.user, onlyWithSuggestions: true },
+      f: { status: "confirmed", classification: "clear", supplierId: SUPPLIER, onlyWithSuggestions: true },
     });
     await waitFor(() => expect(urls(fetchMock)).toHaveLength(2));
     const second = urls(fetchMock)[1];
     expect(second.get("status")).toBe("confirmed");
     expect(second.get("classification")).toBe("clear");
-    expect(second.get("supplier_id")).toBe(ids.user);
+    expect(second.get("supplier_id")).toBe(SUPPLIER);
     expect(second.get("only_with_suggestions")).toBe("true");
     expect(second.get("offset")).toBe("0");
   });
@@ -79,11 +80,13 @@ describe("useDecideMatch", () => {
     return { list: useMatchLines(ids.tender, {}), decide: useDecideMatch(ids.tender) };
   }
 
-  it("confirms with the CSRF header and replaces the suggestion in the cached page", async () => {
+  it("confirms with the CSRF header, replaces the suggestion at once, then refreshes in the background", async () => {
+    let confirmed = false;
     const fetchMock = mockApi({
-      [`GET ${LIST}`]: () => respond(200, [makeMatchLine()]),
+      [`GET ${LIST}`]: () =>
+        respond(200, [makeMatchLine({ suggestions: [makeMatchSuggestion({ status: confirmed ? "confirmed" : "suggested", decided_by_name: confirmed ? "Esta" : null })] })]),
       [`POST /api/v1/match-suggestions/${SUGG}/confirm`]: () =>
-        respond(200, makeMatchSuggestion({ status: "confirmed", decided_by_name: "Esta" })),
+        ((confirmed = true), respond(200, makeMatchSuggestion({ status: "confirmed", decided_by_name: "Esta" }))),
     });
     const { wrapper } = setup();
     const { result } = renderHook(useBoth, { wrapper });
@@ -95,13 +98,17 @@ describe("useDecideMatch", () => {
     expect(((init as RequestInit).headers as Record<string, string>)["X-Requested-With"]).toBe("IntelTPS");
     await waitFor(() => expect(result.current.list.lines[0].suggestions[0].status).toBe("confirmed"));
     await waitFor(() => expect(result.current.list.lines[0].suggestions[0].decided_by_name).toBe("Esta"));
+    await waitFor(() => expect(callsTo(fetchMock, "GET", LIST).length).toBeGreaterThanOrEqual(2));
   });
 
   it("rejects and resets through their own paths", async () => {
+    let server = "suggested";
     const fetchMock = mockApi({
-      [`GET ${LIST}`]: () => respond(200, [makeMatchLine()]),
-      [`POST /api/v1/match-suggestions/${SUGG}/reject`]: () => respond(200, makeMatchSuggestion({ status: "rejected" })),
-      [`POST /api/v1/match-suggestions/${SUGG}/reset`]: () => respond(200, makeMatchSuggestion({ status: "suggested" })),
+      [`GET ${LIST}`]: () => respond(200, [makeMatchLine({ suggestions: [makeMatchSuggestion({ status: server })] })]),
+      [`POST /api/v1/match-suggestions/${SUGG}/reject`]: () =>
+        ((server = "rejected"), respond(200, makeMatchSuggestion({ status: "rejected" }))),
+      [`POST /api/v1/match-suggestions/${SUGG}/reset`]: () =>
+        ((server = "suggested"), respond(200, makeMatchSuggestion({ status: "suggested" }))),
     });
     const { wrapper } = setup();
     const { result } = renderHook(useBoth, { wrapper });
@@ -115,6 +122,35 @@ describe("useDecideMatch", () => {
     });
     await waitFor(() => expect(result.current.list.lines[0].suggestions[0].status).toBe("suggested"));
     expect(callsTo(fetchMock, "POST", `/api/v1/match-suggestions/${SUGG}/reset`)).toHaveLength(1);
+  });
+
+  it.each(["stale_match", "row_replaced", "try_again"])("reloads the list on %s", async (code) => {
+    const fetchMock = mockApi({
+      [`GET ${LIST}`]: () => respond(200, [makeMatchLine()]),
+      [`POST /api/v1/match-suggestions/${SUGG}/confirm`]: () => respond(409, errorBody(code, "no")),
+    });
+    const { wrapper } = setup();
+    const { result } = renderHook(useBoth, { wrapper });
+    await waitFor(() => expect(result.current.list.lines).toHaveLength(1));
+    await act(async () => {
+      await result.current.decide.confirm.mutateAsync(SUGG).catch(() => {});
+    });
+    await waitFor(() => expect(callsTo(fetchMock, "GET", LIST).length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("does not reload the list on 409 match_conflict", async () => {
+    const fetchMock = mockApi({
+      [`GET ${LIST}`]: () => respond(200, [makeMatchLine()]),
+      [`POST /api/v1/match-suggestions/${SUGG}/confirm`]: () => respond(409, errorBody("match_conflict", "no")),
+    });
+    const { wrapper } = setup();
+    const { result } = renderHook(useBoth, { wrapper });
+    await waitFor(() => expect(result.current.list.lines).toHaveLength(1));
+    await act(async () => {
+      await result.current.decide.confirm.mutateAsync(SUGG).catch(() => {});
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(callsTo(fetchMock, "GET", LIST)).toHaveLength(1);
   });
 
   it("leaves the cache unchanged on 409 match_conflict", async () => {
