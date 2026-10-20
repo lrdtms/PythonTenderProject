@@ -93,6 +93,105 @@ class OllamaLLM:
         )
 
 
+class KimiLLM:
+    """OpenAI-compatible adapter for the Kimi (Moonshot) API.
+
+    Raises LLMUnavailable on network errors, timeouts, and HTTP 4xx/5xx so that
+    FallbackLLM can retry on Ollama. Malformed JSON responses raise ValueError
+    (a prompt/schema bug, not a transport failure).
+    """
+
+    def __init__(self, api_key: str, base_url: str, model: str, timeout_s: float) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout_s = timeout_s
+        self._auth = f"Bearer {api_key}"
+
+    def generate_structured(
+        self,
+        system: str,
+        user: str,
+        json_schema: dict[str, Any],
+        options: dict[str, Any] | None = None,
+    ) -> StructuredResult:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "stream": False,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "response", "schema": json_schema},
+            },
+            "temperature": 0,
+            **(options or {}),
+        }
+        request = urllib.request.Request(  # noqa: S310 - the URL comes from settings
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": self._auth,
+            },
+        )
+        limit = get_settings().llm_max_response_bytes
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:  # noqa: S310
+                raw = response.read(limit + 1)
+        except TimeoutError:
+            raise LLMTimeout from None
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, TimeoutError):
+                raise LLMTimeout from None
+            raise LLMUnavailable from None
+        except OSError:
+            raise LLMUnavailable from None
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        if len(raw) > limit:
+            return StructuredResult("", "length", 0, 0, latency_ms, self.model)
+        try:
+            body = json.loads(raw)
+        except ValueError as exc:
+            raise ValueError(f"Kimi returned non-JSON: {raw[:200]!r}") from exc
+        try:
+            choice = body["choices"][0]
+            content = str(choice["message"]["content"])
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ValueError(f"Kimi response missing choices[0].message.content: {body!r}") from exc
+        usage = body.get("usage") or {}
+        return StructuredResult(
+            raw_json=content,
+            done_reason=choice.get("finish_reason"),
+            tokens_in=_count(usage.get("prompt_tokens")),
+            tokens_out=_count(usage.get("completion_tokens")),
+            latency_ms=latency_ms,
+            model=self.model,
+        )
+
+
+class FallbackLLM:
+    """Tries the primary LLM first; on LLMUnavailable or LLMTimeout, retries on the fallback."""
+
+    def __init__(self, primary: LLMPort, fallback: LLMPort) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def generate_structured(
+        self,
+        system: str,
+        user: str,
+        json_schema: dict[str, Any],
+        options: dict[str, Any] | None = None,
+    ) -> StructuredResult:
+        try:
+            return self.primary.generate_structured(system, user, json_schema, options)
+        except (LLMUnavailable, LLMTimeout):
+            return self.fallback.generate_structured(system, user, json_schema, options)
+
+
 class FakeLLM:
     """Scripted responses, popped in order. An item may be a JSON string, an exception to
     raise, or a callable `(system, user) -> str`. After the script runs out, `default`."""
@@ -135,10 +234,23 @@ def get_llm() -> LLMPort:
     settings = get_settings()
     if settings.llm_provider == "fake":
         return FakeLLM()
-    return OllamaLLM(
+    ollama = OllamaLLM(
         settings.llm_base_url,
         settings.llm_model,
         settings.llm_timeout_s,
         settings.llm_num_ctx,
         settings.llm_num_predict,
     )
+    if settings.llm_provider == "kimi":
+        if not settings.llm_allow_hosted:
+            raise RuntimeError("LLM_PROVIDER=kimi requires LLM_ALLOW_HOSTED=true")
+        if not settings.llm_kimi_api_key:
+            raise RuntimeError("LLM_PROVIDER=kimi requires LLM_KIMI_API_KEY to be set")
+        kimi = KimiLLM(
+            settings.llm_kimi_api_key,
+            settings.llm_kimi_base_url,
+            settings.llm_kimi_model,
+            settings.llm_timeout_s,
+        )
+        return FallbackLLM(kimi, ollama)
+    return ollama

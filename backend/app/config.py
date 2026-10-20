@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     llm_base_url: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen3:4b"
     llm_allow_hosted: bool = False
-    llm_provider: str = "ollama"  # "ollama" or "fake" (tests)
+    llm_provider: str = "ollama"  # "ollama", "kimi", or "fake" (tests)
+    llm_kimi_api_key: str | None = None
+    llm_kimi_base_url: str = "https://api.moonshot.ai/v1"
+    llm_kimi_model: str = "kimi-k2.6"
     llm_timeout_s: int = 120  # must stay below job_lease_seconds
     llm_num_ctx: int = 4096
     llm_num_predict: int = 2048

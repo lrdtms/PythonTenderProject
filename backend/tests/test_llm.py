@@ -10,7 +10,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from app.infrastructure.llm import FakeLLM, OllamaLLM, get_llm, set_llm_override
+from app.infrastructure.llm import (
+    FakeLLM,
+    FallbackLLM,
+    KimiLLM,
+    OllamaLLM,
+    get_llm,
+    set_llm_override,
+)
 from app.kernel import LLMTimeout, LLMUnavailable
 
 SCHEMA = {"type": "object"}
@@ -116,6 +123,107 @@ def test_factory_returns_fake_in_tests_and_honours_override() -> None:
         assert get_llm() is mine
     finally:
         set_llm_override(None)
+
+
+def _kimi(url: str, timeout: float = 5) -> KimiLLM:
+    return KimiLLM("test-key", url, "kimi-k2.6", timeout)
+
+
+def test_kimi_request_and_response(server) -> None:
+    seen: dict = {}
+
+    def respond(body: dict) -> tuple[int, dict]:
+        seen.update(body)
+        return 200, {
+            "choices": [
+                {
+                    "message": {"content": '{"requirements": []}'},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 42, "completion_tokens": 7},
+        }
+
+    result = _kimi(server(respond)).generate_structured("sys", "usr", SCHEMA)
+    assert result.raw_json == '{"requirements": []}'
+    assert (result.done_reason, result.tokens_in, result.tokens_out) == ("stop", 42, 7)
+    assert seen["model"] == "kimi-k2.6" and seen["stream"] is False
+    assert seen["messages"][0] == {"role": "system", "content": "sys"}
+    assert seen["response_format"]["type"] == "json_schema"
+    assert seen["response_format"]["json_schema"]["schema"] == SCHEMA
+
+
+def test_kimi_unreachable_is_unavailable() -> None:
+    with pytest.raises(LLMUnavailable):
+        _kimi("http://127.0.0.1:9").generate_structured("s", "u", SCHEMA)
+
+
+def test_kimi_http_error_is_unavailable(server) -> None:
+    with pytest.raises(LLMUnavailable):
+        _kimi(server(lambda body: (500, {"error": "internal"}))).generate_structured(
+            "s", "u", SCHEMA
+        )
+
+
+def test_kimi_slow_server_is_a_timeout(server) -> None:
+    def slow(body: dict) -> tuple[int, dict]:
+        time.sleep(1.0)
+        return 200, {"choices": [{"message": {"content": "{}"}}]}
+
+    with pytest.raises(LLMTimeout):
+        _kimi(server(slow), timeout=0.2).generate_structured("s", "u", SCHEMA)
+
+
+def test_kimi_malformed_json_raises_value_error_not_fallback(server) -> None:
+    result = _kimi(server(lambda body: (200, {"unexpected": True})))
+    with pytest.raises(ValueError, match="choices"):
+        result.generate_structured("s", "u", SCHEMA)
+
+
+def test_fallback_uses_primary_on_success() -> None:
+    primary = FakeLLM(['{"a": 1}'])
+    fallback = FakeLLM(['{"b": 2}'])
+    assert (
+        FallbackLLM(primary, fallback).generate_structured("s", "u", SCHEMA).raw_json == '{"a": 1}'
+    )
+    assert len(primary.calls) == 1 and len(fallback.calls) == 0
+
+
+@pytest.mark.parametrize("error", [LLMUnavailable(), LLMTimeout()])
+def test_fallback_retries_on_transport_errors(error) -> None:
+    primary = FakeLLM([error])
+    fallback = FakeLLM(['{"b": 2}'])
+    assert (
+        FallbackLLM(primary, fallback).generate_structured("s", "u", SCHEMA).raw_json == '{"b": 2}'
+    )
+    assert len(primary.calls) == 1 and len(fallback.calls) == 1
+
+
+def test_fallback_does_not_swallow_value_error() -> None:
+    primary = FakeLLM([ValueError("bad prompt")])
+    fallback = FakeLLM(['{"b": 2}'])
+    with pytest.raises(ValueError, match="bad prompt"):
+        FallbackLLM(primary, fallback).generate_structured("s", "u", SCHEMA)
+    assert len(fallback.calls) == 0
+
+
+def test_factory_kimi_requires_hosted_opt_in_and_key(monkeypatch) -> None:
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_provider", "kimi")
+    monkeypatch.setattr(settings, "llm_kimi_api_key", "k")
+    monkeypatch.setattr(settings, "llm_allow_hosted", False)
+    with pytest.raises(RuntimeError, match="LLM_ALLOW_HOSTED"):
+        get_llm()
+    monkeypatch.setattr(settings, "llm_allow_hosted", True)
+    monkeypatch.setattr(settings, "llm_kimi_api_key", None)
+    with pytest.raises(RuntimeError, match="LLM_KIMI_API_KEY"):
+        get_llm()
+    monkeypatch.setattr(settings, "llm_kimi_api_key", "k")
+    llm = get_llm()
+    assert isinstance(llm, FallbackLLM)
+    assert isinstance(llm.primary, KimiLLM) and isinstance(llm.fallback, OllamaLLM)
 
 
 @pytest.mark.parametrize(
