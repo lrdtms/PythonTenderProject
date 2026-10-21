@@ -128,6 +128,8 @@ class KimiLLM:
                 "type": "json_schema",
                 "json_schema": {"name": "response", "schema": json_schema},
             },
+            # Thinking off: extraction does not need it and it blows the per-call timeout.
+            "thinking": {"type": "disabled"},
             # No temperature: kimi-k2.x only accepts its fixed default and 400s on anything else.
             **(options or {}),
         }
