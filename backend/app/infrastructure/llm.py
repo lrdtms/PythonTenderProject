@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import urllib.error
 import urllib.request
@@ -11,6 +12,8 @@ from typing import Any
 
 from app.config import get_settings
 from app.kernel import LLMPort, LLMTimeout, LLMUnavailable, StructuredResult
+
+log = logging.getLogger("llm")
 
 
 def _count(value: object) -> int:
@@ -125,7 +128,7 @@ class KimiLLM:
                 "type": "json_schema",
                 "json_schema": {"name": "response", "schema": json_schema},
             },
-            "temperature": 0,
+            # No temperature: kimi-k2.x only accepts its fixed default and 400s on anything else.
             **(options or {}),
         }
         request = urllib.request.Request(  # noqa: S310 - the URL comes from settings
@@ -143,9 +146,17 @@ class KimiLLM:
                 raw = response.read(limit + 1)
         except TimeoutError:
             raise LLMTimeout from None
+        except urllib.error.HTTPError as exc:
+            # The body says why (bad parameter, auth, quota); keep it out of the exception
+            # chain but not out of the logs, or the fallback hides the cause.
+            detail = exc.read(500).decode(errors="replace")
+            log.warning("Kimi HTTP %s, falling back: %s", exc.code, detail)
+            raise LLMUnavailable from None
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, TimeoutError):
+                log.warning("Kimi timed out, falling back")
                 raise LLMTimeout from None
+            log.warning("Kimi unreachable, falling back: %s", exc.reason)
             raise LLMUnavailable from None
         except OSError:
             raise LLMUnavailable from None
@@ -188,7 +199,8 @@ class FallbackLLM:
     ) -> StructuredResult:
         try:
             return self.primary.generate_structured(system, user, json_schema, options)
-        except (LLMUnavailable, LLMTimeout):
+        except (LLMUnavailable, LLMTimeout) as exc:
+            log.warning("primary LLM failed (%s), using fallback", type(exc).__name__)
             return self.fallback.generate_structured(system, user, json_schema, options)
 
 
