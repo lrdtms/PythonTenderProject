@@ -321,19 +321,37 @@ def test_migrations_match_the_models() -> None:
         (
             "reviewer",
             {"read"},
-            {"edit_tenders", "manage_members", "upload_documents", "review_data"},
+            {
+                "edit_tenders",
+                "manage_members",
+                "upload_documents",
+                "review_data",
+                "approve_estimate",
+                "manage_pricing",
+            },
         ),
         (
             "estimator",
             {"read", "edit_tenders", "upload_documents", "review_data"},
-            {"manage_members"},
+            {"manage_members", "approve_estimate", "manage_pricing"},
         ),
         (
             "project_manager",
-            {"read", "edit_tenders", "manage_tasks"},
-            {"upload_documents", "manage_members"},
+            {"read", "edit_tenders", "manage_tasks", "approve_estimate"},
+            {"upload_documents", "manage_members", "manage_pricing"},
         ),
-        ("admin", {"read", "manage_members", "edit_tenders", "view_audit"}, set()),
+        (
+            "admin",
+            {
+                "read",
+                "manage_members",
+                "edit_tenders",
+                "view_audit",
+                "approve_estimate",
+                "manage_pricing",
+            },
+            set(),
+        ),
     ],
 )
 def test_role_permission_matrix(role: str, allowed: set[str], denied: set[str]) -> None:
