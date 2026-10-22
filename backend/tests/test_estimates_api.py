@@ -853,6 +853,11 @@ def test_not_ready_lists_blockers_by_code() -> None:
     blockers = err["details"]["blockers"]
     assert len(blockers) == 20 and {b["code"] for b in blockers} == {"unresolved"}
     assert {b["line_id"] for b in blockers} == {x["id"] for x in _lines(actor, est)}
+    by_line = {x["id"]: x for x in _lines(actor, est)}
+    for b in blockers:
+        line = by_line[b["line_id"]]
+        assert b["item_no"] == line["item_no"] and b["description"] == line["description"][:120]
+        assert b["reasons"] == []  # no price chosen yet: no flags at all
     assert _move(actor, est, "approve").status_code == 409  # a draft cannot be approved
     # a changed line
     _resolve_all(actor, est)
@@ -863,17 +868,60 @@ def test_not_ready_lists_blockers_by_code() -> None:
         s.get(BoqItem, UUID(priced["boq_item_id"])).quantity = Decimal("123")
     err = _move(actor, est, "review").json()["error"]
     assert err["code"] == "estimate_not_ready"
-    assert err["details"]["blockers"] == [{"line_id": priced["id"], "code": "source_changed"}]
+    assert err["details"]["blockers"] == [
+        {
+            "line_id": priced["id"],
+            "code": "source_changed",
+            "item_no": priced["item_no"],
+            "description": priced["description"][:120],
+            "reasons": ["source_changed"],
+        }
+    ]
     # an unreviewed source
     with session_scope() as s:
         item = s.get(BoqItem, UUID(priced["boq_item_id"]))
         item.quantity = Decimal(priced["quantity"])
         item.review_status = "unreviewed"
     err = _move(actor, est, "review").json()["error"]
-    assert err["details"]["blockers"] == [{"line_id": priced["id"], "code": "unreviewed_source"}]
+    assert err["details"]["blockers"] == [
+        {
+            "line_id": priced["id"],
+            "code": "unreviewed_source",
+            "item_no": priced["item_no"],
+            "description": priced["description"][:120],
+            "reasons": ["unreviewed_source"],
+        }
+    ]
     with session_scope() as s:
         s.get(BoqItem, UUID(priced["boq_item_id"])).review_status = "confirmed"
     assert _move(actor, est, "review").status_code == 200
+
+
+def test_not_ready_blocker_for_a_vat_unknown_line_names_the_reason() -> None:
+    from app.modules.suppliers.models import Quotation
+
+    actor, _, est = _priced_setup("st3v@example.com")
+    with session_scope() as s:
+        for q in s.scalars(select(Quotation)):
+            q.prices_include_vat = None
+    line = _usable(actor, est)[0]
+    assert (
+        _put(actor, line, match_suggestion_id=line["candidates"][0]["match_id"]).status_code == 200
+    )
+    err = _move(actor, est, "review").json()["error"]
+    mine = next(b for b in err["details"]["blockers"] if b["line_id"] == line["id"])
+    assert mine["code"] == "unresolved" and mine["reasons"] == ["vat_basis_unknown"]
+    assert mine["item_no"] == line["item_no"]
+
+
+def test_not_ready_blocker_description_is_truncated_to_120_characters() -> None:
+    actor, _, est = _priced_setup("st3t@example.com")
+    line = _lines(actor, est)[0]
+    with session_scope() as s:
+        s.get(EstimateLine, UUID(line["id"])).description = "x" * 300
+    err = _move(actor, est, "review").json()["error"]
+    mine = next(b for b in err["details"]["blockers"] if b["line_id"] == line["id"])
+    assert mine["description"] == "x" * 120
 
 
 def test_approving_a_draft_is_refused_and_no_lines_blocks() -> None:
@@ -882,7 +930,9 @@ def test_approving_a_draft_is_refused_and_no_lines_blocks() -> None:
     est = actor.client.post(f"{TENDERS}/{empty}/estimates").json()
     err = _move(actor, est, "review").json()["error"]
     assert err["code"] == "estimate_not_ready"
-    assert err["details"]["blockers"] == [{"line_id": None, "code": "no_lines"}]
+    assert err["details"]["blockers"] == [
+        {"line_id": None, "code": "no_lines", "item_no": None, "description": None, "reasons": []}
+    ]
     full, _, est2 = _ready("st4b@example.com")
     r = _move(full, est2, "approve")
     assert r.status_code == 409 and r.json()["error"]["code"] == "estimate_not_reviewed"

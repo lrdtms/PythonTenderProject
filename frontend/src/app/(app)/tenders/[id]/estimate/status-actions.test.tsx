@@ -63,7 +63,7 @@ describe("status actions", () => {
     renderSignedIn(<EstimateView />);
     await screen.findByText(/LED panel/);
     await userEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
-    expect(await screen.findByText("Some lines still have no price.")).toBeInTheDocument();
+    expect(await screen.findByText(/No price has been chosen yet/)).toBeInTheDocument();
     expect(screen.getByText("This estimate has no BoQ lines to price.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /go to the line/i })).toHaveAttribute("href", `#line-${LINES[0].id}`);
   });

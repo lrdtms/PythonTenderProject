@@ -206,10 +206,15 @@ describe("estimate mutations", () => {
 describe("notReadyBlockers", () => {
   it("reads the blockers from an estimate_not_ready error", () => {
     const blockers = [
-      { line_id: LINE, code: "unresolved" },
-      { line_id: null, code: "no_lines" },
+      { line_id: LINE, code: "unresolved", item_no: "B1", description: "Cable", reasons: ["vat_basis_unknown"] },
+      { line_id: null, code: "no_lines", item_no: null, description: null, reasons: [] },
     ];
     expect(notReadyBlockers(new ApiError(409, "estimate_not_ready", "x", { blockers }))).toEqual(blockers);
+  });
+
+  it("tolerates a blocker without the naming fields", () => {
+    const got = notReadyBlockers(new ApiError(409, "estimate_not_ready", "x", { blockers: [{ line_id: LINE, code: "unresolved" }] }));
+    expect(got).toEqual([{ line_id: LINE, code: "unresolved", item_no: null, description: null, reasons: [] }]);
   });
 
   it("returns [] when absent or invalid", () => {

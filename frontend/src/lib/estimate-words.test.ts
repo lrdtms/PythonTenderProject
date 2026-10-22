@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { blockerText, errorText, flagText } from "./estimate-words";
+import { blockerReasonText, blockerText, errorText, flagText } from "./estimate-words";
 
 const FLAGS = [
   "currency_differs",
@@ -71,5 +71,14 @@ describe("estimate plain words", () => {
       expect(text).toMatch(/\S/);
       expect(text).not.toContain("made_up_code");
     }
+  });
+
+  it("words a blocker's reasons, or says no price was chosen when it has none", () => {
+    expect(blockerReasonText("unresolved", [])).toBe("No price has been chosen yet.");
+    expect(blockerReasonText("unresolved", ["vat_basis_unknown", "currency_missing"])).toBe(
+      `${flagText("vat_basis_unknown")} ${flagText("currency_missing")}`,
+    );
+    expect(blockerReasonText("source_changed", ["source_changed"])).toBe(flagText("source_changed"));
+    expect(blockerReasonText("no_lines", [])).toBe(blockerText("no_lines"));
   });
 });

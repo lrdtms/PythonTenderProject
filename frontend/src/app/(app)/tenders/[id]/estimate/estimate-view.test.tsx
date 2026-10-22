@@ -247,7 +247,7 @@ describe("ErrorNotice", () => {
     });
     mockApi({}, estimator);
     renderSignedIn(<ErrorNotice error={error} />);
-    expect(await screen.findByText("Some lines still have no price.")).toBeInTheDocument();
+    expect(await screen.findByText(/No price has been chosen yet/)).toBeInTheDocument();
     expect(screen.getByText("This estimate has no BoQ lines to price.")).toBeInTheDocument();
   });
 });

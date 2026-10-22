@@ -686,8 +686,14 @@ def readiness(est: Estimate, lines: Sequence[EstimateLine], live: LiveInputs) ->
     out: list[Blocker] = []
     for row in lines:
         dto = _line_dto(row, live)
+        named = {
+            "line_id": row.id,
+            "item_no": row.item_no,
+            "description": None if row.description is None else row.description[:120],
+            "reasons": list(dto.flags),
+        }
         if dto.status == "changed":
-            out.append(Blocker(line_id=row.id, code="source_changed"))
+            out.append(Blocker(code="source_changed", **named))
         elif dto.status == "unresolved":
             only_unreviewed = (
                 row.price_source != "unresolved"
@@ -695,7 +701,7 @@ def readiness(est: Estimate, lines: Sequence[EstimateLine], live: LiveInputs) ->
                 and dto.flags == ["unreviewed_source"]
             )
             code: BlockerCode = "unreviewed_source" if only_unreviewed else "unresolved"
-            out.append(Blocker(line_id=row.id, code=code))
+            out.append(Blocker(code=code, **named))
     return out
 
 

@@ -18,6 +18,10 @@ export type PricingDefaultsPut = Schemas["PricingDefaultsPut"];
 export type Blocker = {
   line_id: string | null;
   code: "unresolved" | "source_changed" | "unreviewed_source" | "no_lines";
+  item_no: string | null;
+  description: string | null;
+  /** The line's flag codes (live ones included); empty when the line simply has no price yet. */
+  reasons: string[];
 };
 
 const BLOCKER_CODES = ["unresolved", "source_changed", "unreviewed_source", "no_lines"];
@@ -31,10 +35,22 @@ export function notReadyBlockers(error: unknown): Blocker[] {
   const out: Blocker[] = [];
   for (const b of list) {
     if (typeof b !== "object" || b === null) return [];
-    const { line_id, code } = b as { line_id?: unknown; code?: unknown };
+    const { line_id, code, item_no, description, reasons } = b as {
+      line_id?: unknown;
+      code?: unknown;
+      item_no?: unknown;
+      description?: unknown;
+      reasons?: unknown;
+    };
     if (typeof code !== "string" || !BLOCKER_CODES.includes(code)) return [];
     if (line_id !== null && typeof line_id !== "string") return [];
-    out.push({ line_id, code } as Blocker);
+    out.push({
+      line_id,
+      code,
+      item_no: typeof item_no === "string" ? item_no : null,
+      description: typeof description === "string" ? description : null,
+      reasons: Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === "string") : [],
+    } as Blocker);
   }
   return out;
 }

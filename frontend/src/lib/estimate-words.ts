@@ -46,6 +46,12 @@ export const flagText = (code: string): string => lookup(FLAGS, code);
 /** Plain sentence for a reason an estimate cannot be approved or reviewed yet. */
 export const blockerText = (code: string): string => lookup(BLOCKERS, code);
 
+/** What is wrong with the line behind a blocker, in plain words: its own reasons, or "no price chosen yet". */
+export const blockerReasonText = (code: string, reasons: string[]): string => {
+  if (reasons.length > 0) return reasons.map(flagText).join(" ");
+  return code === "unresolved" ? "No price has been chosen yet." : blockerText(code);
+};
+
 /** Plain sentence for an API error code returned by an estimate write. */
 export const errorText = (code: string, fallbackMessage?: string): string =>
   fallbackMessage && SERVER_WORDED.has(code) ? fallbackMessage : lookup(ERRORS, code);

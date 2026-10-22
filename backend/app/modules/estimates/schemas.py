@@ -228,3 +228,6 @@ BlockerCode = Literal["unresolved", "source_changed", "unreviewed_source", "no_l
 class Blocker(BaseModel):
     line_id: UUID | None
     code: BlockerCode
+    item_no: str | None = None
+    description: str | None = None  # truncated to 120 characters
+    reasons: list[str] = []  # the line's flag codes, live ones included; empty when none apply
