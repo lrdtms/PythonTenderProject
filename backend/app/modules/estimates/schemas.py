@@ -192,6 +192,7 @@ class EstimateSummaryDTO(BaseModel):
     created_at: datetime
     reviewed_at: datetime | None
     approved_at: datetime | None
+    is_current_approved: bool = False
 
 
 class EstimateDTO(BaseModel):
@@ -216,3 +217,11 @@ class EstimateDTO(BaseModel):
     reviewed_at: datetime | None
     approved_by: UUID | None
     approved_at: datetime | None
+
+
+BlockerCode = Literal["unresolved", "source_changed", "unreviewed_source", "no_lines"]
+
+
+class Blocker(BaseModel):
+    line_id: UUID | None
+    code: BlockerCode

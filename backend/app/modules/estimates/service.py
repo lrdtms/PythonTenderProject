@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -17,6 +18,8 @@ from . import calc
 from .models import Estimate, EstimateLine, PricingDefaults
 from .repo import EstimateRepo
 from .schemas import (
+    Blocker,
+    BlockerCode,
     BoqInput,
     CandidateDTO,
     CandidateInput,
@@ -372,6 +375,8 @@ def list_lines(
 
 def list_estimates(session: Session, ctx: OrgContext, tender_id: UUID) -> list[EstimateSummaryDTO]:
     ctx.require(Permission.READ)
+    rows = EstimateRepo(session, ctx).for_tender(tender_id)  # newest version first
+    current = next((e.id for e in rows if e.status == "approved"), None)
     return [
         EstimateSummaryDTO(
             id=e.id,
@@ -383,8 +388,9 @@ def list_estimates(session: Session, ctx: OrgContext, tender_id: UUID) -> list[E
             created_at=e.created_at,
             reviewed_at=e.reviewed_at,
             approved_at=e.approved_at,
+            is_current_approved=e.id == current,
         )
-        for e in EstimateRepo(session, ctx).for_tender(tender_id)
+        for e in rows
     ]
 
 
@@ -659,3 +665,141 @@ def patch_estimate(
     for r in rows:
         session.refresh(r)
     return _estimate_dto(est, _lines_of(repo, est, live))
+
+
+# --- readiness and status moves --------------------------------------------------------------
+
+
+def readiness(est: Estimate, lines: Sequence[EstimateLine], live: LiveInputs) -> list[Blocker]:
+    """Why this estimate cannot be marked reviewed or approved. Every line is judged against the
+    live inputs: a priced or excluded line passes, anything else blocks. An estimate with no
+    lines at all is blocked."""
+    if not lines:
+        return [Blocker(line_id=None, code="no_lines")]
+    out: list[Blocker] = []
+    for row in lines:
+        dto = _line_dto(row, live)
+        if dto.status == "changed":
+            out.append(Blocker(line_id=row.id, code="source_changed"))
+        elif dto.status == "unresolved":
+            only_unreviewed = (
+                row.price_source != "unresolved"
+                and row.total is not None
+                and dto.flags == ["unreviewed_source"]
+            )
+            code: BlockerCode = "unreviewed_source" if only_unreviewed else "unresolved"
+            out.append(Blocker(line_id=row.id, code=code))
+    return out
+
+
+def _require_ready(est: Estimate, rows: Sequence[EstimateLine], live: LiveInputs) -> None:
+    blockers = readiness(est, rows, live)
+    if blockers:
+        raise Conflict(
+            "Resolve every line before moving this estimate on.",
+            {"blockers": [b.model_dump(mode="json") for b in blockers]},
+            code="estimate_not_ready",
+        )
+
+
+def _freeze_totals(est: Estimate, rows: Sequence[EstimateLine]) -> None:
+    """Store the totals of the priced lines. Called only once readiness passed, so every
+    non-excluded line is priced and has its amounts."""
+    zero = Decimal("0.00")
+    amounts = [
+        calc.LineAmounts(
+            r.material_cost if r.material_cost is not None else zero,
+            r.labour_cost if r.labour_cost is not None else zero,
+            r.cost if r.cost is not None else zero,
+            r.markup if r.markup is not None else zero,
+            r.total,
+        )
+        for r in rows
+        if r.price_source != "excluded" and r.total is not None
+    ]
+    t = calc.totals(amounts, _settings(est))
+    est.subtotal_cost, est.markup_total = t.subtotal_cost, t.markup_total
+    est.subtotal_ex_vat, est.vat_total, est.total_inc_vat = (
+        t.subtotal_ex_vat,
+        t.vat_total,
+        t.total_inc_vat,
+    )
+
+
+def _finish(session: Session, repo: EstimateRepo, est: Estimate, live: LiveInputs) -> EstimateDTO:
+    session.flush()
+    session.refresh(est)
+    return _estimate_dto(est, _lines_of(repo, est, live))
+
+
+def review_estimate(
+    session: Session, ctx: OrgContext, estimate_id: UUID, live: LiveInputs
+) -> EstimateDTO:
+    ctx.require(Permission.REVIEW_DATA)
+    repo, est = _lock_draft(session, ctx, estimate_id)
+    rows = repo.all_lines(est.id)
+    _require_ready(est, rows, live)
+    _freeze_totals(est, rows)
+    est.status, est.reviewed_by, est.reviewed_at = "reviewed", ctx.user_id, datetime.now(UTC)
+    audit.record(
+        session, ctx, "estimate", est.id, "estimate_reviewed",
+        {"version": est.version, "status": "reviewed", "reviewed_by": str(ctx.user_id)},
+    )  # fmt: skip
+    return _finish(session, repo, est, live)
+
+
+def approve_estimate(
+    session: Session, ctx: OrgContext, estimate_id: UUID, live: LiveInputs
+) -> EstimateDTO:
+    """reviewed -> approved. The readiness gate runs again against the live inputs, so a BoQ or
+    quotation edit since the review blocks approval (reopen, refresh and review again)."""
+    ctx.require(Permission.APPROVE_ESTIMATE)
+    repo = EstimateRepo(session, ctx)
+    est = repo.get_for_update(estimate_id)
+    if est.status == "approved":
+        raise Conflict("This estimate is already approved.", code="estimate_frozen")
+    if est.status != "reviewed":
+        raise Conflict(
+            "Mark the estimate reviewed before approving it.", code="estimate_not_reviewed"
+        )
+    _require_ready(est, repo.all_lines(est.id), live)
+    est.status, est.approved_by, est.approved_at = "approved", ctx.user_id, datetime.now(UTC)
+    audit.record(
+        session, ctx, "estimate", est.id, "estimate_approved",
+        {
+            "version": est.version,
+            "status": "approved",
+            "reviewed_by": str(est.reviewed_by),
+            "approved_by": str(ctx.user_id),
+        },
+    )  # fmt: skip
+    return _finish(session, repo, est, live)
+
+
+def reopen_estimate(
+    session: Session, ctx: OrgContext, estimate_id: UUID, live: LiveInputs
+) -> EstimateDTO:
+    """reviewed -> draft, only while the tender has no other draft."""
+    ctx.require(Permission.REVIEW_DATA)
+    repo = EstimateRepo(session, ctx)
+    est = repo.get_for_update(estimate_id)
+    if est.status == "approved":
+        raise Conflict("An approved estimate cannot be reopened.", code="estimate_frozen")
+    if est.status != "reviewed":
+        raise Conflict("Only a reviewed estimate can be reopened.", code="estimate_not_reviewed")
+    if repo.draft_for(est.tender_id) is not None:
+        raise Conflict("This tender already has a draft estimate.", code="draft_exists")
+    try:
+        with session.begin_nested():  # the one-draft index lost a race
+            est.status, est.reviewed_by, est.reviewed_at = "draft", None, None
+            est.subtotal_cost = est.markup_total = est.subtotal_ex_vat = None
+            est.vat_total = est.total_inc_vat = None
+            session.flush()
+    except IntegrityError as exc:
+        session.refresh(est)
+        raise Conflict("This tender already has a draft estimate.", code="draft_exists") from exc
+    audit.record(
+        session, ctx, "estimate", est.id, "estimate_reopened",
+        {"version": est.version, "status": "draft"},
+    )  # fmt: skip
+    return _finish(session, repo, est, live)

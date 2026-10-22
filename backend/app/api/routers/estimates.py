@@ -145,10 +145,12 @@ def get_lines(
     return estimates.list_lines(session, ctx, estimate_id, live, status, limit, offset)
 
 
-def _locked_live(session, ctx, tender_id: UUID) -> estimates.LiveInputs:
+def _locked_live(
+    session, ctx, tender_id: UUID, permission: Permission = Permission.REVIEW_DATA
+) -> estimates.LiveInputs:
     """Authorise, refuse an archived tender, take the tender lock, then read the live inputs.
     The estimate row lock is taken afterwards, in the service."""
-    ctx.require(Permission.REVIEW_DATA)
+    ctx.require(permission)
     refuse_archived(session, ctx, tender_id)
     suppliers.lock_tender(session, ctx, tender_id)
     refuse_archived(session, ctx, tender_id, fresh=True)  # an archive may have committed meanwhile
@@ -174,3 +176,24 @@ def refresh_line(line_id: UUID, ctx: Ctx, session: DbSession):
     tender_id = estimates.line_tender(session, ctx, line_id)
     live = _locked_live(session, ctx, tender_id)
     return estimates.refresh_line(session, ctx, line_id, live)
+
+
+@router.post("/estimates/{estimate_id}/review", response_model=estimates.EstimateDTO)
+def review_estimate(estimate_id: UUID, ctx: Ctx, session: DbSession):
+    tender_id = estimates.tender_of(session, ctx, estimate_id)
+    live = _locked_live(session, ctx, tender_id)
+    return estimates.review_estimate(session, ctx, estimate_id, live)
+
+
+@router.post("/estimates/{estimate_id}/reopen", response_model=estimates.EstimateDTO)
+def reopen_estimate(estimate_id: UUID, ctx: Ctx, session: DbSession):
+    tender_id = estimates.tender_of(session, ctx, estimate_id)
+    live = _locked_live(session, ctx, tender_id)
+    return estimates.reopen_estimate(session, ctx, estimate_id, live)
+
+
+@router.post("/estimates/{estimate_id}/approve", response_model=estimates.EstimateDTO)
+def approve_estimate(estimate_id: UUID, ctx: Ctx, session: DbSession):
+    tender_id = estimates.tender_of(session, ctx, estimate_id)
+    live = _locked_live(session, ctx, tender_id, Permission.APPROVE_ESTIMATE)
+    return estimates.approve_estimate(session, ctx, estimate_id, live)

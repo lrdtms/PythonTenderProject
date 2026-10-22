@@ -16,7 +16,7 @@ from .models import AuditEvent
 SAFE_METADATA_KEYS = frozenset(
     {"reason", "role", "old_role", "new_role", "status", "old_status", "new_status", "fields",
      "target_user_id", "count", "kind", "filename", "source_id", "into_id", "confirmed", "skipped",
-     "match_ids"}
+     "match_ids", "reviewed_by", "approved_by"}
 )  # fmt: skip
 
 

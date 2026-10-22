@@ -763,3 +763,191 @@ def test_no_computed_flag_is_ever_stored() -> None:
         for row in s.scalars(select(EstimateLine)):
             assert not {"unreviewed_source", "source_changed"} & set(row.flags or {})
             assert (row.total is None) == (row.material_cost is None) == (row.markup is None)
+
+
+# --- status moves: review, reopen, approve ---------------------------------------------------
+
+
+def _resolve_all(actor, est, price_first: bool = True) -> None:
+    """Price the first usable line with its confirmed match, exclude every other line."""
+    lines = _lines(actor, est)
+    first = _usable(actor, est)[0] if price_first else None
+    for line in lines:
+        if first is not None and line["id"] == first["id"]:
+            r = _put(actor, line, match_suggestion_id=line["candidates"][0]["match_id"])
+        else:
+            r = _put(actor, line, exclude_reason="Not needed")
+        assert r.status_code == 200, r.text
+
+
+def _move(actor, est, action: str):
+    return actor.client.post(f"{API}/estimates/{est['id']}/{action}")
+
+
+def _ready(email: str):
+    actor, tender_id, est = _priced_setup(email)
+    _resolve_all(actor, est)
+    return actor, tender_id, est
+
+
+def test_review_and_approve_freeze_totals_actor_and_time() -> None:
+    actor, _, est = _ready("st1@example.com")
+    live_totals = actor.client.get(f"{API}/estimates/{est['id']}").json()["totals"]
+    assert Decimal(live_totals["total_inc_vat"]) > 0
+    r = _move(actor, est, "review")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "reviewed" and body["totals"] == live_totals
+    assert body["reviewed_by"] == actor.me["user_id"] and body["reviewed_at"]
+    assert body["approved_by"] is None and body["incomplete"] is False
+    a = _move(actor, est, "approve")
+    assert a.status_code == 200, a.text
+    done = a.json()
+    assert done["status"] == "approved" and done["totals"] == live_totals
+    assert done["approved_by"] == actor.me["user_id"] and done["approved_at"]
+    assert done["reviewed_by"] == actor.me["user_id"]
+    # every write is refused once frozen
+    line = _lines(actor, est)[0]
+    for r2 in (
+        _put(actor, line, exclude_reason="x"),
+        actor.client.post(f"{LINES}/{line['id']}/refresh"),
+        actor.client.patch(f"{API}/estimates/{est['id']}", json={"vat_rate": "1"}),
+        _move(actor, est, "review"),
+        _move(actor, est, "approve"),
+        _move(actor, est, "reopen"),
+    ):
+        assert r2.status_code == 409 and r2.json()["error"]["code"] == "estimate_frozen", r2.text
+    # editing the BoQ later does not move the frozen totals
+    from app.modules.estimating.models import BoqItem
+
+    with session_scope() as s:
+        for item in s.scalars(select(BoqItem)):
+            item.quantity = Decimal("999")
+    again = actor.client.get(f"{API}/estimates/{est['id']}").json()
+    assert again["totals"] == live_totals and again["status"] == "approved"
+
+
+def test_roles_for_review_approve_and_reopen() -> None:
+    actor, _, est = _ready("st2@example.com")
+    estimator = add_member(actor, "st2e@example.com", "estimator")
+    manager = add_member(actor, "st2m@example.com", "project_manager")
+    reviewer = add_member(actor, "st2r@example.com", "reviewer")
+    for who in (reviewer, manager):
+        assert _move(who, est, "review").status_code == 403
+    assert _move(estimator, est, "review").status_code == 200
+    assert _move(estimator, est, "approve").status_code == 403
+    assert _move(reviewer, est, "approve").status_code == 403
+    assert _move(manager, est, "reopen").status_code == 403
+    assert _move(manager, est, "approve").status_code == 200
+    other = register("st2o@example.com")
+    for action in ("review", "reopen", "approve"):
+        assert _move(other, est, action).status_code == 404
+        assert _move(actor, {"id": str(uuid4())}, action).status_code == 404
+
+
+def test_not_ready_lists_blockers_by_code() -> None:
+    actor, tender_id, est = _priced_setup("st3@example.com")
+    r = _move(actor, est, "review")
+    err = r.json()["error"]
+    assert r.status_code == 409 and err["code"] == "estimate_not_ready"
+    blockers = err["details"]["blockers"]
+    assert len(blockers) == 20 and {b["code"] for b in blockers} == {"unresolved"}
+    assert {b["line_id"] for b in blockers} == {x["id"] for x in _lines(actor, est)}
+    assert _move(actor, est, "approve").status_code == 409  # a draft cannot be approved
+    # a changed line
+    _resolve_all(actor, est)
+    priced = next(x for x in _lines(actor, est) if x["status"] == "priced")
+    from app.modules.estimating.models import BoqItem
+
+    with session_scope() as s:
+        s.get(BoqItem, UUID(priced["boq_item_id"])).quantity = Decimal("123")
+    err = _move(actor, est, "review").json()["error"]
+    assert err["code"] == "estimate_not_ready"
+    assert err["details"]["blockers"] == [{"line_id": priced["id"], "code": "source_changed"}]
+    # an unreviewed source
+    with session_scope() as s:
+        item = s.get(BoqItem, UUID(priced["boq_item_id"]))
+        item.quantity = Decimal(priced["quantity"])
+        item.review_status = "unreviewed"
+    err = _move(actor, est, "review").json()["error"]
+    assert err["details"]["blockers"] == [{"line_id": priced["id"], "code": "unreviewed_source"}]
+    with session_scope() as s:
+        s.get(BoqItem, UUID(priced["boq_item_id"])).review_status = "confirmed"
+    assert _move(actor, est, "review").status_code == 200
+
+
+def test_approving_a_draft_is_refused_and_no_lines_blocks() -> None:
+    actor, _ = _estimates_ready("st4@example.com")
+    empty = make_tender(actor, "Empty")
+    est = actor.client.post(f"{TENDERS}/{empty}/estimates").json()
+    err = _move(actor, est, "review").json()["error"]
+    assert err["code"] == "estimate_not_ready"
+    assert err["details"]["blockers"] == [{"line_id": None, "code": "no_lines"}]
+    full, _, est2 = _ready("st4b@example.com")
+    r = _move(full, est2, "approve")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "estimate_not_reviewed"
+
+
+def test_all_excluded_estimate_approves_with_zero_totals() -> None:
+    actor, _, est = _priced_setup("st5@example.com")
+    _resolve_all(actor, est, price_first=False)
+    assert _move(actor, est, "review").status_code == 200
+    done = _move(actor, est, "approve").json()
+    assert done["status"] == "approved" and done["excluded"] == 20
+    assert done["totals"] == {
+        "subtotal_cost": "0.00", "markup_total": "0.00", "subtotal_ex_vat": "0.00",
+        "vat_total": "0.00", "total_inc_vat": "0.00",
+    }  # fmt: skip
+
+
+def test_reopen_returns_to_draft_and_refuses_when_another_draft_exists() -> None:
+    actor, tender_id, est = _ready("st6@example.com")
+    assert _move(actor, est, "reopen").status_code == 409  # a draft cannot be reopened
+    assert _move(actor, est, "review").status_code == 200
+    r = _move(actor, est, "reopen")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "draft" and body["reviewed_by"] is None and body["reviewed_at"] is None
+    assert _move(actor, est, "review").status_code == 200
+    second = actor.client.post(f"{TENDERS}/{tender_id}/estimates")
+    assert second.status_code == 201, second.text  # no draft now, so a new version is allowed
+    blocked = _move(actor, est, "reopen")
+    assert blocked.status_code == 409 and blocked.json()["error"]["code"] == "draft_exists"
+    assert actor.client.get(f"{API}/estimates/{est['id']}").json()["status"] == "reviewed"
+
+
+def test_current_approved_version_flag_and_audit_rows() -> None:
+    actor, tender_id, est = _ready("st7@example.com")
+    assert _move(actor, est, "review").status_code == 200
+    assert _move(actor, est, "approve").status_code == 200
+    v2 = actor.client.post(f"{TENDERS}/{tender_id}/estimates").json()
+    _resolve_all(actor, v2)
+    assert _move(actor, v2, "review").status_code == 200
+    assert _move(actor, v2, "reopen").status_code == 200
+    assert _move(actor, v2, "review").status_code == 200
+    assert _move(actor, v2, "approve").status_code == 200
+    v3 = actor.client.post(f"{TENDERS}/{tender_id}/estimates").json()
+    rows = actor.client.get(f"{TENDERS}/{tender_id}/estimates").json()
+    assert [(r["version"], r["status"], r["is_current_approved"]) for r in rows] == [
+        (3, "draft", False), (2, "approved", True), (1, "approved", False),
+    ]  # fmt: skip
+    assert v3["version"] == 3
+    with session_scope() as s:
+        events = s.scalars(
+            select(AuditEvent).where(
+                AuditEvent.organisation_id == UUID(actor.org_id),
+                AuditEvent.action.in_(
+                    ["estimate_reviewed", "estimate_reopened", "estimate_approved"]
+                ),
+            )
+        ).all()
+        by_action: dict[str, list] = {}
+        for e in events:
+            by_action.setdefault(e.action, []).append(e.event_metadata)
+    assert len(by_action["estimate_reviewed"]) == 3 and len(by_action["estimate_reopened"]) == 1
+    approved = by_action["estimate_approved"]
+    assert len(approved) == 2
+    for meta in approved:
+        assert meta["reviewed_by"] == actor.me["user_id"]
+        assert meta["approved_by"] == actor.me["user_id"] and meta["status"] == "approved"
+        assert not {"total_inc_vat", "totals"} & set(meta)

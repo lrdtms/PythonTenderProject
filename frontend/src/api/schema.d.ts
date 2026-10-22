@@ -349,6 +349,23 @@ export interface paths {
         patch: operations["patch_estimate_api_v1_estimates__estimate_id__patch"];
         trace?: never;
     };
+    "/api/v1/estimates/{estimate_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Estimate */
+        post: operations["approve_estimate_api_v1_estimates__estimate_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/estimates/{estimate_id}/lines": {
         parameters: {
             query?: never;
@@ -360,6 +377,40 @@ export interface paths {
         get: operations["get_lines_api_v1_estimates__estimate_id__lines_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reopen Estimate */
+        post: operations["reopen_estimate_api_v1_estimates__estimate_id__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Estimate */
+        post: operations["review_estimate_api_v1_estimates__estimate_id__review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1317,6 +1368,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Current Approved
+             * @default false
+             */
+            is_current_approved: boolean;
             /** Reviewed At */
             reviewed_at: string | null;
             /** Status */
@@ -2857,6 +2913,37 @@ export interface operations {
             };
         };
     };
+    approve_estimate_api_v1_estimates__estimate_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_lines_api_v1_estimates__estimate_id__lines_get: {
         parameters: {
             query?: {
@@ -2879,6 +2966,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EstimateLineDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_estimate_api_v1_estimates__estimate_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_estimate_api_v1_estimates__estimate_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
                 };
             };
             /** @description Validation Error */

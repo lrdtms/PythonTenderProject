@@ -1080,6 +1080,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_current_approved": {
+            "default": false,
+            "title": "Is Current Approved",
+            "type": "boolean"
+          },
           "reviewed_at": {
             "anyOf": [
               {
@@ -4602,6 +4607,49 @@
         ]
       }
     },
+    "/api/v1/estimates/{estimate_id}/approve": {
+      "post": {
+        "operationId": "approve_estimate_api_v1_estimates__estimate_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Estimate",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
     "/api/v1/estimates/{estimate_id}/lines": {
       "get": {
         "operationId": "get_lines_api_v1_estimates__estimate_id__lines_get",
@@ -4689,6 +4737,92 @@
           }
         },
         "summary": "Get Lines",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimates/{estimate_id}/reopen": {
+      "post": {
+        "operationId": "reopen_estimate_api_v1_estimates__estimate_id__reopen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reopen Estimate",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimates/{estimate_id}/review": {
+      "post": {
+        "operationId": "review_estimate_api_v1_estimates__estimate_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Estimate",
         "tags": [
           "estimates"
         ]
