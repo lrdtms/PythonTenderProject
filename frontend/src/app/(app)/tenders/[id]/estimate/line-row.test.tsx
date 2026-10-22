@@ -64,7 +64,7 @@ describe("LineRow", () => {
   it("shows an exclusion with its reason and a manual price", () => {
     const { rerender } = render(<ul><LineRow line={makeEstimateLine({ status: "excluded", price_source: "excluded", exclude_reason: "Client supplies it" })} currency="ZAR" /></ul>);
     expect(screen.getByText("Excluded: Client supplies it")).toBeInTheDocument();
-    rerender(<ul><LineRow line={makeEstimateLine({ status: "priced", price_source: "manual", quoted_unit_price: "10.0000", quoted_currency: "ZAR", quoted_includes_vat: false })} currency="ZAR" /></ul>);
+    rerender(<ul><LineRow line={makeEstimateLine({ status: "priced", price_source: "manual", unit_price_ex_vat: "10.0000", quoted_unit_price: null })} currency="ZAR" /></ul>);
     expect(screen.getByText(/Manual price: ZAR 10\.0000/)).toBeInTheDocument();
   });
 

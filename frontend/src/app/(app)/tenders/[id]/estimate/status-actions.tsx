@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   type Estimate,
@@ -34,6 +34,10 @@ export function StatusActions({
   const approve = useApproveEstimate();
   const create = useCreateEstimate(estimate.tender_id);
   const [confirming, setConfirming] = useState(false);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (confirming) confirmRef.current?.focus();
+  }, [confirming]);
 
   const all = [review, reopen, approve, create];
   const pending = all.some((m) => m.isPending);
@@ -76,9 +80,10 @@ export function StatusActions({
           </button>
         ) : null}
         {showApprove && confirming ? (
-          <span role="group" aria-label="Confirm approval" className="flex flex-wrap items-center gap-2 rounded border p-2 text-sm">
+          <span role="group" aria-label="Confirm approval" aria-live="polite" className="flex flex-wrap items-center gap-2 rounded border p-2 text-sm">
             <span>Approve this estimate? It can no longer be changed.</span>
             <button
+              ref={confirmRef}
               type="button"
               disabled={pending}
               className={BUTTON}

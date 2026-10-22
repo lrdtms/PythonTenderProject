@@ -103,6 +103,7 @@ describe("status actions", () => {
     renderSignedIn(<EstimateView />);
     await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
     expect(screen.getByText("Approve this estimate? It can no longer be changed.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yes, approve" })).toHaveFocus();
     expect(callsTo(fetchMock, "POST", `${E(reviewed)}/approve`)).toHaveLength(0);
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByText(/It can no longer be changed/)).toBeNull();

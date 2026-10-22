@@ -21,16 +21,20 @@ const AMOUNTS: [string, keyof EstimateLine][] = [
   ["Line total", "total"],
 ];
 
-function chosenSource(line: EstimateLine): string | null {
+function chosenSource(line: EstimateLine, currency: string): string | null {
   if (line.price_source === "excluded" || line.status === "excluded")
     return `Excluded: ${line.exclude_reason ?? "no reason given"}`;
+  if (line.price_source === "manual") {
+    // A manual price is stored as the ex-VAT unit price; the quoted fields are empty for it.
+    const manual = priceText({ unit_price: line.unit_price_ex_vat, currency, prices_include_vat: false });
+    return `Manual price: ${manual}`;
+  }
   const price = priceText({
     unit_price: line.quoted_unit_price,
     currency: line.quoted_currency,
     prices_include_vat: line.quoted_includes_vat,
   });
   if (line.price_source === "supplier") return `Price from ${line.supplier_name ?? "a supplier"}: ${price}`;
-  if (line.price_source === "manual") return `Manual price: ${price}`;
   return null;
 }
 
@@ -51,7 +55,7 @@ export function LineRow({
   // A frozen estimate keeps its chosen price but not the candidate list, so only an open line can say "none".
   const noCandidatesNote = line.price_source === "unresolved";
   const status = STATUS[line.status];
-  const source = chosenSource(line);
+  const source = chosenSource(line, currency);
   const amounts = AMOUNTS.filter(([, key]) => line[key] !== null && line[key] !== undefined);
   return (
     <li id={`line-${line.id}`} className="rounded border border-zinc-300 p-3 dark:border-zinc-700">

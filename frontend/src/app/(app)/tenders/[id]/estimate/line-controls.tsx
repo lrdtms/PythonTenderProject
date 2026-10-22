@@ -31,13 +31,26 @@ export function labourError(v: string): string | null {
 
 type Cache = InfiniteData<EstimateLine[]>;
 
-/** Optimistic edit of one line in every cached lines page. Returns the rollback. */
-function patchLine(client: ReturnType<typeof useQueryClient>, lineId: string, patch: Partial<EstimateLine>) {
-  const before = client.getQueriesData<Cache>({ queryKey: ["estimate-lines"] });
-  client.setQueriesData<Cache>({ queryKey: ["estimate-lines"] }, (data) =>
-    data ? { ...data, pages: data.pages.map((p) => p.map((l) => (l.id === lineId ? { ...l, ...patch } : l))) } : data,
-  );
-  return () => before.forEach(([key, data]) => client.setQueryData(key, data));
+/** Optimistic edit of one line in every cached lines page. The rollback restores only that line, so a failed
+ * write cannot undo another row's saved write. In-flight list fetches are cancelled first so they cannot
+ * overwrite the patch. */
+async function patchLine(client: ReturnType<typeof useQueryClient>, lineId: string, patch: Partial<EstimateLine>) {
+  await client.cancelQueries({ queryKey: ["estimate-lines"] });
+  let original: EstimateLine | undefined;
+  for (const [, data] of client.getQueriesData<Cache>({ queryKey: ["estimate-lines"] })) {
+    original ??= data?.pages.flat().find((l) => l.id === lineId);
+  }
+  const mapLine = (fn: (l: EstimateLine) => EstimateLine) =>
+    client.setQueriesData<Cache>({ queryKey: ["estimate-lines"] }, (data) =>
+      data ? { ...data, pages: data.pages.map((p) => p.map((l) => (l.id === lineId ? fn(l) : l))) } : data,
+    );
+  mapLine((l) => ({ ...l, ...patch }));
+  return () => {
+    if (original) {
+      const back = original;
+      mapLine(() => back);
+    }
+  };
 }
 
 const messageOf = (error: unknown) => (error instanceof ApiError ? errorText(error.code, error.message) : FAILED);
@@ -55,21 +68,29 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
   const [labour, setLabour] = useState(line.labour_rate ?? "");
   const [markup, setMarkup] = useState(line.markup_override_percent ?? "");
   const [seen, setSeen] = useState(`${line.labour_rate}|${line.markup_override_percent}`);
+  const [dirty, setDirty] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
   const [acked, setAcked] = useState<Record<string, boolean>>(() =>
     line.match_suggestion_id && line.unit_mismatch_acknowledged ? { [line.match_suggestion_id]: true } : {},
   );
 
-  // The fields follow the server's values when a refetch brings different ones.
+  // The fields follow the server's values when a refetch brings different ones, unless the user is editing.
   const server = `${line.labour_rate}|${line.markup_override_percent}`;
   if (server !== seen) {
     setSeen(server);
-    setLabour(line.labour_rate ?? "");
-    setMarkup(line.markup_override_percent ?? "");
+    if (!dirty) {
+      setLabour(line.labour_rate ?? "");
+      setMarkup(line.markup_override_percent ?? "");
+    }
   }
 
   const busy = price.isPending || refresh.isPending;
   const quantityMissing = line.quantity === null || line.flags.includes("quantity_missing");
+  const excluded = line.price_source === "excluded" || line.status === "excluded";
   const changed = line.flags.includes("source_changed") || line.status === "changed";
+
+  const pickedCand = line.candidates.find((x) => x.match_id === picked);
+  const pickedOk = !!pickedCand && (!pickedCand.warnings.includes("unit_mismatch") || !!acked[pickedCand.match_id]);
 
   function rates(): { labour_rate: string | null; markup_override_percent: string | null } | null {
     const l = labour.trim();
@@ -82,19 +103,21 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
     return { labour_rate: l || null, markup_override_percent: m || null };
   }
 
-  function send(source: Partial<LinePut>, optimistic: Partial<EstimateLine>, acknowledge = false) {
+  async function send(source: Partial<LinePut>, optimistic: Partial<EstimateLine>, acknowledge = false) {
     setMessage(null);
     const r = rates();
     if (!r) return;
     const body: LinePut = { ...source, ...r, unit_mismatch_acknowledged: acknowledge };
-    const rollback = patchLine(client, line.id, { ...optimistic, ...r, unit_mismatch_acknowledged: acknowledge });
+    const rollback = await patchLine(client, line.id, { ...optimistic, ...r, unit_mismatch_acknowledged: acknowledge });
     price.mutate(
       { lineId: line.id, body },
       {
+        onSuccess: () => setDirty(false),
         onError: (error) => {
           rollback();
           setMessage(messageOf(error));
           if (error instanceof ApiError && error.code === "stale_match") {
+            setPicked(null);
             void client.invalidateQueries({ queryKey: ["estimate-lines"] });
           }
         },
@@ -102,7 +125,9 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
     );
   }
 
-  function choose(c: EstimateLine["candidates"][number]) {
+  function choose() {
+    const c = line.candidates.find((x) => x.match_id === picked);
+    if (!c) return setMessage("Choose a supplier price first.");
     const mismatch = c.warnings.includes("unit_mismatch");
     if (mismatch && !acked[c.match_id]) {
       setMessage(errorText("unit_mismatch_unacknowledged"));
@@ -134,7 +159,8 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
       {
         price_source: "manual",
         status: "priced",
-        quoted_unit_price: v,
+        unit_price_ex_vat: v,
+        quoted_unit_price: null,
         match_suggestion_id: null,
         supplier_id: null,
         supplier_name: null,
@@ -154,8 +180,7 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
   function saveRates() {
     if (line.price_source === "supplier" && line.match_suggestion_id)
       send({ match_suggestion_id: line.match_suggestion_id }, {}, line.unit_mismatch_acknowledged);
-    else if (line.price_source === "manual" && line.quoted_unit_price) send({ manual_unit_price: line.quoted_unit_price }, {});
-    else if (line.price_source === "excluded" && line.exclude_reason) send({ exclude_reason: line.exclude_reason }, {});
+    else if (line.price_source === "manual" && line.unit_price_ex_vat) send({ manual_unit_price: line.unit_price_ex_vat }, {});
     else setMessage("Choose a price for this line first, then save the rates.");
   }
 
@@ -173,9 +198,8 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
                     <input
                       type="radio"
                       name={`${uid}-candidate`}
-                      checked={line.match_suggestion_id === c.match_id}
-                      disabled={mismatch && !acked[c.match_id]}
-                      onChange={() => choose(c)}
+                      checked={picked === c.match_id}
+                      onChange={() => setPicked(c.match_id)}
                     />
                     <span className="font-medium">{c.supplier_name}</span>{" "}
                     <span>{priceText({ unit_price: c.unit_price, currency: c.currency, prices_include_vat: c.includes_vat })}</span>
@@ -199,6 +223,9 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
               );
             })}
           </ul>
+          <button type="button" className={`${BUTTON} mt-1`} disabled={busy || !pickedOk} onClick={choose}>
+            Use this price
+          </button>
         </fieldset>
       ) : null}
 
@@ -226,19 +253,27 @@ export function LineControls({ line, basis }: { line: EstimateLine; basis: Marku
         </button>
       </div>
 
-      {!quantityMissing ? (
+      {!quantityMissing && !excluded ? (
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs">
             <span className="mr-1 font-medium">Labour rate</span>
-            <input type="text" inputMode="decimal" value={labour} onChange={(e) => setLabour(e.target.value)} className={`${INPUT} w-24`} disabled={busy} />
+            <input type="text" inputMode="decimal" value={labour} onChange={(e) => {
+              setLabour(e.target.value);
+              setDirty(true);
+            }} className={`${INPUT} w-24`} disabled={busy} />
           </label>
           <label className="text-xs">
             <span className="mr-1 font-medium">Markup override %</span>
-            <input type="text" inputMode="decimal" value={markup} onChange={(e) => setMarkup(e.target.value)} className={`${INPUT} w-24`} disabled={busy} />
+            <input type="text" inputMode="decimal" value={markup} onChange={(e) => {
+              setMarkup(e.target.value);
+              setDirty(true);
+            }} className={`${INPUT} w-24`} disabled={busy} />
           </label>
-          <button type="button" className={BUTTON} disabled={busy} onClick={saveRates}>
-            Save rates
-          </button>
+          {line.price_source === "supplier" || line.price_source === "manual" ? (
+            <button type="button" className={BUTTON} disabled={busy} onClick={saveRates}>
+              Save rates
+            </button>
+          ) : null}
         </div>
       ) : null}
 

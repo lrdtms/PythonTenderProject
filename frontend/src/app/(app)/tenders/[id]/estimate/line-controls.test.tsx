@@ -58,6 +58,10 @@ function routes(over: Record<string, () => Response | Promise<Response>> = {}, l
 const rowOf = (text: string) => screen.getByText(new RegExp(text)).closest("li") as HTMLElement;
 const bodyOf = (call: unknown[] | undefined) => JSON.parse(String((call?.[1] as RequestInit).body));
 const PUT = (id: string) => `/api/v1/estimate-lines/${id}`;
+const pick = async (row: HTMLElement, name: RegExp) => {
+  await userEvent.click(within(row).getByRole("radio", { name }));
+  await userEvent.click(within(row).getByRole("button", { name: "Use this price" }));
+};
 
 describe("line controls", () => {
   it("sends match_suggestion_id when a candidate is chosen, with the current rates, and nothing is pre-selected", async () => {
@@ -66,7 +70,7 @@ describe("line controls", () => {
     await screen.findByText(/LED panel/);
     const row = rowOf("LED panel");
     expect(row.querySelectorAll("input[type=radio]:checked")).toHaveLength(0);
-    await userEvent.click(within(row).getByRole("radio", { name: /Zulu Supplies/ }));
+    await pick(row, /Zulu Supplies/);
     await waitFor(() => expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(1));
     expect(bodyOf(callsTo(fetchMock, "PUT", PUT(L1))[0])).toEqual({
       match_suggestion_id: ZULU.match_id,
@@ -91,11 +95,12 @@ describe("line controls", () => {
     renderSignedIn(<EstimateView />);
     await screen.findByText(/LED panel/);
     const row = rowOf("LED panel");
-    const radio = within(row).getByRole("radio", { name: /Alpha Traders/ });
-    expect(radio).toBeDisabled();
+    await userEvent.click(within(row).getByRole("radio", { name: /Alpha Traders/ }));
+    const use = within(row).getByRole("button", { name: "Use this price" });
+    expect(use).toBeDisabled();
     await userEvent.click(within(row).getByRole("checkbox", { name: /different unit/i }));
-    expect(radio).toBeEnabled();
-    await userEvent.click(radio);
+    expect(use).toBeEnabled();
+    await userEvent.click(use);
     await waitFor(() => expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(1));
     expect(bodyOf(callsTo(fetchMock, "PUT", PUT(L1))[0])).toMatchObject({
       match_suggestion_id: ALPHA.match_id,
@@ -158,14 +163,14 @@ describe("line controls", () => {
     const labour = within(row).getByLabelText("Labour rate");
     await userEvent.clear(labour);
     await userEvent.type(labour, "1.23456");
-    await userEvent.click(within(row).getByRole("radio", { name: /Zulu Supplies/ }));
+    await pick(row, /Zulu Supplies/);
     expect(await within(row).findByRole("alert")).toHaveTextContent(/labour rate/i);
     await userEvent.clear(labour);
     await userEvent.type(labour, "5");
     const markup = within(row).getByLabelText("Markup override %");
     await userEvent.clear(markup);
     await userEvent.type(markup, "1001");
-    await userEvent.click(within(row).getByRole("radio", { name: /Zulu Supplies/ }));
+    await pick(row, /Zulu Supplies/);
     expect(await within(row).findByRole("alert")).toHaveTextContent(/markup/i);
     expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(0);
   });
@@ -177,7 +182,7 @@ describe("line controls", () => {
     const row = rowOf("LED panel");
     await userEvent.clear(within(row).getByLabelText("Labour rate"));
     await userEvent.clear(within(row).getByLabelText("Markup override %"));
-    await userEvent.click(within(row).getByRole("radio", { name: /Zulu Supplies/ }));
+    await pick(row, /Zulu Supplies/);
     await waitFor(() => expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(1));
     expect(bodyOf(callsTo(fetchMock, "PUT", PUT(L1))[0])).toMatchObject({ labour_rate: null, markup_override_percent: null });
   });
@@ -212,7 +217,7 @@ describe("line controls", () => {
     await screen.findByText(/LED panel/);
     const row = rowOf("LED panel");
     const before = callsTo(fetchMock, "GET", `${E}/lines`).length;
-    await userEvent.click(within(row).getByRole("radio", { name: /Zulu Supplies/ }));
+    await pick(row, /Zulu Supplies/);
     expect(await within(row).findByText(/out of date\. Choose it again/)).toBeInTheDocument();
     await waitFor(() => expect(callsTo(fetchMock, "GET", `${E}/lines`).length).toBeGreaterThan(before));
     expect(within(rowOf("LED panel")).getByRole("radio", { name: /Zulu Supplies/ })).not.toBeChecked();
@@ -223,7 +228,7 @@ describe("line controls", () => {
     renderSignedIn(<EstimateView />);
     await screen.findByText(/LED panel/);
     const row = rowOf("LED panel");
-    await userEvent.click(within(row).getByRole("radio", { name: /Zulu Supplies/ }));
+    await pick(row, /Zulu Supplies/);
     expect(await within(row).findByText(/no longer a draft/)).toBeInTheDocument();
   });
 
@@ -242,5 +247,123 @@ describe("line controls", () => {
     await screen.findByText(/LED panel/);
     expect(document.querySelector("input[type=text], input[type=radio]")).toBeNull();
     expect(screen.queryByRole("button", { name: /exclude|refresh|use manual/i })).toBeNull();
+  });
+});
+
+describe("line controls, review fixes", () => {
+  it("sends nothing when a radio is only selected or moved with the arrow keys", async () => {
+    const fetchMock = mockApi(routes(), estimator);
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/LED panel/);
+    const row = rowOf("LED panel");
+    expect(within(row).getByRole("button", { name: "Use this price" })).toBeDisabled();
+    await userEvent.click(within(row).getByRole("radio", { name: /Zulu Supplies/ }));
+    await userEvent.keyboard("{ArrowDown}{ArrowUp}");
+    expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(0);
+    expect(within(row).getByRole("button", { name: "Use this price" })).toBeEnabled();
+  });
+
+  const manualLine = makeEstimateLine({
+    id: L1, description: "LED panel", status: "priced", price_source: "manual", unit_price_ex_vat: "99.5000",
+    quoted_unit_price: null, labour_rate: "3.0000", candidates: [ZULU],
+  });
+
+  it("saves rates on a manual line by resending its price as manual_unit_price", async () => {
+    const fetchMock = mockApi(routes({ [`PUT ${PUT(L1)}`]: () => respond(200, manualLine) }, [manualLine]), estimator);
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/LED panel/);
+    expect(screen.getByText(/Manual price: ZAR 99\.5000/)).toBeInTheDocument();
+    const row = rowOf("LED panel");
+    const markup = within(row).getByLabelText("Markup override %");
+    await userEvent.type(markup, "5");
+    await userEvent.click(within(row).getByRole("button", { name: "Save rates" }));
+    await waitFor(() => expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(1));
+    expect(bodyOf(callsTo(fetchMock, "PUT", PUT(L1))[0])).toEqual({
+      manual_unit_price: "99.5000", labour_rate: "3.0000", markup_override_percent: "5", unit_mismatch_acknowledged: false,
+    });
+  });
+
+  it("saves rates on a supplier line by resending its match", async () => {
+    const supplier = makeEstimateLine({
+      id: L1, description: "LED panel", status: "priced", price_source: "supplier", match_suggestion_id: ZULU.match_id, candidates: [ZULU],
+    });
+    const fetchMock = mockApi(routes({ [`PUT ${PUT(L1)}`]: () => respond(200, supplier) }, [supplier]), estimator);
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/LED panel/);
+    const row = rowOf("LED panel");
+    await userEvent.type(within(row).getByLabelText("Labour rate"), "4");
+    await userEvent.click(within(row).getByRole("button", { name: "Save rates" }));
+    await waitFor(() => expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(1));
+    expect(bodyOf(callsTo(fetchMock, "PUT", PUT(L1))[0])).toMatchObject({ match_suggestion_id: ZULU.match_id, labour_rate: "4", markup_override_percent: null });
+  });
+
+  it("offers no rate fields or Save rates on an excluded line", async () => {
+    const excluded = makeEstimateLine({ id: L1, description: "LED panel", status: "excluded", price_source: "excluded", exclude_reason: "n/a" });
+    mockApi(routes({}, [excluded]), estimator);
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/LED panel/);
+    const row = rowOf("LED panel");
+    expect(within(row).queryByLabelText("Labour rate")).toBeNull();
+    expect(within(row).queryByLabelText("Markup override %")).toBeNull();
+    expect(within(row).queryByRole("button", { name: "Save rates" })).toBeNull();
+  });
+
+  it("keeps typed rates after a failed action", async () => {
+    mockApi(routes({ [`PUT ${PUT(L1)}`]: () => respond(409, errorBody("estimate_frozen", "x")) }), estimator);
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/LED panel/);
+    const row = rowOf("LED panel");
+    const labour = within(row).getByLabelText("Labour rate");
+    await userEvent.clear(labour);
+    await userEvent.type(labour, "8");
+    await pick(row, /Zulu Supplies/);
+    expect(await within(row).findByText(/no longer a draft/)).toBeInTheDocument();
+    expect(within(rowOf("LED panel")).getByLabelText("Labour rate")).toHaveValue("8");
+  });
+
+  it("still lists the candidates of a line without a quantity, read-only", async () => {
+    const noQty = makeEstimateLine({ id: L2, description: "Provisional sum", quantity: null, flags: ["quantity_missing"], candidates: [ZULU] });
+    mockApi(routes({}, [noQty]), estimator);
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/Provisional sum/);
+    const row = rowOf("Provisional sum");
+    expect(within(row).getByText("Zulu Supplies")).toBeInTheDocument();
+    expect(within(row).queryByRole("radio")).toBeNull();
+  });
+
+  it("rolls back only the failed row when two rows are in flight", async () => {
+    const a = makeEstimateLine({ id: L1, description: "LED panel", candidates: [ZULU] });
+    const b = makeEstimateLine({ id: L3, item_no: "2.1", description: "Cable tray", candidates: [cand(3, "Beta Cables", "5.0000")] });
+    const bSaved = makeEstimateLine({
+      ...b, status: "priced", price_source: "supplier", supplier_name: "Beta Cables", match_suggestion_id: b.candidates[0].match_id, quoted_unit_price: "5.0000",
+    });
+    let saved = false;
+    let failA: () => void = () => {};
+    let okB: () => void = () => {};
+    const fetchMock = mockApi(
+      routes(
+        {
+          [`PUT ${PUT(L1)}`]: () => new Promise<Response>((r) => { failA = () => r(respond(409, errorBody("estimate_frozen", "x"))); }),
+          [`PUT ${PUT(L3)}`]: () => new Promise<Response>((r) => { okB = () => r(respond(200, bSaved)); }),
+          [`GET ${E}/lines`]: () => respond(200, saved ? [a, bSaved] : [a, b]),
+        },
+        [a, b],
+      ),
+      estimator,
+    );
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/LED panel/);
+    await pick(rowOf("LED panel"), /Zulu Supplies/);
+    await pick(rowOf("Cable tray"), /Beta Cables/);
+    await waitFor(() => expect(within(rowOf("Cable tray")).getByText(/Price from Beta Cables/)).toBeInTheDocument());
+    expect(within(rowOf("LED panel")).getByText(/Price from Zulu Supplies/)).toBeInTheDocument();
+    await waitFor(() => expect(callsTo(fetchMock, "PUT", PUT(L3))).toHaveLength(1));
+    await waitFor(() => expect(callsTo(fetchMock, "PUT", PUT(L1))).toHaveLength(1));
+    saved = true;
+    okB();
+    failA();
+    expect(await within(rowOf("LED panel")).findByText(/no longer a draft/)).toBeInTheDocument();
+    expect(within(rowOf("LED panel")).queryByText(/Price from Zulu Supplies/)).toBeNull();
+    expect(within(rowOf("Cable tray")).getByText(/Price from Beta Cables/)).toBeInTheDocument();
   });
 });

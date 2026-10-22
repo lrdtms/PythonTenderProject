@@ -145,7 +145,7 @@ function EstimateBody({
                 key={line.id}
                 line={line}
                 currency={estimate.currency}
-                candidatesInControls={editable}
+                candidatesInControls={editable && line.quantity !== null && !line.flags.includes("quantity_missing")}
                 controls={editable ? <LineControls line={line} basis={estimate.markup_basis} /> : undefined}
               />
             ))}
