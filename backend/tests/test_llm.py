@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from app.config import get_settings
 from app.infrastructure.llm import (
     FakeLLM,
     FallbackLLM,
@@ -148,6 +149,8 @@ def test_kimi_request_and_response(server) -> None:
     assert result.raw_json == '{"requirements": []}'
     assert (result.done_reason, result.tokens_in, result.tokens_out) == ("stop", 42, 7)
     assert seen["model"] == "kimi-k2.6" and seen["stream"] is False
+    # A hosted model that ignores "thinking: disabled" must still be bounded (billed tokens).
+    assert seen["max_tokens"] == get_settings().llm_num_predict > 0
     assert seen["messages"][0] == {"role": "system", "content": "sys"}
     assert seen["response_format"]["type"] == "json_schema"
     assert seen["response_format"]["json_schema"]["schema"] == SCHEMA

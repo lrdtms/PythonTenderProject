@@ -130,6 +130,9 @@ class KimiLLM:
             },
             # Thinking off: extraction does not need it and it blows the per-call timeout.
             "thinking": {"type": "disabled"},
+            # Some hosted models ignore the flag above and reason until they run out of tokens
+            # (billed, no JSON). A hard output cap, the same as Ollama's, bounds every call.
+            "max_tokens": get_settings().llm_num_predict,
             # No temperature: kimi-k2.x only accepts its fixed default and 400s on anything else.
             **(options or {}),
         }
