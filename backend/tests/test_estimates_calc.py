@@ -153,3 +153,10 @@ def test_no_float_in_estimates_module():
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             assert not (isinstance(node, ast.Name) and node.id == "float"), path
             assert not (isinstance(node, ast.Constant) and isinstance(node.value, float)), path
+
+
+def test_validate_settings_markup_cap_on_cost_basis():
+    validate_settings(Settings(D("15"), "cost", D("1000")))
+    with pytest.raises(ValueError):
+        validate_settings(Settings(D("15"), "cost", D("1000.01")))
+    validate_settings(Settings(D("15"), "selling_price", D("99.99")))

@@ -1171,6 +1171,80 @@
         "title": "PageDetailDTO",
         "type": "object"
       },
+      "PricingDefaultsDTO": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "default_markup_percent": {
+            "title": "Default Markup Percent",
+            "type": "string"
+          },
+          "markup_basis": {
+            "enum": [
+              "cost",
+              "selling_price"
+            ],
+            "title": "Markup Basis",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "vat_rate": {
+            "title": "Vat Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "vat_rate",
+          "markup_basis",
+          "default_markup_percent",
+          "updated_at"
+        ],
+        "title": "PricingDefaultsDTO",
+        "type": "object"
+      },
+      "PricingDefaultsPut": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "default_markup_percent": {
+            "pattern": "^-?\\d{1,14}(\\.\\d{1,4})?$",
+            "title": "Default Markup Percent",
+            "type": "string"
+          },
+          "markup_basis": {
+            "enum": [
+              "cost",
+              "selling_price"
+            ],
+            "title": "Markup Basis",
+            "type": "string"
+          },
+          "vat_rate": {
+            "pattern": "^-?\\d{1,14}(\\.\\d{1,4})?$",
+            "title": "Vat Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "vat_rate",
+          "markup_basis",
+          "default_markup_percent"
+        ],
+        "title": "PricingDefaultsPut",
+        "type": "object"
+      },
       "QuotationDTO": {
         "properties": {
           "created_at": {
@@ -4083,6 +4157,66 @@
         "summary": "Change Role",
         "tags": [
           "members"
+        ]
+      }
+    },
+    "/api/v1/pricing-defaults": {
+      "get": {
+        "operationId": "get_pricing_defaults_api_v1_pricing_defaults_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingDefaultsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Pricing Defaults",
+        "tags": [
+          "estimates"
+        ]
+      },
+      "put": {
+        "operationId": "put_pricing_defaults_api_v1_pricing_defaults_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricingDefaultsPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingDefaultsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Pricing Defaults",
+        "tags": [
+          "estimates"
         ]
       }
     },

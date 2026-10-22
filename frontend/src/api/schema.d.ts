@@ -519,6 +519,24 @@ export interface paths {
         patch: operations["change_role_api_v1_members__membership_id__role_patch"];
         trace?: never;
     };
+    "/api/v1/pricing-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Pricing Defaults */
+        get: operations["get_pricing_defaults_api_v1_pricing_defaults_get"];
+        /** Put Pricing Defaults */
+        put: operations["put_pricing_defaults_api_v1_pricing_defaults_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/quotation-items/{quotation_item_id}": {
         parameters: {
             query?: never;
@@ -1282,6 +1300,39 @@ export interface components {
             text: string;
             /** Text Source */
             text_source: string;
+        };
+        /** PricingDefaultsDTO */
+        PricingDefaultsDTO: {
+            /** Currency */
+            currency: string;
+            /** Default Markup Percent */
+            default_markup_percent: string;
+            /**
+             * Markup Basis
+             * @enum {string}
+             */
+            markup_basis: "cost" | "selling_price";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Vat Rate */
+            vat_rate: string;
+        };
+        /** PricingDefaultsPut */
+        PricingDefaultsPut: {
+            /** Currency */
+            currency: string;
+            /** Default Markup Percent */
+            default_markup_percent: string;
+            /**
+             * Markup Basis
+             * @enum {string}
+             */
+            markup_basis: "cost" | "selling_price";
+            /** Vat Rate */
+            vat_rate: string;
         };
         /** QuotationDTO */
         QuotationDTO: {
@@ -2747,6 +2798,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pricing_defaults_api_v1_pricing_defaults_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingDefaultsDTO"];
+                };
+            };
+        };
+    };
+    put_pricing_defaults_api_v1_pricing_defaults_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PricingDefaultsPut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingDefaultsDTO"];
                 };
             };
             /** @description Validation Error */

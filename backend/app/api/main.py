@@ -7,6 +7,7 @@ from app.api.errors import error_body, register_error_handlers
 from app.api.routers import (
     auth,
     documents,
+    estimates,
     extraction,
     jobs,
     matches,
@@ -65,3 +66,4 @@ app.include_router(suppliers.router)
 app.include_router(quotations.router)
 app.include_router(jobs.router)
 app.include_router(matches.router)
+app.include_router(estimates.router)

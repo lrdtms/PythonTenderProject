@@ -12,6 +12,7 @@ MarkupBasis = Literal["cost", "selling_price"]
 _CTX = Context(prec=40, rounding=ROUND_HALF_UP)
 _HUNDRED = Decimal(100)
 _ONE = Decimal(1)
+_MAX_COST_MARKUP = Decimal(1000)
 _CENT = Decimal("0.01")
 _FOUR_DP = Decimal("0.0001")
 
@@ -58,6 +59,8 @@ def validate_settings(settings: Settings) -> None:
         raise ValueError("vat_rate must be between 0 and 100")
     if settings.markup_percent < 0:
         raise ValueError("markup_percent must not be negative")
+    if settings.markup_basis == "cost" and settings.markup_percent > _MAX_COST_MARKUP:
+        raise ValueError("markup_percent must not exceed 1000 on the cost basis")
     if settings.markup_basis == "selling_price" and settings.markup_percent >= _HUNDRED:
         raise ValueError("markup_percent must be below 100 on the selling_price basis")
 
