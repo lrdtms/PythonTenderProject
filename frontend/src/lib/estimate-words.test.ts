@@ -64,6 +64,8 @@ describe("estimate plain words", () => {
       expect(errorText(code)).toMatch(/\S/);
     }
     expect(errorText("estimate_frozen", "ignored")).not.toBe("ignored");
+    const refusal = "Line C6 has a markup of 150, which is too high for pricing on selling price. Lower it first.";
+    expect(errorText("invalid_settings", refusal)).toBe(refusal);
   });
 
   it("falls back to a generic sentence for unknown codes and never echoes the code", () => {

@@ -701,7 +701,12 @@ def test_patch_validation_and_currency_lock() -> None:
     assert (
         _put(actor, line, manual_unit_price="2", markup_override_percent="500").status_code == 200
     )
-    assert actor.client.patch(url, json={"markup_basis": "selling_price"}).status_code == 422
+    refused = actor.client.patch(url, json={"markup_basis": "selling_price"})
+    assert refused.status_code == 422
+    msg = refused.json()["error"]["message"]
+    assert refused.json()["error"]["code"] == "invalid_settings"
+    assert f"Line {line['item_no']} has a markup of 500" in msg and "_" not in msg
+    assert "selling price" in msg and msg.endswith("Lower it first.")
 
 
 def test_a_blocked_supplier_line_also_holds_the_currency() -> None:

@@ -656,11 +656,21 @@ def patch_estimate(
         raise Conflict("The currency cannot change once a line is priced.", code="currency_locked")
     try:
         calc.validate_settings(calc.Settings(vat, basis, pct))  # type: ignore[arg-type]
-        for r in rows:
-            if r.markup_override_percent is not None:
-                calc.validate_settings(calc.Settings(vat, basis, r.markup_override_percent))  # type: ignore[arg-type]
     except ValueError as exc:
         raise ValidationFailed(str(exc), code="invalid_settings") from exc
+    for r in rows:
+        if r.markup_override_percent is None:
+            continue
+        try:
+            calc.validate_settings(calc.Settings(vat, basis, r.markup_override_percent))  # type: ignore[arg-type]
+        except ValueError as exc:
+            label = f"Line {r.item_no}" if r.item_no else "A line"
+            way = "selling price" if basis == "selling_price" else "cost"
+            raise ValidationFailed(
+                f"{label} has a markup of {r.markup_override_percent:f}, which is too high for "
+                f"pricing on {way}. Lower it first.",
+                code="invalid_settings",
+            ) from exc
     changed = [
         name
         for name, old, new in (
