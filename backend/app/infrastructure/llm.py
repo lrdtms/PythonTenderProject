@@ -139,6 +139,9 @@ class KimiLLM:
             headers={
                 "Content-Type": "application/json",
                 "Authorization": self._auth,
+                # urllib's default "Python-urllib" agent is refused by some gateways (Mammouth
+                # answers 403, Cloudflare error 1010), so identify the application instead.
+                "User-Agent": "IntelTPS/1.0",
             },
         )
         limit = get_settings().llm_max_response_bytes
