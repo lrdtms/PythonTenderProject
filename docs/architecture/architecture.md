@@ -110,7 +110,7 @@ Controls are defined in ADR-0005. Each attack path below names the control and t
 | F4 | **Cross-tenant retrieval canary.** A and B hold near-identical packs; B's pack contains a unique canary string. Searching or asking in A for the canary returns 0 B chunks; searching with B's `tender_id` as A returns 404; superseded versions never appear | FR-58 |
 | F5 | **Worker tenancy.** A job for org A cannot write rows with org B (composite FK violation is asserted) | ADR-0005 |
 | F6 | **Idempotent re-ingestion.** Run every stage twice: identical row counts. Run, correct one BoQ item, re-run: the correction survives. Enqueue twice concurrently: one job. Kill the worker mid-stage: resume with no duplicates | FR-59, §4.2 |
-| F7 | **Deterministic calculations.** Golden-file and property-based (Hypothesis) tests of totals, markup, VAT on/off and rounding; same input gives the same output; a check that bans `float` in `estimates/` | BR-03, FR-28 |
+| F7 | **Deterministic calculations.** Golden-file and property-based (Hypothesis) tests of totals, markup, VAT (always applied) and rounding; same input gives the same output; a check that bans `float` in `estimates/` | BR-03, FR-28 |
 | F8 | **Provenance by construction.** LLM output schemas contain no `document_id`/`page` fields; every persisted candidate has a `SourceRef` or a flag | FR-56, BR-02 |
 | F9 | **Log hygiene.** Process the canary document and assert the canary text is absent from logs and `audit_events` | §4.2, POPIA |
 | F10 | **AI regression (manual/nightly, not per PR).** The §13 evaluation script on the synthetic set; fail the release if critical-field metrics drop more than 3 points. CI uses `FakeLLM` fixtures | §13 |

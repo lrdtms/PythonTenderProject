@@ -68,7 +68,9 @@ From the spec's known limitations:
 - No per-supplier totals comparison.
 - The approver may equal the reviewer.
 - A scanned quote needs a manual price typed per line, and manual quotation entry does not exist yet.
-- Markup is on cost only, as spec section 11 says. Spec section 12 records the owner's answer that the markup basis is an option (cost or selling price). The selling-price basis was not exercised at the gate.
+- Markup defaults to cost. The selling-price basis is implemented (spec section 12 records the owner's answer that the markup basis is an option) but was not exercised in the browser gate.
+- Section subtotals (spec sections 1 and 5) were cut and are not shown.
+- BoQ lines added after an estimate was started (a second BoQ or addendum upload, or a BoQ re-run) block review and approval with `boq_lines_missing`; start a new version to include them. Amounts of 1e16 or more are refused with a 422 (`amount_too_large`) instead of being stored.
 
 Observed or deferred during the build and gate:
 
