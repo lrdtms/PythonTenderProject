@@ -76,8 +76,6 @@ Observed or deferred during the build and gate:
 
 - **Currency stays locked** until every priced or manual line is excluded.
 - **Approve can freeze BoQ inputs edited concurrently.** The spec accepts this window.
-- **The audit metadata allowlist drops unknown keys silently.** `version` is dropped, so `estimate_created` loses `tender_id`, `version` and `lines`.
-- **Amounts can overflow.** `DecimalText` allows 14 integer digits, so an extreme price times quantity can overflow the amount columns and return 500 instead of 422.
 - **The estimate page reads all quotation items on each request** to learn review status.
 - **No `boq_missing` flag** for a line whose BoQ line has vanished.
 - **Digits outside ASCII are accepted.** The `RateText` and `DecimalText` patterns use `\d`, which also matches Unicode digits. They should use `[0-9]`.

@@ -8,7 +8,6 @@ const FLAGS = [
   "vat_basis_unknown",
   "price_missing",
   "quantity_missing",
-  "amount_too_large",
   "unit_missing",
   "unit_mismatch",
   "unreviewed_source",
@@ -26,6 +25,7 @@ const ERRORS = [
   "tender_archived",
   "quantity_missing",
   "unit_mismatch_unacknowledged",
+  "amount_too_large",
 ];
 
 describe("estimate plain words", () => {
