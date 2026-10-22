@@ -21,11 +21,16 @@ describe("Summary", () => {
   it("labels the total incomplete while lines are unresolved or changed", () => {
     render(<Summary estimate={makeEstimate({ incomplete: true, unresolved: 2, changed: 1 })} />);
     expect(screen.getByText("Incomplete: excludes 3 lines")).toBeInTheDocument();
+    // every figure is marked, and a caption covers the whole block
+    expect(screen.getAllByText("(partial)")).toHaveLength(5);
+    expect(screen.getByText(/These figures are partial/)).toBeInTheDocument();
+    expect(screen.getByText("ZAR 110.00")).toBeInTheDocument();
   });
 
   it("hides the incomplete label when nothing is open", () => {
     render(<Summary estimate={makeEstimate()} />);
     expect(screen.queryByText(/incomplete/i)).toBeNull();
+    expect(screen.queryByText(/partial/i)).toBeNull();
   });
 
   it("shows 0.00 for an all-excluded estimate, never NaN or blank", () => {

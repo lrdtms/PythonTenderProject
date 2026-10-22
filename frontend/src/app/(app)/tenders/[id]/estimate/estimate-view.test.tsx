@@ -48,7 +48,6 @@ function routes(over: Record<string, () => Response | Promise<Response>> = {}, e
     [`GET ${T}/estimates`]: () => respond(200, [summaryOf(estimate)]),
     [`GET /api/v1/estimates/${estimate.id}`]: () => respond(200, estimate),
     [`GET /api/v1/estimates/${estimate.id}/lines`]: () => respond(200, lines),
-    [`GET /api/v1/members`]: () => respond(200, [{ user_id: ids.user, name: "Esta Mator" }]),
     ...over,
   };
 }
@@ -91,7 +90,7 @@ describe("EstimateView", () => {
 
   it("renders a frozen estimate read-only with reviewer and approver names and no controls", async () => {
     const frozen = makeEstimate({
-      status: "approved", reviewed_by: ids.user, reviewed_at: "2026-10-20T08:00:00Z", approved_by: ids.user, approved_at: "2026-10-21T09:00:00Z",
+      status: "approved", reviewed_by_name: "Esta Mator", approved_by_name: "Esta Mator", reviewed_by: ids.user, reviewed_at: "2026-10-20T08:00:00Z", approved_by: ids.user, approved_at: "2026-10-21T09:00:00Z",
     });
     mockApi(routes({}, frozen), meWith(["read", "review_data", "approve_estimate"], "admin"));
     renderSignedIn(<EstimateView />);
@@ -102,14 +101,35 @@ describe("EstimateView", () => {
     expect(main.querySelector("input[type=text], input[type=radio], textarea")).toBeNull();
     expect(within(main).queryByRole("button", { name: /save settings|create estimate/i })).toBeNull();
     expect(screen.queryByText("Draft")).toBeNull();
+    expect(screen.queryByText("Not approved")).toBeNull();
   });
 
-  it("marks a reviewed (not approved) estimate as a draft output too", async () => {
+  it("falls back to a team member when the name is null, and asks for no members list", async () => {
+    const fetchMock = mockApi(
+      routes({}, makeEstimate({ status: "reviewed", reviewed_by: ids.user, reviewed_by_name: null, reviewed_at: "2026-10-20T08:00:00Z" })),
+      estimator,
+    );
+    renderSignedIn(<EstimateView />);
+    expect(await screen.findByText(/Reviewed by a team member/)).toBeInTheDocument();
+    expect(callsTo(fetchMock, "GET", "/api/v1/members")).toHaveLength(0);
+  });
+
+  it("makes no estimate request when the tender has no estimate", async () => {
+    const fetchMock = mockApi(routes({ [`GET ${T}/estimates`]: () => respond(200, []) }), reviewer);
+    renderSignedIn(<EstimateView />);
+    await screen.findByText(/no estimate yet/i);
+    const urls = fetchMock.mock.calls.map(([u]) => String(u).split("?")[0]);
+    expect(urls.filter((u) => u.startsWith("/api/v1/estimates"))).toEqual([]);
+  });
+
+  it("marks a reviewed estimate as not approved, without a Draft label", async () => {
     mockApi(routes({}, makeEstimate({ status: "reviewed", reviewed_by: ids.user, reviewed_at: "2026-10-20T08:00:00Z" })), estimator);
     renderSignedIn(<EstimateView />);
     await screen.findByText(/LED panel/);
     expect(screen.getByText("Reviewed")).toBeInTheDocument();
-    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(screen.getByText("Not approved")).toBeInTheDocument();
+    expect(screen.queryByText("Draft")).toBeNull();
+    expect(screen.getByRole("group", { name: "Estimate actions" })).toBeInTheDocument();
     expect(document.querySelector("input[type=text]")).toBeNull();
   });
 
@@ -140,7 +160,7 @@ describe("EstimateView", () => {
   });
 
   it("shows a plain empty state for an estimate with no lines", async () => {
-    const e = makeEstimate({ priced: 0, excluded: 0, unresolved: 0, changed: 0, incomplete: true, totals: null });
+    const e = makeEstimate({ priced: 0, excluded: 0, unresolved: 0, changed: 0, incomplete: false, totals: null });
     mockApi(routes({}, e, []), estimator);
     renderSignedIn(<EstimateView />);
     expect(await screen.findByText(/has no BoQ lines/i)).toBeInTheDocument();

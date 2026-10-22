@@ -9,6 +9,7 @@ const FLAGS = [
   "price_missing",
   "quantity_missing",
   "unit_missing",
+  "unit_mismatch",
   "unreviewed_source",
   "source_changed",
 ];

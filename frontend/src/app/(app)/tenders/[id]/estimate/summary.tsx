@@ -16,16 +16,25 @@ export function Summary({ estimate }: { estimate: Estimate }) {
   return (
     <section aria-label="Summary" className="rounded border border-zinc-300 p-4 dark:border-zinc-700">
       <h2 className="mb-2 text-lg font-medium">Summary</h2>
+      {estimate.incomplete ? (
+        <p className="mb-2 text-sm text-amber-700 dark:text-amber-300">
+          These figures are partial: lines that are unresolved or changed are left out.
+        </p>
+      ) : null}
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-sm">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
             <dt className="font-medium">{label}</dt>
-            <dd>{value}</dd>
+            <dd>
+              {value}
+              {estimate.incomplete ? <span className="ml-1 text-xs text-amber-700 dark:text-amber-300">(partial)</span> : null}
+            </dd>
           </div>
         ))}
         <dt className="font-medium">Total inc VAT</dt>
         <dd>
           <span className="font-semibold">{money(t?.total_inc_vat)}</span>
+          {estimate.incomplete ? <span className="ml-1 text-xs text-amber-700 dark:text-amber-300">(partial)</span> : null}
           {estimate.incomplete ? (
             <span className="mt-0.5 block text-amber-700 dark:text-amber-300">
               {`Incomplete: excludes ${open} ${open === 1 ? "line" : "lines"}`}

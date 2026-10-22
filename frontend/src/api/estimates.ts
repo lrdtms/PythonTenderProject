@@ -73,8 +73,9 @@ export function useSavePricingDefaults() {
   });
 }
 
-export function useEstimates(tenderId: string) {
+export function useEstimates(tenderId: string, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ["estimates", tenderId] as const,
     queryFn: ({ signal }) => get<EstimateSummary[]>(`/api/v1/tenders/${tenderId}/estimates`, undefined, signal),
   });
@@ -82,6 +83,7 @@ export function useEstimates(tenderId: string) {
 
 export function useEstimate(id: string) {
   return useQuery({
+    enabled: id !== "",
     queryKey: ["estimate", id] as const,
     queryFn: ({ signal }) => get<Estimate>(`/api/v1/estimates/${id}`, undefined, signal),
   });

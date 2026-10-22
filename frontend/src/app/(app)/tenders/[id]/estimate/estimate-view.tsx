@@ -17,7 +17,6 @@ import {
   useEstimates,
   usePricingDefaults,
 } from "@/api/estimates";
-import { membersQueryOptions } from "@/api/members";
 import { tenderQueryOptions } from "@/api/tenders";
 import { useCan } from "@/components/auth-gate";
 import { StatusBadge } from "@/components/status-badge";
@@ -76,9 +75,9 @@ function defaultVersion(versions: EstimateSummary[]): EstimateSummary {
   return versions.find((v) => v.status === "draft") ?? [...versions].sort((a, b) => b.version - a.version)[0];
 }
 
-function Who({ label, userId, at, names }: { label: string; userId: string | null; at: string | null; names: Map<string, string> }) {
+function Who({ label, userId, name: given, at }: { label: string; userId: string | null; name?: string | null; at: string | null }) {
   if (!userId && !at) return null;
-  const name = (userId && names.get(userId)) || "a team member";
+  const name = given || "a team member";
   return (
     <p>
       {label} by {name}
@@ -90,8 +89,6 @@ function Who({ label, userId, at, names }: { label: string; userId: string | nul
 function EstimateBody({ estimate, editable }: { estimate: Estimate; editable: boolean }) {
   const [status, setStatus] = useState("");
   const list = useEstimateLines(estimate.id, { status: (status || undefined) as EstimateLine["status"] | undefined });
-  const members = useQuery(membersQueryOptions);
-  const names = new Map((members.data ?? []).map((m) => [m.user_id, m.name]));
   const frozen = estimate.status !== "draft";
   const lines = list.lines;
   const total = estimate.priced + estimate.excluded + estimate.unresolved + estimate.changed;
@@ -101,8 +98,8 @@ function EstimateBody({ estimate, editable }: { estimate: Estimate; editable: bo
     <>
       {frozen ? (
         <div className="mb-3 text-sm text-zinc-700 dark:text-zinc-300">
-          <Who label="Reviewed" userId={estimate.reviewed_by} at={estimate.reviewed_at} names={names} />
-          <Who label="Approved" userId={estimate.approved_by} at={estimate.approved_at} names={names} />
+          <Who label="Reviewed" userId={estimate.reviewed_by} name={estimate.reviewed_by_name} at={estimate.reviewed_at} />
+          <Who label="Approved" userId={estimate.approved_by} name={estimate.approved_by_name} at={estimate.approved_at} />
         </div>
       ) : null}
 
@@ -112,7 +109,7 @@ function EstimateBody({ estimate, editable }: { estimate: Estimate; editable: bo
       </div>
 
       {/* Actions area: Mark reviewed, Approve, Reopen and New version are added here. */}
-      <div aria-label="Estimate actions" className="mb-4 flex flex-wrap items-center gap-2" />
+      <div role="group" aria-label="Estimate actions" className="mb-4 flex flex-wrap items-center gap-2" />
 
       <div className="mb-3 flex flex-wrap items-end gap-3" role="group" aria-label="Filters">
         <label className="text-sm">
@@ -201,7 +198,7 @@ export function EstimateView() {
   const valid = typeof id === "string" && UUID.test(id);
   const canReviewData = useCan("review_data");
   const tender = useQuery({ ...tenderQueryOptions(id), enabled: valid });
-  const versions = useEstimates(id);
+  const versions = useEstimates(id, valid);
   const [picked, setPicked] = useState<string | null>(null);
 
   const chosen = versions.data && versions.data.length > 0 ? (versions.data.find((v) => v.id === picked) ?? defaultVersion(versions.data)) : null;
@@ -263,7 +260,7 @@ export function EstimateView() {
             tone={e.status === "approved" ? "success" : e.status === "reviewed" ? "info" : "warning"}
             label={STATUS_LABEL[e.status] ?? e.status}
           />
-          {e.status !== "approved" && e.status !== "draft" ? <StatusBadge tone="warning" label="Draft" /> : null}
+          {e.status === "reviewed" ? <StatusBadge tone="warning" label="Not approved" /> : null}
         </div>
         <EstimateBody key={e.id} estimate={e} editable={canEdit && e.status === "draft"} />
       </>

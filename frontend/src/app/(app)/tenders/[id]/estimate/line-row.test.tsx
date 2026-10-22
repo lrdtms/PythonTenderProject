@@ -68,6 +68,13 @@ describe("LineRow", () => {
     expect(screen.getByText(/Manual price: ZAR 10\.0000/)).toBeInTheDocument();
   });
 
+  it("says there is no supplier price only for an open line, not a priced or frozen one", () => {
+    const { rerender } = render(<ul><LineRow line={makeEstimateLine()} currency="ZAR" /></ul>);
+    expect(screen.getByText("No confirmed supplier price for this line.")).toBeInTheDocument();
+    rerender(<ul><LineRow line={makeEstimateLine({ status: "priced", price_source: "supplier", supplier_name: "Z", quoted_unit_price: "1.0000" })} currency="ZAR" /></ul>);
+    expect(screen.queryByText("No confirmed supplier price for this line.")).toBeNull();
+  });
+
   it("renders a controls slot for later editing", () => {
     render(<ul><LineRow line={makeEstimateLine()} currency="ZAR" controls={<p>slot</p>} /></ul>);
     expect(screen.getByText("slot")).toBeInTheDocument();

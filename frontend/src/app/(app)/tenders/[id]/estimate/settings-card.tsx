@@ -17,6 +17,15 @@ function failure(error: unknown): { code: string | null; text: string } {
   return { code: null, text: "Something went wrong. Try again." };
 }
 
+/** Decimal text compared by value, so "15.0" equals the server's "15.00". Callers have already validated the text. */
+function sameNumber(typed: string, saved: string): boolean {
+  const norm = (v: string) => {
+    const [whole, frac = ""] = v.trim().split(".");
+    return `${whole.replace(/^0+(?=\d)/, "")}.${frac.replace(/0+$/, "")}`;
+  };
+  return norm(typed) === norm(saved);
+}
+
 function Form({ estimate, done, setDone }: { estimate: Estimate; done: boolean; setDone: (v: boolean) => void }) {
   const patch = usePatchEstimate();
   const [currency, setCurrency] = useState(estimate.currency);
@@ -26,13 +35,15 @@ function Form({ estimate, done, setDone }: { estimate: Estimate; done: boolean; 
   const [errors, setErrors] = useState<{ currency?: string; vat?: string; markup?: string }>({});
 
   const error = patch.error ? failure(patch.error) : null;
-  // A priced line (or one whose source changed) still carries a price, so the currency is locked.
-  const locked = estimate.priced + estimate.changed > 0 || error?.code === "currency_locked";
+  const refusedLock = error?.code === "currency_locked";
+  // The server says when a line carries a price; a refused PATCH can also tell us before the refetch.
+  const locked = estimate.currency_locked || error?.code === "currency_locked";
 
   const touch = () => {
     if (done) setDone(false);
-    if (patch.isError) patch.reset();
+    if (patch.isError && !refusedLock) patch.reset();
   };
+  if (refusedLock && currency !== estimate.currency) setCurrency(estimate.currency);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -47,12 +58,15 @@ function Form({ estimate, done, setDone }: { estimate: Estimate; done: boolean; 
     if (markupProblem) found.markup = markupProblem;
     setErrors(found);
     setDone(false);
+    // Same value, different spelling ("15.0" for "15.00"): show the saved spelling.
+    if (!found.vat && sameNumber(vat, estimate.vat_rate)) setVat(estimate.vat_rate);
+    if (!found.markup && sameNumber(markup, estimate.markup_percent)) setMarkup(estimate.markup_percent);
     if (Object.keys(found).length > 0) return;
     const body: EstimatePatch = {};
     if (!locked && code !== estimate.currency) body.currency = code;
-    if (vat.trim() !== estimate.vat_rate) body.vat_rate = vat.trim();
+    if (sameNumber(vat, estimate.vat_rate) === false) body.vat_rate = vat.trim();
     if (basis !== estimate.markup_basis) body.markup_basis = basis;
-    if (markup.trim() !== estimate.markup_percent) body.markup_percent = markup.trim();
+    if (sameNumber(markup, estimate.markup_percent) === false) body.markup_percent = markup.trim();
     if (Object.keys(body).length === 0) return;
     patch.mutate({ id: estimate.id, patch: body }, { onSuccess: () => setDone(true) });
   }

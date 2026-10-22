@@ -70,14 +70,14 @@ describe("SettingsCard", () => {
     expect(callsTo(fetchMock, "PATCH", PATH)).toHaveLength(0);
   });
 
-  it("disables the currency with an explanation once a line is priced", () => {
-    setup({ priced: 2 });
+  it("disables the currency with an explanation when the server says it is locked", () => {
+    setup({ currency_locked: true });
     expect(screen.getByLabelText("Currency")).toBeDisabled();
     expect(screen.getByText(/cannot be changed while a line has a price/i)).toBeInTheDocument();
   });
 
-  it("allows the currency while nothing is priced", () => {
-    setup({ priced: 0, excluded: 2 });
+  it("allows the currency while the server says it is not locked", () => {
+    setup({ priced: 2, currency_locked: false });
     expect(screen.getByLabelText("Currency")).toBeEnabled();
   });
 
@@ -88,7 +88,23 @@ describe("SettingsCard", () => {
     await userEvent.type(screen.getByLabelText("Currency"), "usd");
     await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
     await waitFor(() => expect(screen.getByLabelText("Currency")).toBeDisabled());
+    expect(screen.getByLabelText("Currency")).toHaveValue("ZAR");
     expect(screen.getByRole("alert")).toHaveTextContent(/cannot be changed while a line has a price/i);
+  });
+
+  it("sends no request when only the spelling of a number changed", async () => {
+    const fetchMock = setup();
+    await userEvent.clear(screen.getByLabelText("VAT rate (%)"));
+    await userEvent.type(screen.getByLabelText("VAT rate (%)"), "15.0");
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(callsTo(fetchMock, "PATCH", PATH)).toHaveLength(0);
+    expect(screen.getByLabelText("VAT rate (%)")).toHaveValue("15.00");
+  });
+
+  it("shows a reviewed estimate's settings read-only", () => {
+    setup({ status: "reviewed" }, false);
+    expect(screen.getByText("On cost")).toBeInTheDocument();
+    expect(document.querySelector("input, button")).toBeNull();
   });
 
   it("shows the plain-words message for a 409 estimate_frozen", async () => {

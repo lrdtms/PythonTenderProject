@@ -6,6 +6,7 @@ const FLAGS: Record<string, string> = {
   vat_basis_unknown: "It is not clear whether the quoted prices include VAT.",
   price_missing: "There is no price for this line yet.",
   quantity_missing: "This BoQ line has no quantity.",
+  unit_mismatch: "The supplier's unit is different from the BoQ unit.",
   unit_missing: "This BoQ line has no unit.",
   unreviewed_source: "A BoQ line or quotation item behind this price has not been reviewed yet. Review it before approving.",
   source_changed: "The BoQ or quotation behind this price has changed since it was chosen. Refresh the line.",
