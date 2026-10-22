@@ -1,3 +1,4 @@
+import type { Estimate, EstimateLine } from "@/api/estimates";
 import type { BoqItem, DocumentItem, DocumentVersion, ExtractionStatus, Job, KindStatus, MatchLine, MatchSuggestion, PageDetail, PageSummary, Quotation, QuotationItem, Requirement, Run, Supplier, Tender } from "@/api/types";
 
 const NOW = "2026-10-16T08:00:00Z";
@@ -127,5 +128,27 @@ export function makeMatchLine(over: Partial<MatchLine> = {}): MatchLine {
   return {
     boq: { id: ID(10), item_no: "1.1", section: "Lighting", description: "LED panel 600x600", unit: "no", quantity: "10.0000" },
     suggestions: [makeMatchSuggestion()], ...over,
+  };
+}
+
+export function makeEstimate(over: Partial<Estimate> = {}): Estimate {
+  return {
+    id: ID(500), tender_id: ids.tender, version: 1, status: "draft", currency: "ZAR", vat_rate: "15.00",
+    markup_basis: "cost", markup_percent: "10.00", based_on_version: null, created_by: ids.user, created_at: NOW,
+    reviewed_by: null, reviewed_at: null, approved_by: null, approved_at: null,
+    priced: 1, excluded: 0, unresolved: 0, changed: 0, incomplete: false,
+    totals: { subtotal_cost: "100.00", markup_total: "10.00", subtotal_ex_vat: "110.00", vat_total: "16.50", total_inc_vat: "126.50" },
+    ...over,
+  };
+}
+
+export function makeEstimateLine(over: Partial<EstimateLine> = {}): EstimateLine {
+  return {
+    id: ID(600), boq_item_id: ID(700), position: 1, section: "Lighting", item_no: "1.1", description: "LED panel",
+    unit: "no", quantity: "10.0000", status: "unresolved", price_source: "unresolved", flags: [], candidates: [],
+    cost: null, exclude_reason: null, labour_cost: null, labour_rate: null, markup: null, markup_override_percent: null,
+    match_suggestion_id: null, material_cost: null, quoted_currency: null, quoted_includes_vat: null,
+    quoted_unit_price: null, supplier_id: null, supplier_name: null, total: null, unit_mismatch_acknowledged: false,
+    unit_price_ex_vat: null, ...over,
   };
 }

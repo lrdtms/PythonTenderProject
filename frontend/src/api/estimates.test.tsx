@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { callsTo, createTestClient, mockApi, respond } from "@/test/render";
 
+import { ApiError } from "./errors";
+
 import {
   ESTIMATE_LINE_PAGE_SIZE,
   useApproveEstimate,
@@ -14,6 +16,7 @@ import {
   useEstimates,
   usePatchEstimate,
   usePriceLine,
+  notReadyBlockers,
   usePricingDefaults,
   useRefreshLine,
   useReopenEstimate,
@@ -197,5 +200,23 @@ describe("estimate mutations", () => {
     await waitFor(() => expect(callsTo(fetchMock, "GET", ONE)).toHaveLength(2));
     await waitFor(() => expect(callsTo(fetchMock, "GET", LINES)).toHaveLength(2));
     await waitFor(() => expect(callsTo(fetchMock, "GET", LIST)).toHaveLength(2));
+  });
+});
+
+describe("notReadyBlockers", () => {
+  it("reads the blockers from an estimate_not_ready error", () => {
+    const blockers = [
+      { line_id: LINE, code: "unresolved" },
+      { line_id: null, code: "no_lines" },
+    ];
+    expect(notReadyBlockers(new ApiError(409, "estimate_not_ready", "x", { blockers }))).toEqual(blockers);
+  });
+
+  it("returns [] when absent or invalid", () => {
+    expect(notReadyBlockers(null)).toEqual([]);
+    expect(notReadyBlockers(new Error("x"))).toEqual([]);
+    expect(notReadyBlockers(new ApiError(409, "estimate_not_ready", "x"))).toEqual([]);
+    expect(notReadyBlockers(new ApiError(409, "estimate_not_ready", "x", { blockers: "no" }))).toEqual([]);
+    expect(notReadyBlockers(new ApiError(409, "estimate_not_ready", "x", { blockers: [{ code: "weird", line_id: null }, 3] }))).toEqual([]);
   });
 });

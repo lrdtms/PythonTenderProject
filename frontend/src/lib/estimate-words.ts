@@ -7,29 +7,34 @@ const FLAGS: Record<string, string> = {
   price_missing: "There is no price for this line yet.",
   quantity_missing: "This BoQ line has no quantity.",
   unit_missing: "This BoQ line has no unit.",
-  unreviewed_source: "A BoQ line or quotation item behind this price has not been reviewed yet.",
+  unreviewed_source: "A BoQ line or quotation item behind this price has not been reviewed yet. Review it before approving.",
   source_changed: "The BoQ or quotation behind this price has changed since it was chosen. Refresh the line.",
 };
 
 const BLOCKERS: Record<string, string> = {
   unresolved: "Some lines still have no price.",
   source_changed: "Some prices are out of date because their BoQ or quotation changed. Refresh those lines.",
-  unreviewed_source: "A BoQ line or quotation item behind this price has not been reviewed yet.",
+  unreviewed_source: "A BoQ line or quotation item behind this price has not been reviewed yet. Review it before approving.",
   no_lines: "This estimate has no BoQ lines to price.",
 };
 
 const ERRORS: Record<string, string> = {
-  estimate_frozen: "This estimate is approved or reviewed, so it cannot be changed. Start a new version to make changes.",
+  estimate_frozen: "This estimate is no longer a draft, so it cannot be changed. Reopen it, or start a new version if it is approved.",
   estimate_not_ready: "This estimate is not ready yet. Fix the items listed, then try again.",
-  estimate_not_reviewed: "This estimate must be marked as reviewed before it can be approved.",
+  estimate_not_reviewed: "This estimate has to be marked as reviewed first.",
   draft_exists: "A draft estimate already exists for this tender. Open that draft instead.",
   pricing_defaults_missing: "Save the pricing defaults first, then create the estimate.",
-  stale_match: "The chosen supplier price is out of date. Reload the page and choose it again.",
+  stale_match: "The chosen supplier price is out of date. Choose it again.",
   currency_locked: "The currency cannot be changed while a line has a price. Clear those prices first.",
   tender_archived: "This tender is archived, so the estimate cannot be changed.",
-  quantity_missing: "This line needs a quantity before it can be priced.",
+  quantity_missing: "This line has no quantity, so it can only be excluded.",
+  invalid_markup_override: "That markup is not allowed. Check the number and try again.",
+  invalid_settings: "Those settings are not allowed. Check the numbers and try again.",
   unit_mismatch_unacknowledged: "The quoted unit is different from the BoQ unit. Confirm that you want to use this price.",
 };
+
+/** Codes whose server message says exactly which number is out of range, so it is clearer than a fixed sentence. */
+const SERVER_WORDED = new Set(["invalid_markup_override", "invalid_settings"]);
 
 const lookup = (table: Record<string, string>, code: string): string =>
   Object.prototype.hasOwnProperty.call(table, code) ? table[code] : GENERIC;
@@ -41,4 +46,5 @@ export const flagText = (code: string): string => lookup(FLAGS, code);
 export const blockerText = (code: string): string => lookup(BLOCKERS, code);
 
 /** Plain sentence for an API error code returned by an estimate write. */
-export const errorText = (code: string): string => lookup(ERRORS, code);
+export const errorText = (code: string, fallbackMessage?: string): string =>
+  fallbackMessage && SERVER_WORDED.has(code) ? fallbackMessage : lookup(ERRORS, code);

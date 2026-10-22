@@ -39,16 +39,29 @@ describe("estimate plain words", () => {
     expect(blockerText(code)).toMatch(/[.]$/);
   });
 
-  it("uses the agreed wording for unreviewed_source", () => {
-    expect(blockerText("unreviewed_source")).toBe(
-      "A BoQ line or quotation item behind this price has not been reviewed yet.",
-    );
-  });
-
   it.each(ERRORS)("gives a plain sentence for the error %s", (code) => {
     expect(errorText(code)).toMatch(/\S/);
     expect(errorText(code)).not.toBe(code);
     expect(errorText(code)).toMatch(/[.]$/);
+  });
+
+  it("uses the agreed wording for the carried-over messages", () => {
+    expect(errorText("estimate_frozen")).toBe(
+      "This estimate is no longer a draft, so it cannot be changed. Reopen it, or start a new version if it is approved.",
+    );
+    expect(errorText("estimate_not_reviewed")).toBe("This estimate has to be marked as reviewed first.");
+    expect(errorText("quantity_missing")).toMatch(/can only be excluded/);
+    expect(errorText("stale_match")).not.toMatch(/reload/i);
+    expect(flagText("unreviewed_source")).toMatch(/Review it before approving\.$/);
+    expect(blockerText("unreviewed_source")).toMatch(/Review it before approving\.$/);
+  });
+
+  it("uses the server's own message for invalid_markup_override and invalid_settings", () => {
+    for (const code of ["invalid_markup_override", "invalid_settings"]) {
+      expect(errorText(code, "Markup must be below 100.")).toBe("Markup must be below 100.");
+      expect(errorText(code)).toMatch(/\S/);
+    }
+    expect(errorText("estimate_frozen", "ignored")).not.toBe("ignored");
   });
 
   it("falls back to a generic sentence for unknown codes and never echoes the code", () => {

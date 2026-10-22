@@ -5,12 +5,12 @@ import { useState, type FormEvent } from "react";
 import { ApiError } from "@/api/errors";
 import { type PricingDefaults, usePricingDefaults, useSavePricingDefaults } from "@/api/estimates";
 import { useCan } from "@/components/auth-gate";
+import { markupError, vatError } from "@/lib/rates";
 
 type Basis = PricingDefaults["markup_basis"];
 
 const BASIS_LABEL: Record<Basis, string> = { cost: "On cost", selling_price: "On selling price" };
 const INPUT = "rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700";
-const DECIMAL = /^\d+(\.\d+)?$/;
 
 type Errors = { currency?: string; vat?: string; markup?: string };
 
@@ -18,15 +18,10 @@ type Errors = { currency?: string; vat?: string; markup?: string };
 function validate(currency: string, vat: string, basis: Basis, markup: string): Errors {
   const errors: Errors = {};
   if (!/^[A-Z]{3}$/.test(currency)) errors.currency = "Currency must be 3 letters, for example ZAR.";
-  const decimals = (v: string) => (v.split(".")[1] ?? "").length;
-  if (!DECIMAL.test(vat)) errors.vat = "Enter the VAT rate as a number, for example 15.";
-  else if (decimals(vat) > 2) errors.vat = "VAT rate can have at most 2 decimals.";
-  else if (Number(vat) > 100) errors.vat = "VAT rate must be between 0 and 100.";
-  if (!DECIMAL.test(markup)) errors.markup = "Enter the markup as a number, for example 10.";
-  else if (decimals(markup) > 2) errors.markup = "Markup can have at most 2 decimals.";
-  else if (basis === "selling_price" && Number(markup) >= 100)
-    errors.markup = "On selling price the markup is a margin and must be below 100.";
-  else if (basis === "cost" && Number(markup) > 1000) errors.markup = "Markup on cost must be between 0 and 1000.";
+  const vatProblem = vatError(vat);
+  if (vatProblem) errors.vat = vatProblem;
+  const markupProblem = markupError(markup, basis);
+  if (markupProblem) errors.markup = markupProblem;
   return errors;
 }
 

@@ -48,6 +48,13 @@ describe("TenderWorkspace", () => {
     expect(await within(items[1]).findByRole("progressbar")).toBeInTheDocument();
   });
 
+  it("links to the checklist, the supplier comparison and the estimate", async () => {
+    mockApi({ [`GET ${TENDER}`]: () => respond(200, makeTender()), [`GET ${TENDER}/documents`]: () => respond(200, []) });
+    renderSignedIn(<TenderWorkspace />);
+    expect(await screen.findByRole("link", { name: "Estimate" })).toHaveAttribute("href", `/tenders/${ids.tender}/estimate`);
+    expect(screen.getByRole("link", { name: "Compare suppliers" })).toHaveAttribute("href", `/tenders/${ids.tender}/suppliers`);
+  });
+
   it("explains an empty tender", async () => {
     mockApi({ [`GET ${TENDER}`]: () => respond(200, makeTender()), [`GET ${TENDER}/documents`]: () => respond(200, []) });
     renderSignedIn(<TenderWorkspace />);

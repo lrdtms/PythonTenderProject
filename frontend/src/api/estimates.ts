@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ApiError } from "./errors";
 import { api, get, patch, post } from "./client";
 import type { components } from "./schema";
 
@@ -13,6 +14,30 @@ export type EstimatePatch = Schemas["EstimatePatch"];
 export type LinePut = Schemas["LinePut"];
 export type PricingDefaults = Schemas["PricingDefaultsDTO"];
 export type PricingDefaultsPut = Schemas["PricingDefaultsPut"];
+
+export type Blocker = {
+  line_id: string | null;
+  code: "unresolved" | "source_changed" | "unreviewed_source" | "no_lines";
+};
+
+const BLOCKER_CODES = ["unresolved", "source_changed", "unreviewed_source", "no_lines"];
+
+/** The blockers of an `estimate_not_ready` error, or [] when the error carries none (or malformed ones). */
+export function notReadyBlockers(error: unknown): Blocker[] {
+  if (!(error instanceof ApiError)) return [];
+  const details = error.details as { blockers?: unknown } | null | undefined;
+  const list = details?.blockers;
+  if (!Array.isArray(list)) return [];
+  const out: Blocker[] = [];
+  for (const b of list) {
+    if (typeof b !== "object" || b === null) return [];
+    const { line_id, code } = b as { line_id?: unknown; code?: unknown };
+    if (typeof code !== "string" || !BLOCKER_CODES.includes(code)) return [];
+    if (line_id !== null && typeof line_id !== "string") return [];
+    out.push({ line_id, code } as Blocker);
+  }
+  return out;
+}
 
 export type EstimateLineFilters = {
   status?: EstimateLine["status"];
@@ -89,7 +114,9 @@ export function useCreateEstimate(tenderId: string) {
   });
 }
 
-/** Choose a line's price: a confirmed match, a manual price, or an exclusion (see LinePut). */
+/** Choose a line's price: a confirmed match, a manual price, or an exclusion (see LinePut).
+ * PUT replaces the whole source: an omitted labour_rate or markup_override_percent is cleared, so send the
+ * current values again when only changing something else. */
 export function usePriceLine() {
   const refresh = useEstimateRefresh();
   return useMutation({
