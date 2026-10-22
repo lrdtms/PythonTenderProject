@@ -5,8 +5,17 @@ import { useState } from "react";
 
 import { ApiError } from "@/api/errors";
 import { anyJobActive, extractionQueryOptions, useRequestExtraction } from "@/api/extraction";
-import type { KindStatus } from "@/api/types";
-import { jobErrorText, jobStatusLabel, jobTone, kindLabel, warningText } from "@/lib/status-text";
+import type { Job, KindStatus } from "@/api/types";
+import {
+  attemptText,
+  jobErrorText,
+  jobStatusLabel,
+  jobTone,
+  kindLabel,
+  progressBounds,
+  progressText,
+  warningText,
+} from "@/lib/status-text";
 
 import { useCan } from "./auth-gate";
 import { StaleNote } from "./stale-note";
@@ -46,6 +55,24 @@ function countText(kind: string, counts: Record<string, unknown>, kept = 0): str
   return count === null ? null : `${count} ${count === 1 ? "requirement" : "requirements"}`;
 }
 
+function JobBar({ kind, job }: { kind: string; job: Job }) {
+  const text = progressText(kind, job);
+  const attempt = attemptText(job.attempt_count);
+  const { done, total } = progressBounds(job);
+  const determinate = job.status === "running" && total > 0;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-zinc-700 dark:text-zinc-300">
+      <progress
+        aria-label={`${kindLabel(kind)} extraction progress`}
+        className="align-middle"
+        {...(determinate ? { value: done, max: total } : {})}
+      />
+      {text ? <span>{text}</span> : null}
+      {attempt ? <span className="text-zinc-500 dark:text-zinc-400">{attempt}</span> : null}
+    </div>
+  );
+}
+
 function KindRow({ item }: { item: KindStatus }) {
   const job = item.job;
   const warnings = [...(job?.warnings ?? []), ...(item.run?.warnings ?? [])];
@@ -61,6 +88,7 @@ function KindRow({ item }: { item: KindStatus }) {
         {job ? <StatusBadge tone={jobTone(job.status)} label={jobStatusLabel(job.status)} /> : null}
         {counts ? <span>{counts}</span> : null}
       </div>
+      {job && progressText(item.kind, job) !== null ? <JobBar kind={item.kind} job={job} /> : null}
       {job?.status === "failed" ? <p className="text-red-700 dark:text-red-300">{jobErrorText(job.error_code)}</p> : null}
       {unique.length > 0 ? (
         <ul className="list-disc pl-5 text-amber-800 dark:text-amber-300">

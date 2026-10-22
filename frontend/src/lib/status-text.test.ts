@@ -7,7 +7,10 @@ import {
   jobStatusLabel,
   jobTone,
   kindLabel,
+  attemptText,
   processingStatusLabel,
+  progressBounds,
+  progressText,
   tenderStatusLabel,
   warningText,
 } from "./status-text";
@@ -92,5 +95,43 @@ describe("status text", () => {
       );
       expect(warningText({ code: "ROW_CAP_REACHED", count })).toBe("Some rows beyond the limit were not stored.");
     }
+  });
+});
+
+describe("extraction progress text", () => {
+  const job = (over: Partial<{ status: string; progress_done: number; progress_total: number }>) => ({
+    status: "running",
+    progress_done: 0,
+    progress_total: 0,
+    ...over,
+  });
+
+  it("clamps and floors the bar numbers", () => {
+    expect(progressBounds(job({ progress_done: 80, progress_total: 73 }))).toEqual({ done: 73, total: 73 });
+    expect(progressBounds(job({ progress_done: -2, progress_total: 9.9 }))).toEqual({ done: 0, total: 9 });
+    expect(progressBounds(job({ progress_done: Number.NaN, progress_total: Number.NaN }))).toEqual({ done: 0, total: 0 });
+  });
+
+  it("returns null for finished jobs", () => {
+    for (const s of ["succeeded", "succeeded_with_warnings", "failed", "cancelled"]) {
+      expect(progressText("requirements", job({ status: s, progress_total: 5 }))).toBeNull();
+    }
+  });
+
+  it("words the progress per kind and says Working when there is no real count", () => {
+    expect(progressText("requirements", job({ progress_done: 44, progress_total: 73 }))).toBe("Reading section 44 of 73");
+    expect(progressText("boq", job({ progress_done: 2, progress_total: 4 }))).toBe("2 of 4 steps");
+    expect(progressText("boq", job({ progress_done: 1, progress_total: 1 }))).toBe("Working…");
+    expect(progressText("requirements", job({ progress_total: 0 }))).toBe("Working…");
+  });
+
+  it("says a queued job is waiting", () => {
+    expect(progressText("boq", job({ status: "queued" }))).toBe("Waiting in the queue…");
+  });
+
+  it("names attempts only after the first", () => {
+    expect(attemptText(1)).toBeNull();
+    expect(attemptText(2)).toBe("Attempt 2");
+    expect(attemptText(3)).toBe("Attempt 3");
   });
 });

@@ -192,6 +192,123 @@ describe("ExtractionPanel", () => {
     expect(settled).toBeLessThanOrEqual(3);
   });
 
+  describe("progress while a job is active", () => {
+    const bar = (name: RegExp) => screen.getByRole("progressbar", { name });
+
+    it("shows a determinate bar and the section count for a running requirements job", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("requirements", { status: "running", progress_done: 44, progress_total: 73 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Reading section 44 of 73")).toBeInTheDocument();
+      expect(bar(/requirements extraction progress/i)).toHaveAttribute("value", "44");
+      expect(bar(/requirements extraction progress/i)).toHaveAttribute("max", "73");
+    });
+
+    it("shows an indeterminate bar with no NaN while the total is still 0", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("requirements", { status: "running", progress_done: 0, progress_total: 0 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Working…")).toBeInTheDocument();
+      const el = bar(/requirements extraction progress/i);
+      expect(el).not.toHaveAttribute("value");
+      expect(el).not.toHaveAttribute("max");
+      expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    });
+
+    it("shows the waiting text with an indeterminate bar for a queued job", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("boq", { status: "queued", progress_done: 0, progress_total: 0 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Waiting in the queue…")).toBeInTheDocument();
+      expect(bar(/bill of quantities extraction progress/i)).not.toHaveAttribute("value");
+    });
+
+    it("explains a restarted run with its attempt number", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("requirements", { status: "running", progress_done: 3, progress_total: 9, attempt_count: 3 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Attempt 3")).toBeInTheDocument();
+    });
+
+    it("shows no attempt note for a first attempt", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("requirements", { status: "running", progress_done: 3, progress_total: 9, attempt_count: 1 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Reading section 3 of 9")).toBeInTheDocument();
+      expect(screen.queryByText(/Attempt/)).not.toBeInTheDocument();
+    });
+
+    it("shows no progress element for a succeeded job", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("requirements", { status: "succeeded", progress_done: 73, progress_total: 73, attempt_count: 2 }, { counts: { requirements: 4 } })])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready />);
+      expect(await screen.findByText("4 requirements")).toBeInTheDocument();
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Attempt/)).not.toBeInTheDocument();
+    });
+
+    it("clamps done to the total so the bar never overflows", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("requirements", { status: "running", progress_done: 80, progress_total: 73 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Reading section 73 of 73")).toBeInTheDocument();
+      expect(bar(/requirements extraction progress/i)).toHaveAttribute("value", "73");
+    });
+
+    it("treats a negative or fractional done as a safe whole number", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("requirements", { status: "running", progress_done: -4, progress_total: 73.7 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Reading section 0 of 73")).toBeInTheDocument();
+      expect(bar(/requirements extraction progress/i)).toHaveAttribute("value", "0");
+      expect(bar(/requirements extraction progress/i)).toHaveAttribute("max", "73");
+    });
+
+    it("says Working for a BoQ job at 1 of 1", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("boq", { status: "running", progress_done: 1, progress_total: 1 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Working…")).toBeInTheDocument();
+    });
+
+    it("says Working for a quotation job at 0 of 1", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("quotation", { status: "running", progress_done: 0, progress_total: 1 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("Working…")).toBeInTheDocument();
+    });
+
+    it("counts steps for a BoQ job with more than one step", async () => {
+      mockApi({
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([makeKind("boq", { status: "running", progress_done: 2, progress_total: 4 }, null)])),
+      });
+      renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+      expect(await screen.findByText("2 of 4 steps")).toBeInTheDocument();
+      expect(bar(/bill of quantities extraction progress/i)).toHaveAttribute("max", "4");
+    });
+  });
+
   it("says the status may be out of date when polling gives up, and recovers on Check again", async () => {
     let healthy = false;
     let n = 0;

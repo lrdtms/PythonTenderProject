@@ -73,6 +73,30 @@ const JOB_ERRORS: Record<string, string> = {
   INFRASTRUCTURE: "A temporary problem stopped processing. Try again.",
   LEASE_EXPIRED: "Processing was interrupted. Try again.",
 };
+/** Whole, in-range progress for a bar: total is 0 when unknown (draw indeterminate), done is clamped to 0..total. */
+export function progressBounds(job: { progress_done: number; progress_total: number }): { done: number; total: number } {
+  const total = Number.isFinite(job.progress_total) && job.progress_total > 0 ? Math.floor(job.progress_total) : 0;
+  const raw = Number.isFinite(job.progress_done) ? Math.floor(job.progress_done) : 0;
+  return { done: Math.min(Math.max(raw, 0), total), total };
+}
+
+/** Plain-words progress for an active extraction job; null once the job has finished. */
+export function progressText(
+  kind: string,
+  job: { status: string; progress_done: number; progress_total: number },
+): string | null {
+  if (isTerminalJob(job.status)) return null;
+  if (job.status === "queued") return "Waiting in the queue…";
+  const { done, total } = progressBounds(job);
+  if (total <= 1) return "Working…";
+  if (kind === "requirements") return `Reading section ${done} of ${total}`;
+  return `${done} of ${total} steps`;
+}
+
+/** A note explaining a restarted run; null for the first attempt. */
+export const attemptText = (attemptCount: number): string | null =>
+  Number.isInteger(attemptCount) && attemptCount > 1 ? `Attempt ${attemptCount}` : null;
+
 export const jobErrorText = (code: string | null): string => (code && JOB_ERRORS[code]) || GENERIC_FAILURE;
 
 function pageList(pages: unknown): number[] {
