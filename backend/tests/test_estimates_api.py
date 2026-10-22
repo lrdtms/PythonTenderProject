@@ -1047,3 +1047,41 @@ def test_reviewer_and_approver_names_reach_every_reader() -> None:
         got = who.client.get(url).json()
         assert got["reviewed_by_name"] == "Erin Estimator", who
         assert got["approved_by_name"] == "Pat Manager", who
+
+
+def test_a_boq_line_added_after_the_estimate_started_blocks_review_and_approval() -> None:
+    from app.modules.estimating.models import BoqItem
+
+    actor, _, est = _ready("st-new1@example.com")
+    assert _move(actor, est, "review").status_code == 200
+    with session_scope() as s:
+        src = s.scalars(select(BoqItem).order_by(BoqItem.source_order, BoqItem.position)).first()
+        s.add(
+            BoqItem(
+                organisation_id=src.organisation_id,
+                run_id=src.run_id,
+                document_version_id=src.document_version_id,
+                position=9999,
+                source_order=9999,
+                description="Added later",
+                unit=src.unit,
+                quantity=Decimal("3"),
+                review_status="confirmed",
+            )
+        )
+    for action in ("approve", "reopen", "review"):
+        r = _move(actor, est, action)
+        if action == "reopen":
+            assert r.status_code == 200
+            continue
+        err = r.json()["error"]
+        assert r.status_code == 409 and err["code"] == "estimate_not_ready", action
+        assert err["details"]["blockers"] == [
+            {
+                "line_id": None,
+                "code": "boq_lines_missing",
+                "item_no": None,
+                "description": None,
+                "reasons": ["1 new BoQ line"],
+            }
+        ]

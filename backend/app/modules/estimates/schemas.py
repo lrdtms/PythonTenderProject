@@ -222,7 +222,9 @@ class EstimateDTO(BaseModel):
     approved_by_name: str | None = None  # filled by the API layer
 
 
-BlockerCode = Literal["unresolved", "source_changed", "unreviewed_source", "no_lines"]
+BlockerCode = Literal[
+    "unresolved", "source_changed", "unreviewed_source", "no_lines", "boq_lines_missing"
+]
 
 
 class Blocker(BaseModel):

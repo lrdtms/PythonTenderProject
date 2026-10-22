@@ -17,6 +17,7 @@ const BLOCKERS: Record<string, string> = {
   source_changed: "Some prices are out of date because their BoQ or quotation changed. Refresh those lines.",
   unreviewed_source: "A BoQ line or quotation item behind this price has not been reviewed yet. Review it before approving.",
   no_lines: "This estimate has no BoQ lines to price.",
+  boq_lines_missing: "New BoQ lines were added after this estimate was started. Start a new version.",
 };
 
 const ERRORS: Record<string, string> = {
@@ -48,6 +49,7 @@ export const blockerText = (code: string): string => lookup(BLOCKERS, code);
 
 /** What is wrong with the line behind a blocker, in plain words: its own reasons, or "no price chosen yet". */
 export const blockerReasonText = (code: string, reasons: string[]): string => {
+  if (code === "boq_lines_missing") return blockerText(code);
   if (reasons.length > 0) return reasons.map(flagText).join(" ");
   return code === "unresolved" ? "No price has been chosen yet." : blockerText(code);
 };

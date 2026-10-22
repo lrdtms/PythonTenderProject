@@ -702,6 +702,16 @@ def readiness(est: Estimate, lines: Sequence[EstimateLine], live: LiveInputs) ->
             )
             code: BlockerCode = "unreviewed_source" if only_unreviewed else "unresolved"
             out.append(Blocker(code=code, **named))
+    missing = set(live.boq) - {row.boq_item_id for row in lines}
+    if missing:  # a BoQ line that arrived after this version was started has no estimate line
+        n = len(missing)
+        out.append(
+            Blocker(
+                line_id=None,
+                code="boq_lines_missing",
+                reasons=[f"{n} new BoQ line{'s' if n != 1 else ''}"],
+            )
+        )
     return out
 
 

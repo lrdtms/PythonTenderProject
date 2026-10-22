@@ -17,14 +17,14 @@ export type PricingDefaultsPut = Schemas["PricingDefaultsPut"];
 
 export type Blocker = {
   line_id: string | null;
-  code: "unresolved" | "source_changed" | "unreviewed_source" | "no_lines";
+  code: "unresolved" | "source_changed" | "unreviewed_source" | "no_lines" | "boq_lines_missing";
   item_no: string | null;
   description: string | null;
   /** The line's flag codes (live ones included); empty when the line simply has no price yet. */
   reasons: string[];
 };
 
-const BLOCKER_CODES = ["unresolved", "source_changed", "unreviewed_source", "no_lines"];
+const BLOCKER_CODES = ["unresolved", "source_changed", "unreviewed_source", "no_lines", "boq_lines_missing"];
 
 /** The blockers of an `estimate_not_ready` error, or [] when the error carries none (or malformed ones). */
 export function notReadyBlockers(error: unknown): Blocker[] {

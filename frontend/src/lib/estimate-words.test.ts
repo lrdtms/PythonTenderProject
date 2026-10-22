@@ -13,7 +13,7 @@ const FLAGS = [
   "unreviewed_source",
   "source_changed",
 ];
-const BLOCKERS = ["unresolved", "source_changed", "unreviewed_source", "no_lines"];
+const BLOCKERS = ["unresolved", "source_changed", "unreviewed_source", "no_lines", "boq_lines_missing"];
 const ERRORS = [
   "estimate_frozen",
   "estimate_not_ready",
@@ -80,5 +80,7 @@ describe("estimate plain words", () => {
     );
     expect(blockerReasonText("source_changed", ["source_changed"])).toBe(flagText("source_changed"));
     expect(blockerReasonText("no_lines", [])).toBe(blockerText("no_lines"));
+    expect(blockerReasonText("boq_lines_missing", ["2 new BoQ lines"])).toBe(blockerText("boq_lines_missing"));
+    expect(blockerText("boq_lines_missing")).toMatch(/new version/i);
   });
 });

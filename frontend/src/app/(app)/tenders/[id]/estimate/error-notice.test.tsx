@@ -43,4 +43,10 @@ describe("ErrorNotice blockers", () => {
     expect(screen.getByRole("listitem")).toHaveTextContent("This estimate has no BoQ lines to price.");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
+
+  it("tells the user to start a new version when BoQ lines were added", () => {
+    render(<ErrorNotice error={notReady([{ line_id: null, code: "boq_lines_missing", item_no: null, description: null, reasons: ["3 new BoQ lines"] }])} />);
+    expect(screen.getByRole("listitem")).toHaveTextContent("Start a new version.");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
 });
