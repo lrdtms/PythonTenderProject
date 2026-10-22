@@ -1153,3 +1153,22 @@ def test_frozen_totals_that_overflow_are_a_422_and_the_estimate_stays_a_draft() 
         assert r.status_code == 200, r.text
     _too_large(_move(actor, est, "review"))
     assert actor.client.get(f"{API}/estimates/{est['id']}").json()["status"] == "draft"
+
+
+def test_estimate_audit_rows_keep_their_ids_and_drop_free_text() -> None:
+    from app.modules.audit import service as audit
+
+    actor, _, est = _priced_setup("au1@example.com")
+    a = _usable(actor, est)[0]
+    assert _put(actor, a, manual_unit_price="2").status_code == 200
+    with session_scope() as s:
+        row = s.scalars(select(AuditEvent).where(AuditEvent.action == "estimate_line_priced")).one()
+        meta = row.event_metadata
+        assert meta["estimate_id"] == est["id"] and meta["source"] == "manual"
+        assert meta["boq_item_id"] == a["boq_item_id"]
+        created = s.scalars(select(AuditEvent).where(AuditEvent.action == "estimate_created")).one()
+        assert created.event_metadata["version"] == 1 and "tender_id" in created.event_metadata
+    assert audit._safe({"description": "secret", "version": 2, "source": "manual"}) == {
+        "version": 2,
+        "source": "manual",
+    }
