@@ -36,14 +36,25 @@ function chosenSource(line: EstimateLine): string | null {
 
 /** One BoQ line: read-only. Candidates are shown in the order the server sent them, none chosen, none marked.
  * `controls` is the extension point for the editing controls. */
-export function LineRow({ line, currency, controls }: { line: EstimateLine; currency: string; controls?: ReactNode }) {
+export function LineRow({
+  line,
+  currency,
+  controls,
+  candidatesInControls = false,
+}: {
+  line: EstimateLine;
+  currency: string;
+  controls?: ReactNode;
+  /** The controls list the candidates themselves (as choices), so the read-only list is left out. */
+  candidatesInControls?: boolean;
+}) {
   // A frozen estimate keeps its chosen price but not the candidate list, so only an open line can say "none".
   const noCandidatesNote = line.price_source === "unresolved";
   const status = STATUS[line.status];
   const source = chosenSource(line);
   const amounts = AMOUNTS.filter(([, key]) => line[key] !== null && line[key] !== undefined);
   return (
-    <li className="rounded border border-zinc-300 p-3 dark:border-zinc-700">
+    <li id={`line-${line.id}`} className="rounded border border-zinc-300 p-3 dark:border-zinc-700">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-sm font-medium">
           {line.item_no ? `${line.item_no} ` : ""}
@@ -78,7 +89,7 @@ export function LineRow({ line, currency, controls }: { line: EstimateLine; curr
         noCandidatesNote ? (
           <p className="text-xs text-zinc-600 dark:text-zinc-400">No confirmed supplier price for this line.</p>
         ) : null
-      ) : (
+      ) : candidatesInControls ? null : (
         <ul aria-label="Supplier prices" className="space-y-1">
           {line.candidates.map((c) => (
             <li key={c.match_id} className="text-sm">

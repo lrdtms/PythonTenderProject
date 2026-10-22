@@ -72,7 +72,7 @@ describe("EstimateView", () => {
     await screen.findByText(/LED panel/);
     const text = document.body.textContent ?? "";
     expect(text.indexOf("Zulu Supplies")).toBeLessThan(text.indexOf("Alpha Traders"));
-    expect(document.querySelector("[aria-label='Supplier prices'] input, [aria-checked=true], [data-best], [data-lowest]")).toBeNull();
+    expect(document.querySelector("[aria-label='Supplier prices'] input:checked, [aria-checked=true], [data-best], [data-lowest]")).toBeNull();
     expect(text).not.toMatch(/cheapest|lowest|\bbest\b/i);
   });
 

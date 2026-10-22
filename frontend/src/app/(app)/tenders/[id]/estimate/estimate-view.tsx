@@ -10,7 +10,6 @@ import {
   type Estimate,
   type EstimateLine,
   type EstimateSummary,
-  notReadyBlockers,
   useCreateEstimate,
   useEstimate,
   useEstimateLines,
@@ -20,11 +19,14 @@ import {
 import { tenderQueryOptions } from "@/api/tenders";
 import { useCan } from "@/components/auth-gate";
 import { StatusBadge } from "@/components/status-badge";
-import { blockerText, errorText } from "@/lib/estimate-words";
+import { errorText } from "@/lib/estimate-words";
 import { formatDateTime } from "@/lib/format";
 
+import { ErrorNotice } from "./error-notice";
+import { LineControls } from "./line-controls";
 import { LineRow } from "./line-row";
 import { SettingsCard } from "./settings-card";
+import { StatusActions } from "./status-actions";
 import { Summary } from "./summary";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,24 +35,7 @@ const BUTTON = "rounded border px-3 py-1 text-sm disabled:opacity-50";
 
 const STATUS_LABEL: Record<string, string> = { draft: "Draft", reviewed: "Reviewed", approved: "Approved" };
 
-/** A failed estimate action in plain words, with the blockers of an `estimate_not_ready` refusal listed. */
-export function ErrorNotice({ error }: { error: unknown }) {
-  if (!error) return null;
-  const text = error instanceof ApiError ? errorText(error.code, error.message) : "Something went wrong. Try again.";
-  const blockers = notReadyBlockers(error);
-  return (
-    <div role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">
-      <p>{text}</p>
-      {blockers.length > 0 ? (
-        <ul className="mt-1 list-disc pl-5">
-          {blockers.map((b, i) => (
-            <li key={`${b.code}-${b.line_id ?? "none"}-${i}`}>{blockerText(b.code)}</li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
+export { ErrorNotice };
 
 type Section = { name: string | null; lines: EstimateLine[] };
 
@@ -86,7 +71,19 @@ function Who({ label, userId, name: given, at }: { label: string; userId: string
   );
 }
 
-function EstimateBody({ estimate, editable }: { estimate: Estimate; editable: boolean }) {
+function EstimateBody({
+  estimate,
+  editable,
+  hasDraft,
+  archived,
+  onCreated,
+}: {
+  estimate: Estimate;
+  editable: boolean;
+  hasDraft: boolean;
+  archived: boolean;
+  onCreated: (id: string) => void;
+}) {
   const [status, setStatus] = useState("");
   const list = useEstimateLines(estimate.id, { status: (status || undefined) as EstimateLine["status"] | undefined });
   const frozen = estimate.status !== "draft";
@@ -108,8 +105,7 @@ function EstimateBody({ estimate, editable }: { estimate: Estimate; editable: bo
         <Summary estimate={estimate} />
       </div>
 
-      {/* Actions area: Mark reviewed, Approve, Reopen and New version are added here. */}
-      <div role="group" aria-label="Estimate actions" className="mb-4 flex flex-wrap items-center gap-2" />
+      <StatusActions estimate={estimate} hasDraft={hasDraft} archived={archived} onCreated={onCreated} />
 
       <div className="mb-3 flex flex-wrap items-end gap-3" role="group" aria-label="Filters">
         <label className="text-sm">
@@ -145,7 +141,13 @@ function EstimateBody({ estimate, editable }: { estimate: Estimate; editable: bo
           <h2 className="mb-2 text-lg font-medium">{section.name ?? "No section"}</h2>
           <ul className="space-y-3">
             {section.lines.map((line) => (
-              <LineRow key={line.id} line={line} currency={estimate.currency} />
+              <LineRow
+                key={line.id}
+                line={line}
+                currency={estimate.currency}
+                candidatesInControls={editable}
+                controls={editable ? <LineControls line={line} basis={estimate.markup_basis} /> : undefined}
+              />
             ))}
           </ul>
         </section>
@@ -262,7 +264,14 @@ export function EstimateView() {
           />
           {e.status === "reviewed" ? <StatusBadge tone="warning" label="Not approved" /> : null}
         </div>
-        <EstimateBody key={e.id} estimate={e} editable={canEdit && e.status === "draft"} />
+        <EstimateBody
+          key={e.id}
+          estimate={e}
+          editable={canEdit && e.status === "draft"}
+          hasDraft={(versions.data ?? []).some((v) => v.status === "draft")}
+          archived={archived}
+          onCreated={setPicked}
+        />
       </>
     );
   }
