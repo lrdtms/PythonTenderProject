@@ -56,6 +56,8 @@ export function LineRow({
   const noCandidatesNote = line.price_source === "unresolved";
   const status = STATUS[line.status];
   const source = chosenSource(line, currency);
+  // A changed line keeps its stored quantity and amounts, but they are stale and left out of the summary.
+  const old = line.status === "changed";
   const amounts = AMOUNTS.filter(([, key]) => line[key] !== null && line[key] !== undefined);
   return (
     <li id={`line-${line.id}`} className="rounded border border-zinc-300 p-3 dark:border-zinc-700">
@@ -66,8 +68,8 @@ export function LineRow({
         </p>
         <StatusBadge tone={status.tone} label={status.label} />
       </div>
-      <p className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">
-        Unit: {line.unit ?? "not given"} · Quantity: {line.quantity ?? "not given"}
+      <p className={`mb-2 text-xs text-zinc-600 dark:text-zinc-400${old ? " opacity-70" : ""}`}>
+        Unit: {line.unit ?? "not given"} · Quantity{old ? " (old)" : ""}: {line.quantity ?? "not given"}
       </p>
       {line.flags.length > 0 ? (
         <ul aria-label="Flags" className="mb-2 flex flex-wrap gap-2">
@@ -80,11 +82,11 @@ export function LineRow({
       ) : null}
       {source ? <p className="mb-1 text-sm">{source}</p> : null}
       {amounts.length > 0 ? (
-        <dl className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        <dl className={`mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs${old ? " opacity-70" : ""}`}>
           {amounts.map(([label, key]) => (
             <div key={key} className="flex gap-1">
-              <dt className="font-medium">{label}</dt>
-              <dd>{`${currency} ${line[key] as string}`}</dd>
+              <dt className="font-medium">{old ? `${label} (old)` : label}</dt>
+              <dd>{`${currency} ${line[key] as string}${old && key === "total" ? " — not counted until refreshed" : ""}`}</dd>
             </div>
           ))}
         </dl>

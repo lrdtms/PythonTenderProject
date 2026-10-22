@@ -45,7 +45,27 @@ describe("LineRow", () => {
     expect(screen.getByText(/has changed since it was chosen/)).toBeInTheDocument();
     expect(screen.getByText(/1\.1/)).toBeInTheDocument();
     expect(screen.getByText(/Unit: no/)).toBeInTheDocument();
-    expect(screen.getByText(/Quantity: 10\.0000/)).toBeInTheDocument();
+    expect(screen.getByText(/Quantity \(old\): 10\.0000/)).toBeInTheDocument();
+  });
+
+  it("marks the stored quantity and amounts of a changed line as old and not counted", () => {
+    const line = makeEstimateLine({
+      status: "changed", flags: ["source_changed"], price_source: "supplier", supplier_name: "Zulu Supplies",
+      quantity: "77.0000", material_cost: "6391.00", labour_cost: "0.00", markup: "639.10", total: "7030.10", cost: "6391.00",
+    });
+    render(<ul><LineRow line={line} currency="ZAR" /></ul>);
+    const row = screen.getAllByRole("listitem")[0];
+    expect(within(row).getByText(/Quantity \(old\): 77\.0000/)).toBeInTheDocument();
+    expect(within(row).getByText("Material (old)")).toBeInTheDocument();
+    expect(within(row).getByText("Line total (old)")).toBeInTheDocument();
+    expect(within(row).getByText("ZAR 7030.10 — not counted until refreshed")).toBeInTheDocument();
+  });
+
+  it("does not label the quantity or amounts of a current line as old", () => {
+    const line = makeEstimateLine({ status: "priced", price_source: "supplier", total: "1380.50", material_cost: "1255.00" });
+    render(<ul><LineRow line={line} currency="ZAR" /></ul>);
+    expect(screen.queryByText(/\(old\)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/not counted until refreshed/)).not.toBeInTheDocument();
   });
 
   it("shows the chosen source and amounts of a priced line", () => {
