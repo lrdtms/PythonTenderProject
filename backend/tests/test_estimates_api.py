@@ -1085,3 +1085,71 @@ def test_a_boq_line_added_after_the_estimate_started_blocks_review_and_approval(
                 "reasons": ["1 new BoQ line"],
             }
         ]
+
+
+def _set_quantity(line: dict, value: str) -> None:
+    from app.modules.estimating.models import BoqItem
+
+    with session_scope() as s:
+        s.get(BoqItem, UUID(line["boq_item_id"])).quantity = Decimal(value)
+
+
+def _too_large(r) -> None:
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "amount_too_large"
+
+
+def test_an_overflowing_line_amount_is_a_422_and_changes_nothing() -> None:
+    actor, _, est = _priced_setup("ov1@example.com")
+    a = _usable(actor, est)[0]
+    _set_quantity(a, "1000000")
+    _too_large(_put(actor, a, manual_unit_price="10000000000"))
+    got = _line(actor, est, a["id"])
+    assert got["status"] == "unresolved" and got["total"] is None
+    assert got["price_source"] == "unresolved"
+
+
+def test_refreshing_to_a_huge_quantity_is_a_422_and_keeps_the_line() -> None:
+    actor, _, est = _priced_setup("ov2@example.com")
+    a = _usable(actor, est)[0]
+    assert _put(actor, a, manual_unit_price="1000000").status_code == 200
+    before = _line(actor, est, a["id"])
+    _set_quantity(a, "99999999999999")
+    _too_large(actor.client.post(f"{API}/estimate-lines/{a['id']}/refresh"))
+    after = _line(actor, est, a["id"])
+    assert after["quantity"] == before["quantity"] and after["total"] == before["total"]
+
+
+def test_a_basis_switch_that_overflows_is_a_422_and_keeps_the_settings() -> None:
+    actor, _, est = _priced_setup("ov3@example.com")
+    a = _usable(actor, est)[0]
+    _set_quantity(a, "1000")
+    assert _put(actor, a, manual_unit_price="1000000000000").status_code == 200
+    before = actor.client.get(f"{API}/estimates/{est['id']}").json()
+    r = actor.client.patch(
+        f"{API}/estimates/{est['id']}",
+        json={"markup_basis": "selling_price", "markup_percent": "99.99"},
+    )
+    _too_large(r)
+    after = actor.client.get(f"{API}/estimates/{est['id']}").json()
+    assert after["markup_basis"] == before["markup_basis"] == "cost"
+    assert after["markup_percent"] == before["markup_percent"]
+    assert (
+        _line(actor, est, a["id"])["total"]
+        == next(x for x in _lines(actor, est) if x["id"] == a["id"])["total"]
+    )
+
+
+def test_frozen_totals_that_overflow_are_a_422_and_the_estimate_stays_a_draft() -> None:
+    actor, _, est = _priced_setup("ov4@example.com")
+    a, b = _usable(actor, est)[:2]
+    for line in (a, b):
+        _set_quantity(line, "1000000")
+    for line in _lines(actor, est):
+        if line["id"] in (a["id"], b["id"]):
+            r = _put(actor, line, manual_unit_price="6000000000", markup_override_percent="0")
+        else:
+            r = _put(actor, line, exclude_reason="Not needed")
+        assert r.status_code == 200, r.text
+    _too_large(_move(actor, est, "review"))
+    assert actor.client.get(f"{API}/estimates/{est['id']}").json()["status"] == "draft"

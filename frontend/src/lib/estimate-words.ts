@@ -32,6 +32,7 @@ const ERRORS: Record<string, string> = {
   quantity_missing: "This line has no quantity, so it can only be excluded.",
   invalid_markup_override: "That markup is not allowed. Check the number and try again.",
   invalid_settings: "Those settings are not allowed. Check the numbers and try again.",
+  amount_too_large: "This amount is too large. Check the quantity and the price.",
   unit_mismatch_unacknowledged: "The quoted unit is different from the BoQ unit. Confirm that you want to use this price.",
 };
 

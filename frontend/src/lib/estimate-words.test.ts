@@ -8,6 +8,7 @@ const FLAGS = [
   "vat_basis_unknown",
   "price_missing",
   "quantity_missing",
+  "amount_too_large",
   "unit_missing",
   "unit_mismatch",
   "unreviewed_source",

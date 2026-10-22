@@ -435,6 +435,17 @@ def _set_amounts(row: EstimateLine, amounts: calc.LineAmounts | None) -> None:
     row.total = amounts.total if amounts else None
 
 
+_AMOUNT_LIMIT = Decimal(10) ** 16  # the amount columns are Numeric(18, 2)
+
+
+def _refuse_overflow(values: Sequence[Decimal]) -> None:
+    if any(abs(v) >= _AMOUNT_LIMIT for v in values):
+        raise ValidationFailed(
+            "This amount is too large. Check the quantity and the price.",
+            code="amount_too_large",
+        )
+
+
 def _price(row: EstimateLine, est: Estimate) -> None:
     """Recompute `unit_price_ex_vat` (supplier lines) and the amounts from the line's snapshots.
     A line with a blocker flag, or without a usable quantity or price, gets no amounts."""
@@ -448,15 +459,16 @@ def _price(row: EstimateLine, est: Estimate) -> None:
     if _blocked(row) or row.unit_price_ex_vat is None:
         _set_amounts(row, None)
         return
-    _set_amounts(
-        row,
-        calc.line_amounts(
-            calc.LineInput(
-                row.quantity, row.unit_price_ex_vat, row.labour_rate, row.markup_override_percent
-            ),
-            _settings(est),
+    amounts = calc.line_amounts(
+        calc.LineInput(
+            row.quantity, row.unit_price_ex_vat, row.labour_rate, row.markup_override_percent
         ),
+        _settings(est),
     )
+    _refuse_overflow(
+        [amounts.material_cost, amounts.labour_cost, amounts.cost, amounts.markup, amounts.total]
+    )
+    _set_amounts(row, amounts)
 
 
 def _snapshot_boq(row: EstimateLine, boq: BoqInput) -> None:
@@ -741,6 +753,9 @@ def _freeze_totals(est: Estimate, rows: Sequence[EstimateLine]) -> None:
         if r.price_source != "excluded" and r.total is not None
     ]
     t = calc.totals(amounts, _settings(est))
+    _refuse_overflow(
+        [t.subtotal_cost, t.markup_total, t.subtotal_ex_vat, t.vat_total, t.total_inc_vat]
+    )
     est.subtotal_cost, est.markup_total = t.subtotal_cost, t.markup_total
     est.subtotal_ex_vat, est.vat_total, est.total_inc_vat = (
         t.subtotal_ex_vat,
