@@ -128,3 +128,28 @@ describe("AppShell members link", () => {
     expect(screen.queryByRole("link", { name: "Members" })).toBeNull();
   });
 });
+
+describe("AppShell pricing link", () => {
+  async function renderWith(permissions: string[]) {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/me") return respond(200, { ...ME, permissions });
+      throw new Error(`unexpected request ${url}`);
+    });
+    renderWithClient(
+      <AuthGate>
+        <AppShell>content</AppShell>
+      </AuthGate>,
+    );
+    await screen.findByText("content");
+  }
+
+  it("shows Pricing only to someone who can manage pricing", async () => {
+    await renderWith(["read", "manage_pricing"]);
+    expect(screen.getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/settings/pricing");
+  });
+
+  it("hides Pricing from everyone else", async () => {
+    await renderWith(["read", "manage_members"]);
+    expect(screen.queryByRole("link", { name: "Pricing" })).toBeNull();
+  });
+});
