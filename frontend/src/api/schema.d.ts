@@ -1220,6 +1220,8 @@ export interface components {
             approved_at: string | null;
             /** Approved By */
             approved_by: string | null;
+            /** Approved By Name */
+            approved_by_name?: string | null;
             /** Based On Version */
             based_on_version: number | null;
             /** Changed */
@@ -1236,6 +1238,8 @@ export interface components {
             created_by: string;
             /** Currency */
             currency: string;
+            /** Currency Locked */
+            currency_locked: boolean;
             /** Excluded */
             excluded: number;
             /**
@@ -1258,6 +1262,8 @@ export interface components {
             reviewed_at: string | null;
             /** Reviewed By */
             reviewed_by: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name?: string | null;
             /** Status */
             status: string;
             /**

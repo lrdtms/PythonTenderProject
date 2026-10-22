@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -230,6 +230,12 @@ def _lines_of(
     return [(row, _line_dto(row, use)) for row in repo.all_lines(est.id)]
 
 
+def _holds_currency(rows: Iterable[EstimateLine]) -> bool:
+    """Whether any line (blocked ones included) is priced from a supplier or by hand: the one rule
+    behind both the `currency_locked` flag and the refusal to change the currency."""
+    return any(r.price_source in ("supplier", "manual") for r in rows)
+
+
 def _estimate_dto(
     est: Estimate, lines: Sequence[tuple[EstimateLine, EstimateLineDTO]]
 ) -> EstimateDTO:
@@ -271,6 +277,7 @@ def _estimate_dto(
         reviewed_at=est.reviewed_at,
         approved_by=est.approved_by,
         approved_at=est.approved_at,
+        currency_locked=_holds_currency(row for row, _ in lines),
         **counts,
     )
 
@@ -633,7 +640,7 @@ def patch_estimate(
     vat = Decimal(body.vat_rate) if body.vat_rate is not None else est.vat_rate
     basis = body.markup_basis if body.markup_basis is not None else est.markup_basis
     pct = Decimal(body.markup_percent) if body.markup_percent is not None else est.markup_percent
-    if currency != est.currency and any(r.price_source in ("supplier", "manual") for r in rows):
+    if currency != est.currency and _holds_currency(rows):
         raise Conflict("The currency cannot change once a line is priced.", code="currency_locked")
     try:
         calc.validate_settings(calc.Settings(vat, basis, pct))  # type: ignore[arg-type]

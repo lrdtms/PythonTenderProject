@@ -13,6 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.deps import Ctx, DbSession
+from app.api.reviewers import with_estimate_names
 from app.api.tender_guard import refuse_archived
 from app.kernel import NotFound, Permission
 from app.modules.documents import public as documents
@@ -122,13 +123,15 @@ def create_estimate(tender_id: UUID, ctx: Ctx, session: DbSession):
     suppliers.lock_tender(session, ctx, tender_id)
     refuse_archived(session, ctx, tender_id, fresh=True)  # an archive may have committed meanwhile
     boq, _ = _current(session, ctx, tender_id)
-    return estimates.create_estimate(session, ctx, tender_id, _boq_inputs(boq))
+    dto = estimates.create_estimate(session, ctx, tender_id, _boq_inputs(boq))
+    return with_estimate_names(session, ctx, dto)
 
 
 @router.get("/estimates/{estimate_id}", response_model=estimates.EstimateDTO)
 def get_estimate(estimate_id: UUID, ctx: Ctx, session: DbSession):
     tender_id = estimates.tender_of(session, ctx, estimate_id)
-    return estimates.get_estimate(session, ctx, estimate_id, _live(session, ctx, tender_id))
+    dto = estimates.get_estimate(session, ctx, estimate_id, _live(session, ctx, tender_id))
+    return with_estimate_names(session, ctx, dto)
 
 
 @router.get("/estimates/{estimate_id}/lines", response_model=list[estimates.EstimateLineDTO])
@@ -161,7 +164,8 @@ def _locked_live(
 def patch_estimate(estimate_id: UUID, body: estimates.EstimatePatch, ctx: Ctx, session: DbSession):
     tender_id = estimates.tender_of(session, ctx, estimate_id)
     live = _locked_live(session, ctx, tender_id)
-    return estimates.patch_estimate(session, ctx, estimate_id, body, live)
+    dto = estimates.patch_estimate(session, ctx, estimate_id, body, live)
+    return with_estimate_names(session, ctx, dto)
 
 
 @router.put("/estimate-lines/{line_id}", response_model=estimates.EstimateLineDTO)
@@ -182,18 +186,21 @@ def refresh_line(line_id: UUID, ctx: Ctx, session: DbSession):
 def review_estimate(estimate_id: UUID, ctx: Ctx, session: DbSession):
     tender_id = estimates.tender_of(session, ctx, estimate_id)
     live = _locked_live(session, ctx, tender_id)
-    return estimates.review_estimate(session, ctx, estimate_id, live)
+    dto = estimates.review_estimate(session, ctx, estimate_id, live)
+    return with_estimate_names(session, ctx, dto)
 
 
 @router.post("/estimates/{estimate_id}/reopen", response_model=estimates.EstimateDTO)
 def reopen_estimate(estimate_id: UUID, ctx: Ctx, session: DbSession):
     tender_id = estimates.tender_of(session, ctx, estimate_id)
     live = _locked_live(session, ctx, tender_id)
-    return estimates.reopen_estimate(session, ctx, estimate_id, live)
+    dto = estimates.reopen_estimate(session, ctx, estimate_id, live)
+    return with_estimate_names(session, ctx, dto)
 
 
 @router.post("/estimates/{estimate_id}/approve", response_model=estimates.EstimateDTO)
 def approve_estimate(estimate_id: UUID, ctx: Ctx, session: DbSession):
     tender_id = estimates.tender_of(session, ctx, estimate_id)
     live = _locked_live(session, ctx, tender_id, Permission.APPROVE_ESTIMATE)
-    return estimates.approve_estimate(session, ctx, estimate_id, live)
+    dto = estimates.approve_estimate(session, ctx, estimate_id, live)
+    return with_estimate_names(session, ctx, dto)

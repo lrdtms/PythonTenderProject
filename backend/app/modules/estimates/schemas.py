@@ -217,6 +217,9 @@ class EstimateDTO(BaseModel):
     reviewed_at: datetime | None
     approved_by: UUID | None
     approved_at: datetime | None
+    currency_locked: bool
+    reviewed_by_name: str | None = None  # filled by the API layer
+    approved_by_name: str | None = None  # filled by the API layer
 
 
 BlockerCode = Literal["unresolved", "source_changed", "unreviewed_source", "no_lines"]

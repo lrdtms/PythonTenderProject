@@ -135,7 +135,7 @@ export function makeEstimate(over: Partial<Estimate> = {}): Estimate {
   return {
     id: ID(500), tender_id: ids.tender, version: 1, status: "draft", currency: "ZAR", vat_rate: "15.00",
     markup_basis: "cost", markup_percent: "10.00", based_on_version: null, created_by: ids.user, created_at: NOW,
-    reviewed_by: null, reviewed_at: null, approved_by: null, approved_at: null,
+    reviewed_by: null, reviewed_at: null, approved_by: null, approved_at: null, currency_locked: false,
     priced: 1, excluded: 0, unresolved: 0, changed: 0, incomplete: false,
     totals: { subtotal_cost: "100.00", markup_total: "10.00", subtotal_ex_vat: "110.00", vat_total: "16.50", total_inc_vat: "126.50" },
     ...over,

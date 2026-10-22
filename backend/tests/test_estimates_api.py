@@ -951,3 +951,49 @@ def test_current_approved_version_flag_and_audit_rows() -> None:
         assert meta["reviewed_by"] == actor.me["user_id"]
         assert meta["approved_by"] == actor.me["user_id"] and meta["status"] == "approved"
         assert not {"total_inc_vat", "totals"} & set(meta)
+
+
+# --- currency_locked and reviewer names on the estimate DTO ----------------------------------
+
+
+def test_currency_locked_follows_the_priced_sources() -> None:
+    actor, _, est = _priced_setup("cl1@example.com")
+    url = f"{API}/estimates/{est['id']}"
+    assert est["currency_locked"] is False
+    assert actor.client.get(url).json()["currency_locked"] is False
+    line = _usable(actor, est)[0]
+    _put(actor, line, exclude_reason="Not needed")
+    assert actor.client.get(url).json()["currency_locked"] is False  # an exclusion holds nothing
+    other = _usable(actor, est)[1]
+    _put(actor, other, manual_unit_price="2")
+    assert actor.client.get(url).json()["currency_locked"] is True
+    patched = actor.client.patch(url, json={"vat_rate": "10"}).json()
+    assert patched["currency_locked"] is True
+
+
+def test_a_blocked_supplier_line_locks_the_currency_in_the_dto() -> None:
+    actor, _, est = _priced_setup("cl2@example.com", currency="EUR")
+    line = _usable(actor, est)[0]
+    got = _put(actor, line, match_suggestion_id=line["candidates"][0]["match_id"]).json()
+    assert "currency_differs" in got["flags"]
+    assert actor.client.get(f"{API}/estimates/{est['id']}").json()["currency_locked"] is True
+
+
+def test_reviewer_and_approver_names_reach_every_reader() -> None:
+    actor, _, est = _ready("nm1@example.com")
+    estimator = add_member(actor, "nm1e@example.com", "estimator", name="Erin Estimator")
+    manager = add_member(actor, "nm1m@example.com", "project_manager", name="Pat Manager")
+    reviewer = add_member(actor, "nm1r@example.com", "reviewer", name="Rae Reader")
+    url = f"{API}/estimates/{est['id']}"
+    before = estimator.client.get(url).json()
+    assert before["reviewed_by_name"] is None and before["approved_by_name"] is None
+    reviewed = _move(estimator, est, "review").json()
+    assert reviewed["reviewed_by_name"] == "Erin Estimator"
+    assert reviewed["approved_by_name"] is None
+    approved = _move(manager, est, "approve").json()
+    assert approved["reviewed_by_name"] == "Erin Estimator"
+    assert approved["approved_by_name"] == "Pat Manager"
+    for who in (manager, estimator, reviewer):
+        got = who.client.get(url).json()
+        assert got["reviewed_by_name"] == "Erin Estimator", who
+        assert got["approved_by_name"] == "Pat Manager", who

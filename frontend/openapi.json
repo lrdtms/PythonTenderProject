@@ -557,6 +557,17 @@
             ],
             "title": "Approved By"
           },
+          "approved_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By Name"
+          },
           "based_on_version": {
             "anyOf": [
               {
@@ -585,6 +596,10 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "currency_locked": {
+            "title": "Currency Locked",
+            "type": "boolean"
           },
           "excluded": {
             "title": "Excluded",
@@ -639,6 +654,17 @@
             ],
             "title": "Reviewed By"
           },
+          "reviewed_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By Name"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -692,7 +718,8 @@
           "reviewed_by",
           "reviewed_at",
           "approved_by",
-          "approved_at"
+          "approved_at",
+          "currency_locked"
         ],
         "title": "EstimateDTO",
         "type": "object"

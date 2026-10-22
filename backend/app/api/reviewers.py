@@ -22,6 +22,24 @@ class _Decided(Protocol):
     decided_by_name: str | None
 
 
+class _Estimate(Protocol):
+    reviewed_by: UUID | None
+    reviewed_by_name: str | None
+    approved_by: UUID | None
+    approved_by_name: str | None
+
+
+def with_estimate_names[T: _Estimate](session: Session, ctx: OrgContext, dto: T) -> T:
+    """Fill the reviewer and approver names of an estimate with one member lookup."""
+    ids = {i for i in (dto.reviewed_by, dto.approved_by) if i}
+    names = identity.member_names(session, ctx, ids) if ids else {}
+    if dto.reviewed_by:
+        dto.reviewed_by_name = names.get(dto.reviewed_by)
+    if dto.approved_by:
+        dto.approved_by_name = names.get(dto.approved_by)
+    return dto
+
+
 def with_decider_names[T: _Decided](
     session: Session, ctx: OrgContext, dtos: Sequence[T]
 ) -> list[T]:
