@@ -28,3 +28,16 @@ export function useRequestExtraction(versionId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["extraction", versionId] }),
   });
 }
+
+/** Cancel a queued or running extraction job by id. The variables are the job id. */
+export function useCancelJob(versionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => post<Job>(`/api/v1/jobs/${jobId}/cancel`),
+    onSettled: (_data, _error, jobId) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["extraction", versionId] }),
+        queryClient.invalidateQueries({ queryKey: ["job", jobId] }),
+      ]),
+  });
+}

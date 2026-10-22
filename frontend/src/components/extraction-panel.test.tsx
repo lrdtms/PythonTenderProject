@@ -329,3 +329,198 @@ describe("ExtractionPanel", () => {
     expect(screen.queryByText("Could not refresh the status.")).not.toBeInTheDocument();
   });
 });
+
+describe("cancelling an extraction", () => {
+  const CANCEL = (jobId: string) => `/api/v1/jobs/${jobId}/cancel`;
+  const OTHER_JOB = "00000000-0000-4000-8000-000000000044";
+  const cancelButtons = () => screen.queryAllByRole("button", { name: "Cancel" });
+  const running = (jobId: string, status: "running" | "queued" = "running") => ({ id: jobId, status, progress_done: 1, progress_total: 4 });
+
+  it("shows Cancel for a running job and for a queued job when the user can run extractions", async () => {
+    mockApi(
+      {
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([
+            makeKind("boq", running(ids.job), null),
+            makeKind("requirements", running(OTHER_JOB, "queued"), null),
+          ])),
+      },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await waitFor(() => expect(cancelButtons()).toHaveLength(2));
+  });
+
+  it("never shows Cancel for a finished job", async () => {
+    mockApi(
+      {
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([
+            makeKind("boq", { status: "succeeded" }, { counts: { items: 2 } }),
+            makeKind("requirements", { status: "failed", error_code: "LLM_UNAVAILABLE" }, null),
+            makeKind("quotation", { status: "cancelled" }, null),
+          ])),
+      },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    expect(await screen.findByText("2 lines")).toBeInTheDocument();
+    expect(cancelButtons()).toHaveLength(0);
+  });
+
+  it("hides Cancel from a reviewer", async () => {
+    mockApi(
+      { [`GET ${STATUS}`]: () => respond(200, makeExtraction([makeKind("boq", running(ids.job), null)])) },
+      meWith(["read"], "reviewer"),
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    expect(await screen.findByText("Processing")).toBeInTheDocument();
+    expect(cancelButtons()).toHaveLength(0);
+  });
+
+  it("hides Cancel for an archived tender", async () => {
+    mockApi(
+      { [`GET ${STATUS}`]: () => respond(200, makeExtraction([makeKind("boq", running(ids.job), null)])) },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready archived pollMs={1000} />);
+    expect(await screen.findByText("Processing")).toBeInTheDocument();
+    expect(cancelButtons()).toHaveLength(0);
+  });
+
+  it("shows a confirmation with focus on Yes, cancel and sends nothing", async () => {
+    const fetchMock = mockApi(
+      { [`GET ${STATUS}`]: () => respond(200, makeExtraction([makeKind("boq", running(ids.job), null)])) },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    const group = screen.getByRole("group", { name: /confirm cancellation/i });
+    expect(group).toHaveTextContent("Cancel this extraction? Work already done on this run is discarded.");
+    expect(screen.getByRole("button", { name: "Yes, cancel" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Keep going" })).toBeInTheDocument();
+    expect(callsTo(fetchMock, "POST", CANCEL(ids.job))).toHaveLength(0);
+  });
+
+  it("Keep going closes the confirmation without a request", async () => {
+    const fetchMock = mockApi(
+      { [`GET ${STATUS}`]: () => respond(200, makeExtraction([makeKind("boq", running(ids.job), null)])) },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+    expect(screen.queryByRole("group", { name: /confirm cancellation/i })).not.toBeInTheDocument();
+    expect(callsTo(fetchMock, "POST", CANCEL(ids.job))).toHaveLength(0);
+    expect(cancelButtons()).toHaveLength(1);
+  });
+
+  it("Yes, cancel posts for the right job and refetches the status", async () => {
+    let cancelled = false;
+    const fetchMock = mockApi(
+      {
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([
+            makeKind("boq", running(ids.job), null),
+            makeKind("requirements", cancelled ? { id: OTHER_JOB, status: "cancelled" } : running(OTHER_JOB), null),
+          ])),
+        [`POST ${CANCEL(OTHER_JOB)}`]: () => {
+          cancelled = true;
+          return respond(200, makeJob({ id: OTHER_JOB, status: "cancelled" }));
+        },
+      },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await waitFor(() => expect(cancelButtons()).toHaveLength(2));
+    const statusCalls = callsTo(fetchMock, "GET", STATUS).length;
+    await userEvent.click(cancelButtons()[1]);
+    await userEvent.click(screen.getByRole("button", { name: "Yes, cancel" }));
+    await waitFor(() => expect(callsTo(fetchMock, "POST", CANCEL(OTHER_JOB))).toHaveLength(1));
+    expect(callsTo(fetchMock, "POST", CANCEL(ids.job))).toHaveLength(0);
+    await waitFor(() => expect(callsTo(fetchMock, "GET", STATUS).length).toBeGreaterThan(statusCalls));
+  });
+
+  it("while cancelling shows Cancelling… and disables the buttons", async () => {
+    let release: (r: Response) => void = () => {};
+    mockApi(
+      {
+        [`GET ${STATUS}`]: () => respond(200, makeExtraction([makeKind("boq", running(ids.job), null)])),
+        [`POST ${CANCEL(ids.job)}`]: () => new Promise<Response>((resolve) => (release = resolve)),
+      },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Yes, cancel" }));
+    expect(await screen.findByText("Cancelling…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yes, cancel" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Keep going" })).toBeDisabled();
+    release(respond(200, makeJob({ status: "cancelled" })));
+  });
+
+  it.each([
+    ["tender_archived", /This tender is archived, so nothing can be cancelled\./],
+    ["job_not_cancellable", /This step cannot be cancelled\./],
+  ])("explains the %s refusal in plain words", async (code, pattern) => {
+    mockApi(
+      {
+        [`GET ${STATUS}`]: () => respond(200, makeExtraction([makeKind("boq", running(ids.job), null)])),
+        [`POST ${CANCEL(ids.job)}`]: () => respond(409, errorBody(code, "raw server text")),
+      },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Yes, cancel" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(pattern);
+    expect(alert).not.toHaveTextContent("raw server text");
+  });
+
+  it("shows a plain message when the cancel cannot reach the server", async () => {
+    mockApi(
+      {
+        [`GET ${STATUS}`]: () => respond(200, makeExtraction([makeKind("boq", running(ids.job), null)])),
+        [`POST ${CANCEL(ids.job)}`]: () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Yes, cancel" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not cancel the extraction. Try again.");
+  });
+
+  it("after a cancel shows Cancelled, no progress bar, no Cancel, and lets the run start again", async () => {
+    let cancelled = false;
+    mockApi(
+      {
+        [`GET ${STATUS}`]: () =>
+          respond(200, makeExtraction([
+            makeKind(
+              "boq",
+              cancelled
+                ? { status: "cancelled", progress_done: 3, progress_total: 9 }
+                : { status: "running", progress_done: 3, progress_total: 9 },
+              null,
+            ),
+          ])),
+        [`POST ${CANCEL(ids.job)}`]: () => {
+          cancelled = true;
+          return respond(200, makeJob({ status: "cancelled" }));
+        },
+      },
+      REVIEW,
+    );
+    renderSignedIn(<ExtractionPanel versionId={ids.version} ready pollMs={1000} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Yes, cancel" }));
+    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(cancelButtons()).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /run extraction again/i })).toBeEnabled();
+  });
+});

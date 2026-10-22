@@ -99,6 +99,14 @@ export const attemptText = (attemptCount: number): string | null =>
 
 export const jobErrorText = (code: string | null): string => (code && JOB_ERRORS[code]) || GENERIC_FAILURE;
 
+const CANCEL_REFUSALS: Record<string, string> = {
+  tender_archived: "This tender is archived, so nothing can be cancelled.",
+  job_not_cancellable: "This step cannot be cancelled.",
+};
+/** Plain words for a failed cancel; the raw server text is never shown. */
+export const cancelFailureText = (code: string | null): string =>
+  (code && CANCEL_REFUSALS[code]) || "Could not cancel the extraction. Try again.";
+
 function pageList(pages: unknown): number[] {
   return Array.isArray(pages) ? pages.filter((p): p is number => typeof p === "number") : [];
 }
