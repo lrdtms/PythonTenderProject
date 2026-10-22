@@ -249,7 +249,7 @@ def _cand_like(c, **over):
     return replace(c, **over)
 
 
-def _choose(estimate_id, boq, cand):
+def _choose(estimate_id, boq, cand, with_amounts=True):
     """What Task 6 will do through the API: snapshot a chosen price on a line."""
     with session_scope() as s:
         line = s.scalars(
@@ -261,6 +261,9 @@ def _choose(estimate_id, boq, cand):
         line.match_suggestion_id = cand.match_id
         line.input_hash = estimates.input_hash(boq, cand)
         line.unit_price_ex_vat = Decimal("5.0000")
+        if with_amounts:
+            line.material_cost = line.cost = line.total = Decimal("50.00")
+            line.labour_cost = line.markup = Decimal("0.00")
 
 
 def _statuses(ctx, estimate_id, live, status=None):
@@ -341,3 +344,28 @@ def test_blocked_candidates_show_warnings_and_stored_blockers_keep_a_line_unpric
     lines, _ = _statuses(ctx, est.id, live)
     assert lines[0].status == "unresolved" and "vat_basis_unknown" in lines[0].flags
     assert _statuses(ctx, est.id, live, "priced")[0] == []
+
+
+def test_a_merged_supplier_makes_the_line_changed() -> None:
+    ctx, est, boq = _live_setup("lc4@example.com", ("10",))
+    c = _cand(boq[0].id)
+    _choose(est.id, boq[0], c)
+    base = {b.id: b for b in boq}
+    assert _statuses(ctx, est.id, estimates.LiveInputs(base, {boq[0].id: [c]}))[0][0].status == (
+        "priced"
+    )
+    merged = _cand_like(c, supplier_id=uuid4(), supplier_name="Greenvale")  # same match id
+    lines, dto = _statuses(ctx, est.id, estimates.LiveInputs(base, {boq[0].id: [merged]}))
+    assert lines[0].status == "changed" and "source_changed" in lines[0].flags
+    assert dto.changed == 1 and dto.incomplete
+
+
+def test_a_supplier_line_without_amounts_is_unresolved_and_incomplete() -> None:
+    ctx, est, boq = _live_setup("lc5@example.com", ("10",))
+    c = _cand(boq[0].id)
+    _choose(est.id, boq[0], c, with_amounts=False)
+    live = estimates.LiveInputs({b.id: b for b in boq}, {boq[0].id: [c]})
+    lines, dto = _statuses(ctx, est.id, live)
+    assert lines[0].status == "unresolved" and lines[0].total is None
+    assert (dto.priced, dto.unresolved) == (0, 1) and dto.incomplete
+    assert dto.totals.total_inc_vat == "0.00"

@@ -86,6 +86,7 @@ def input_hash(boq: BoqInput, candidate: CandidateInput | None) -> str:
     parts = [_text(boq.quantity), _text(boq.unit)]
     if candidate is not None:
         parts += [
+            _text(candidate.supplier_id),
             _text(candidate.unit_price),
             _text(candidate.includes_vat),
             _text(candidate.currency),
@@ -153,8 +154,8 @@ def _line_dto(row: EstimateLine, live: LiveInputs | None) -> EstimateLineDTO:
         status = "excluded"
     elif changed:
         status = "changed"
-    elif row.price_source == "unresolved" or flags:
-        status = "unresolved"
+    elif row.price_source == "unresolved" or flags or row.total is None:
+        status = "unresolved"  # a line without amounts is never counted as priced
     else:
         status = "priced"
     if changed:
@@ -232,7 +233,7 @@ def _estimate_dto(
     zero = Decimal("0.00")
     for row, dto in lines:
         counts[dto.status] += 1
-        if dto.status == "priced" and row.total is not None:
+        if dto.status == "priced" and row.total is not None:  # priced implies amounts
             amounts.append(
                 calc.LineAmounts(
                     row.material_cost if row.material_cost is not None else zero,
