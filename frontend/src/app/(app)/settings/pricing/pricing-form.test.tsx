@@ -109,4 +109,52 @@ describe("PricingForm", () => {
     expect(await screen.findByText("Pricing defaults have not been set yet. Ask an administrator.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save pricing defaults" })).toBeNull();
   });
+
+  it("keeps the confirmation after the first save refetches the row", async () => {
+    let saved = false;
+    mockApi(
+      {
+        "GET /api/v1/pricing-defaults": () => (saved ? respond(200, SAVED) : missing()),
+        "PUT /api/v1/pricing-defaults": () => ((saved = true), respond(200, SAVED)),
+      },
+      admin,
+    );
+    const { client } = renderSignedIn(<PricingForm />);
+    await screen.findByLabelText("Currency");
+    await fillValid();
+    await userEvent.click(screen.getByRole("button", { name: "Save pricing defaults" }));
+    await waitFor(() => expect(screen.getByLabelText("VAT rate (%)")).toHaveValue("15.00"));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(screen.getByText("Pricing defaults saved.")).toBeInTheDocument();
+  });
+
+  it("keeps the confirmation when a saved row refetches with a newer updated_at", async () => {
+    let row = SAVED;
+    mockApi(
+      {
+        "GET /api/v1/pricing-defaults": () => respond(200, row),
+        "PUT /api/v1/pricing-defaults": () => ((row = { ...SAVED, vat_rate: "14.00", updated_at: "2026-10-22T11:00:00Z" }), respond(200, row)),
+      },
+      admin,
+    );
+    const { client } = renderSignedIn(<PricingForm />);
+    const vat = await screen.findByLabelText("VAT rate (%)");
+    await userEvent.clear(vat);
+    await userEvent.type(vat, "14");
+    await userEvent.click(screen.getByRole("button", { name: "Save pricing defaults" }));
+    await waitFor(() => expect(screen.getByLabelText("VAT rate (%)")).toHaveValue("14.00"));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(screen.getByText("Pricing defaults saved.")).toBeInTheDocument();
+  });
+
+  it("rejects a trailing dot and sends nothing", async () => {
+    const fetchMock = mockApi({ "GET /api/v1/pricing-defaults": missing }, admin);
+    renderSignedIn(<PricingForm />);
+    await userEvent.type(await screen.findByLabelText("Currency"), "ZAR");
+    await userEvent.type(screen.getByLabelText("VAT rate (%)"), "15.");
+    await userEvent.type(screen.getByLabelText("Default markup (%)"), "5");
+    await userEvent.click(screen.getByRole("button", { name: "Save pricing defaults" }));
+    expect(await screen.findByText("Enter the VAT rate as a number, for example 15.")).toBeInTheDocument();
+    expect(callsTo(fetchMock, "PUT", PUT)).toHaveLength(0);
+  });
 });

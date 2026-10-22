@@ -10,7 +10,7 @@ type Basis = PricingDefaults["markup_basis"];
 
 const BASIS_LABEL: Record<Basis, string> = { cost: "On cost", selling_price: "On selling price" };
 const INPUT = "rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700";
-const DECIMAL = /^\d+(\.\d*)?$/;
+const DECIMAL = /^\d+(\.\d+)?$/;
 
 type Errors = { currency?: string; vat?: string; markup?: string };
 
@@ -34,14 +34,13 @@ function serverMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong. Try again.";
 }
 
-function EditForm({ saved }: { saved: PricingDefaults | null }) {
+function EditForm({ saved, done, setDone }: { saved: PricingDefaults | null; done: boolean; setDone: (v: boolean) => void }) {
   const save = useSavePricingDefaults();
   const [currency, setCurrency] = useState(saved?.currency ?? "");
   const [vat, setVat] = useState(saved?.vat_rate ?? "");
   const [basis, setBasis] = useState<Basis>(saved?.markup_basis ?? "cost");
   const [markup, setMarkup] = useState(saved?.default_markup_percent ?? "");
   const [errors, setErrors] = useState<Errors>({});
-  const [done, setDone] = useState(false);
 
   // Editing clears the previous outcome, so a stale message never sits beside new input.
   const touch = () => {
@@ -86,7 +85,7 @@ function EditForm({ saved }: { saved: PricingDefaults | null }) {
           onChange={(e) => (touch(), setCurrency(e.target.value))}
           onBlur={() => setCurrency((c) => c.trim().toUpperCase())}
           aria-invalid={errors.currency ? true : undefined}
-          aria-describedby={errors.currency ? "pd-currency-err" : "pd-currency-hint"}
+          aria-describedby={errors.currency ? "pd-currency-err pd-currency-hint" : "pd-currency-hint"}
           className={`${INPUT} w-28 uppercase`}
         />
         <p id="pd-currency-hint" className="text-xs text-zinc-500">
@@ -191,10 +190,12 @@ function ReadOnly({ saved }: { saved: PricingDefaults | null }) {
 export function PricingForm() {
   const canManage = useCan("manage_pricing");
   const query = usePricingDefaults();
+  // Kept here, not in EditForm: a save refetches the row, and the new updated_at remounts EditForm.
+  const [done, setDone] = useState(false);
   const notSet = query.error instanceof ApiError && query.error.code === "pricing_defaults_missing";
 
   let body;
-  if (query.isPending) body = <p>Loading…</p>;
+  if (query.isPending) body = <p role="status">Loading…</p>;
   else if (query.error && !notSet)
     body = (
       <p role="alert" className="text-red-700 dark:text-red-300">
@@ -203,7 +204,7 @@ export function PricingForm() {
     );
   else {
     const saved = query.data ?? null;
-    body = canManage ? <EditForm key={saved?.updated_at ?? "none"} saved={saved} /> : <ReadOnly saved={saved} />;
+    body = canManage ? <EditForm key={saved?.updated_at ?? "none"} saved={saved} done={done} setDone={setDone} /> : <ReadOnly saved={saved} />;
   }
 
   return (
