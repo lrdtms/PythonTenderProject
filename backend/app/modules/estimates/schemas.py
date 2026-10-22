@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 from .calc import Settings, validate_settings
 
 DecimalText = Annotated[str, StringConstraints(pattern=r"^-?\d{1,14}(\.\d{1,4})?$")]
+RateText = Annotated[str, StringConstraints(pattern=r"^\d{1,4}(\.\d{1,2})?$")]
 Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
 
 
@@ -26,9 +27,9 @@ class PricingDefaultsPut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     currency: Currency
-    vat_rate: DecimalText
+    vat_rate: RateText
     markup_basis: Literal["cost", "selling_price"]
-    default_markup_percent: DecimalText
+    default_markup_percent: RateText
 
     @model_validator(mode="after")
     def _check(self) -> PricingDefaultsPut:

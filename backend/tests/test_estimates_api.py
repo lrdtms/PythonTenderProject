@@ -28,11 +28,11 @@ def test_put_then_get_round_trips_and_audits() -> None:
     assert got.status_code == 200
     body = got.json()
     assert body["currency"] == "ZAR" and body["markup_basis"] == "cost"
-    assert float(body["vat_rate"]) == 15 and float(body["default_markup_percent"]) == 12.5
+    assert body["vat_rate"] == "15.00" and body["default_markup_percent"] == "12.50"
     assert body["updated_at"]
     again = admin.client.put(URL, json={**GOOD, "default_markup_percent": "20"})
     assert again.status_code == 200
-    assert float(admin.client.get(URL).json()["default_markup_percent"]) == 20
+    assert admin.client.get(URL).json()["default_markup_percent"] == "20.00"
     with session_scope() as s:
         events = s.scalars(
             select(AuditEvent).where(
@@ -66,6 +66,8 @@ def test_invalid_values_are_422() -> None:
     admin = register("pd4@example.com")
     for patch in (
         {"vat_rate": "101"},
+        {"vat_rate": "15.005"},
+        {"markup_basis": "selling_price", "default_markup_percent": "99.995"},
         {"default_markup_percent": "-1"},
         {"markup_basis": "selling_price", "default_markup_percent": "100"},
         {"default_markup_percent": "1000.01"},
