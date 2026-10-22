@@ -6,6 +6,7 @@ from dataclasses import replace
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import select
 
 from app.db.session import session_scope
@@ -369,3 +370,396 @@ def test_a_supplier_line_without_amounts_is_unresolved_and_incomplete() -> None:
     assert lines[0].status == "unresolved" and lines[0].total is None
     assert (dto.priced, dto.unresolved) == (0, 1) and dto.incomplete
     assert dto.totals.total_inc_vat == "0.00"
+
+
+# --- price a line, refresh, settings ---------------------------------------------------------
+
+LINES = f"{API}/estimate-lines"
+
+
+def _quotes(include_vat=False, currency="ZAR") -> None:
+    from app.modules.estimating.models import BoqItem
+    from app.modules.suppliers.models import Quotation, QuotationItem
+
+    with session_scope() as s:
+        for q in s.scalars(select(Quotation)):
+            q.prices_include_vat = include_vat
+            q.currency = currency
+        for row in (*s.scalars(select(BoqItem)), *s.scalars(select(QuotationItem))):
+            row.review_status = "confirmed"  # unreviewed sources block pricing (BR-01)
+
+
+def _priced_setup(email: str, include_vat=False, currency="ZAR", count=4):
+    actor, tender_id = _estimates_ready(email)
+    _confirm(actor, tender_id, count)
+    _quotes(include_vat, currency)
+    est = actor.client.post(f"{TENDERS}/{tender_id}/estimates").json()
+    return actor, tender_id, est
+
+
+def _lines(actor, est) -> list[dict]:
+    return actor.client.get(f"{API}/estimates/{est['id']}/lines", params={"limit": 100}).json()
+
+
+def _line(actor, est, line_id) -> dict:
+    return next(x for x in _lines(actor, est) if x["id"] == line_id)
+
+
+def _usable(actor, est) -> list[dict]:
+    """Lines with a confirmed candidate that has a price, a quantity and no unit mismatch."""
+    return [
+        x
+        for x in _lines(actor, est)
+        if x["candidates"]
+        and x["candidates"][0]["unit_price"]
+        and "unit_mismatch" not in x["candidates"][0]["warnings"]
+        and x["quantity"] is not None
+        and Decimal(x["quantity"]) > 0
+    ]
+
+
+def _put(actor, line, **body):
+    return actor.client.put(f"{LINES}/{line['id']}", json=body)
+
+
+def _round2(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
+
+
+def _ex(price: str, rate: str) -> Decimal:
+    return (Decimal(price) / (1 + Decimal(rate) / 100)).quantize(
+        Decimal("0.0001"), rounding="ROUND_HALF_UP"
+    )
+
+
+def test_choosing_a_confirmed_match_prices_the_line_with_golden_maths() -> None:
+    actor, _, est = _priced_setup("pl1@example.com")
+    line = _usable(actor, est)[0]
+    cand = line["candidates"][0]
+    r = _put(actor, line, match_suggestion_id=cand["match_id"], labour_rate="2")
+    assert r.status_code == 200, r.text
+    got = r.json()
+    qty, price = Decimal(line["quantity"]), Decimal(cand["unit_price"])
+    material, labour = _round2(qty * price), _round2(qty * Decimal("2"))
+    markup = _round2((material + labour) * Decimal("0.125"))
+    assert got["status"] == "priced" and got["price_source"] == "supplier"
+    assert got["match_suggestion_id"] == cand["match_id"] and got["flags"] == []
+    assert got["supplier_name"] == cand["supplier_name"]
+    assert (got["material_cost"], got["labour_cost"]) == (str(material), str(labour))
+    assert got["cost"] == str(material + labour) and got["markup"] == str(markup)
+    assert got["total"] == str(material + labour + markup)
+    assert got["unit_price_ex_vat"] == str(price.quantize(Decimal("0.0001")))
+    est_after = actor.client.get(f"{API}/estimates/{est['id']}").json()
+    assert est_after["priced"] == 1 and est_after["totals"]["subtotal_ex_vat"] == got["total"]
+    with session_scope() as s:
+        row = s.get(EstimateLine, UUID(line["id"]))
+        assert row.flags == {} and row.input_hash
+
+
+def test_a_vat_inclusive_quote_is_divided_by_one_plus_the_rate() -> None:
+    actor, _, est = _priced_setup("pl2@example.com", include_vat=True)
+    line = _usable(actor, est)[0]
+    cand = line["candidates"][0]
+    got = _put(actor, line, match_suggestion_id=cand["match_id"]).json()
+    ex = _ex(cand["unit_price"], "15")
+    assert got["unit_price_ex_vat"] == str(ex) and got["quoted_includes_vat"] is True
+    assert got["quoted_unit_price"] == cand["unit_price"]
+    assert got["material_cost"] == str(_round2(Decimal(line["quantity"]) * ex))
+
+
+def test_manual_price_and_exclusion() -> None:
+    actor, _, est = _priced_setup("pl3@example.com")
+    a, b = _usable(actor, est)[:2]
+    got = _put(actor, a, manual_unit_price="10.5", markup_override_percent="0").json()
+    assert got["price_source"] == "manual" and got["status"] == "priced"
+    assert got["unit_price_ex_vat"] == "10.5000" and got["match_suggestion_id"] is None
+    expected = _round2(Decimal(a["quantity"]) * Decimal("10.5"))
+    assert got["material_cost"] == str(expected) and got["markup"] == "0.00"
+    assert got["total"] == str(expected)
+    assert _put(actor, b, exclude_reason="").status_code == 422
+    assert _put(actor, b, exclude_reason="x" * 301).status_code == 422
+    ex = _put(actor, b, exclude_reason="  Client supplies  ").json()
+    assert ex["status"] == "excluded" and ex["exclude_reason"] == "Client supplies"
+    assert ex["total"] is None and ex["cost"] is None
+    for bad in ("0", "-1", "1.00001", "abc"):
+        assert _put(actor, a, manual_unit_price=bad).status_code == 422, bad
+    again = _put(actor, a, exclude_reason="changed mind").json()  # a priced line can be excluded
+    assert again["status"] == "excluded" and again["total"] is None
+    with session_scope() as s:
+        events = s.scalars(select(AuditEvent).where(AuditEvent.action.like("estimate_line_%")))
+        text = str([e.event_metadata for e in events])
+    assert "Client supplies" not in text and "10.5" not in text
+
+
+def test_exactly_one_source_and_strict_bodies() -> None:
+    actor, _, est = _priced_setup("pl4@example.com")
+    line = _usable(actor, est)[0]
+    cand = line["candidates"][0]["match_id"]
+    for body in (
+        {},
+        {"labour_rate": "1"},
+        {"match_suggestion_id": cand, "manual_unit_price": "5"},
+        {"manual_unit_price": "5", "exclude_reason": "x"},
+        {"match_suggestion_id": cand, "exclude_reason": "x"},
+        {"manual_unit_price": "5", "extra": 1},
+        {"manual_unit_price": "5", "labour_rate": "-1"},
+        {"manual_unit_price": "5", "markup_override_percent": "-1"},
+        {"manual_unit_price": "5", "markup_override_percent": "1000.01"},
+    ):
+        assert _put(actor, line, **body).status_code == 422, body
+    # the override range follows the estimate's basis: 100 or more is refused on selling_price
+    url = f"{API}/estimates/{est['id']}"
+    assert actor.client.patch(url, json={"markup_basis": "selling_price"}).status_code == 200
+    assert (
+        _put(actor, line, manual_unit_price="5", markup_override_percent="100").status_code == 422
+    )
+    ok = _put(actor, line, manual_unit_price="5", markup_override_percent="99.99")
+    assert ok.status_code == 200
+
+
+def test_stale_and_foreign_matches_are_conflicts() -> None:
+    actor, tender_id, est = _priced_setup("pl5@example.com", count=4)
+    a, b = _usable(actor, est)[:2]
+    other = b["candidates"][0]["match_id"]
+    r = _put(actor, a, match_suggestion_id=other)  # another BoQ line's match
+    assert r.status_code == 409 and r.json()["error"]["code"] == "stale_match"
+    unconfirmed = next(
+        s
+        for x in actor.client.get(
+            f"{TENDERS}/{tender_id}/match-suggestions", params={"limit": 500}
+        ).json()
+        for s in x["suggestions"]
+        if s["status"] != "confirmed"
+    )
+    r = _put(actor, a, match_suggestion_id=unconfirmed["id"])
+    assert r.status_code == 409 and r.json()["error"]["code"] == "stale_match"
+    r = _put(actor, a, match_suggestion_id=str(uuid4()))
+    assert r.status_code == 409 and r.json()["error"]["code"] == "stale_match"
+    # reset the chosen match after pricing: the line shows changed, a refresh is a conflict
+    mid = a["candidates"][0]["match_id"]
+    assert _put(actor, a, match_suggestion_id=mid).status_code == 200
+    assert actor.client.post(f"{API}/match-suggestions/{mid}/reset").status_code == 200
+    after = _line(actor, est, a["id"])
+    assert after["status"] == "changed" and "source_changed" in after["flags"]
+    r = actor.client.post(f"{LINES}/{a['id']}/refresh")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "stale_match"
+
+
+def test_unit_mismatch_needs_acknowledgement() -> None:
+    actor, _, est = _priced_setup("pl6@example.com", count=8)
+    line = next(
+        (
+            x
+            for x in _lines(actor, est)
+            if x["candidates"]
+            and "unit_mismatch" in x["candidates"][0]["warnings"]
+            and x["quantity"]
+            and Decimal(x["quantity"]) > 0
+            and x["candidates"][0]["unit_price"]
+        ),
+        None,
+    )
+    if line is None:
+        pytest.skip("the fixture has no confirmed unit-mismatch candidate")
+    mid = line["candidates"][0]["match_id"]
+    r = _put(actor, line, match_suggestion_id=mid)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "unit_mismatch_unacknowledged"
+    ok = _put(actor, line, match_suggestion_id=mid, unit_mismatch_acknowledged=True)
+    assert ok.status_code == 200 and ok.json()["unit_mismatch_acknowledged"] is True
+
+
+def test_blockers_leave_the_line_unresolved_without_amounts() -> None:
+    from app.modules.suppliers.models import Quotation
+
+    cases = [
+        (None, "ZAR", "vat_basis_unknown"),
+        (False, None, "currency_missing"),
+        (False, "USD", "currency_differs"),
+    ]
+    for n, (vat, cur, flag) in enumerate(cases):
+        actor, _, est = _priced_setup(f"pl7{n}@example.com")
+        with session_scope() as s:
+            for q in s.scalars(select(Quotation)):
+                q.prices_include_vat, q.currency = vat, cur
+        line = _usable(actor, est)[0]
+        got = _put(actor, line, match_suggestion_id=line["candidates"][0]["match_id"]).json()
+        assert got["status"] == "unresolved" and flag in got["flags"], (flag, got)
+        assert got["match_suggestion_id"] and got["supplier_name"]
+        for k in ("material_cost", "labour_cost", "cost", "markup", "total"):
+            assert got[k] is None
+        assert actor.client.get(f"{API}/estimates/{est['id']}").json()["priced"] == 0
+        with session_scope() as s:
+            assert s.get(EstimateLine, UUID(line["id"])).flags == {flag: True}
+
+
+def test_resolving_the_vat_basis_shows_source_changed_and_refresh_reprices() -> None:
+    from app.modules.suppliers.models import Quotation, QuotationItem
+
+    actor, _, est = _priced_setup("pl8@example.com")
+    with session_scope() as s:
+        for q in s.scalars(select(Quotation)):
+            q.prices_include_vat = None
+    line = _usable(actor, est)[0]
+    cand = line["candidates"][0]
+    assert _put(actor, line, match_suggestion_id=cand["match_id"]).json()["status"] == "unresolved"
+    with session_scope() as s:
+        quotation_id = s.get(QuotationItem, UUID(cand["quotation_item_id"])).quotation_id
+    r = actor.client.patch(f"{API}/quotations/{quotation_id}", json={"prices_include_vat": True})
+    assert r.status_code == 200, r.text
+    now = _line(actor, est, line["id"])
+    assert now["status"] == "changed" and "source_changed" in now["flags"]
+    got = actor.client.post(f"{LINES}/{line['id']}/refresh").json()
+    assert got["status"] == "priced" and got["unit_price_ex_vat"] == str(
+        _ex(cand["unit_price"], "15")
+    )
+    assert "source_changed" not in got["flags"] and got["total"] is not None
+
+
+def test_editing_the_boq_quantity_shows_source_changed_and_refresh_clears_it() -> None:
+    from app.modules.estimating.models import BoqItem
+
+    actor, _, est = _priced_setup("pl9@example.com")
+    line = _usable(actor, est)[0]
+    assert _put(actor, line, manual_unit_price="4").json()["status"] == "priced"
+    with session_scope() as s:
+        s.get(BoqItem, UUID(line["boq_item_id"])).quantity = Decimal("123.5")
+    now = _line(actor, est, line["id"])
+    assert now["status"] == "changed" and "source_changed" in now["flags"]
+    assert now["quantity"] == line["quantity"]  # the snapshot is untouched until refreshed
+    assert actor.client.get(f"{API}/estimates/{est['id']}").json()["changed"] == 1
+    got = actor.client.post(f"{LINES}/{line['id']}/refresh").json()
+    assert got["quantity"] == "123.5000" and got["status"] == "priced"
+    assert got["material_cost"] == "494.00" and "source_changed" not in got["flags"]
+    with session_scope() as s:
+        s.get(BoqItem, UUID(line["boq_item_id"])).quantity = None
+    assert _line(actor, est, line["id"])["status"] == "changed"
+    got = actor.client.post(f"{LINES}/{line['id']}/refresh").json()
+    assert got["status"] == "unresolved" and "quantity_missing" in got["flags"]
+    assert got["total"] is None
+    # a line with no quantity can only be excluded
+    assert _put(actor, line, manual_unit_price="4").status_code == 422
+    assert _put(actor, line, exclude_reason="rate only").json()["status"] == "excluded"
+
+
+def test_patching_vat_and_markup_recomputes_every_line() -> None:
+    actor, _, est = _priced_setup("pl10@example.com", include_vat=True)
+    a, b = _usable(actor, est)[:2]
+    _put(actor, a, match_suggestion_id=a["candidates"][0]["match_id"])
+    _put(actor, b, manual_unit_price="3")
+    r = actor.client.patch(f"{API}/estimates/{est['id']}", json={"vat_rate": "20"})
+    assert r.status_code == 200, r.text
+    assert r.json()["vat_rate"] == "20.00"
+    lines = {x["id"]: x for x in _lines(actor, est)}
+    ex = _ex(a["candidates"][0]["unit_price"], "20")
+    assert lines[a["id"]]["unit_price_ex_vat"] == str(ex)
+    assert lines[a["id"]]["material_cost"] == str(_round2(Decimal(a["quantity"]) * ex))
+    assert lines[b["id"]]["unit_price_ex_vat"] == "3.0000"
+    totals = r.json()["totals"]
+    subtotal = sum(Decimal(x["total"]) for x in lines.values() if x["total"])
+    assert totals["subtotal_ex_vat"] == str(subtotal)
+    assert totals["vat_total"] == str(_round2(subtotal * Decimal("0.2")))
+    r = actor.client.patch(f"{API}/estimates/{est['id']}", json={"markup_percent": "0"})
+    assert r.json()["totals"]["markup_total"] == "0.00"
+    lines = {x["id"]: x for x in _lines(actor, est)}
+    assert all(x["markup"] == "0.00" for x in lines.values() if x["total"])
+    with session_scope() as s:
+        events = s.scalars(
+            select(AuditEvent).where(AuditEvent.action == "estimate_settings_changed")
+        ).all()
+    assert sorted(str(e.event_metadata) for e in events) == sorted(
+        [str({"fields": ["vat_rate"]}), str({"fields": ["markup_percent"]})]
+    )
+
+
+def test_patch_validation_and_currency_lock() -> None:
+    actor, _, est = _priced_setup("pl11@example.com")
+    url = f"{API}/estimates/{est['id']}"
+    for bad in (
+        {},
+        {"vat_rate": None},
+        {"vat_rate": "101"},
+        {"markup_percent": "1000.01"},
+        {"currency": "usd"},
+        {"markup_basis": "x"},
+        {"extra": 1},
+    ):
+        assert actor.client.patch(url, json=bad).status_code == 422, bad
+    body = {"markup_percent": "99", "markup_basis": "selling_price"}
+    assert actor.client.patch(url, json=body).status_code == 200
+    assert actor.client.patch(url, json={"markup_percent": "100"}).status_code == 422
+    assert actor.client.patch(url, json={"currency": "USD"}).json()["currency"] == "USD"
+    line = _usable(actor, est)[0]
+    _put(actor, line, manual_unit_price="2")
+    r = actor.client.patch(url, json={"currency": "EUR"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "currency_locked"
+    assert actor.client.get(url).json()["currency"] == "USD"
+    # an override that the new basis cannot hold is refused
+    assert (
+        actor.client.patch(url, json={"markup_basis": "cost", "markup_percent": "5"}).status_code
+        == 200
+    )
+    assert (
+        _put(actor, line, manual_unit_price="2", markup_override_percent="500").status_code == 200
+    )
+    assert actor.client.patch(url, json={"markup_basis": "selling_price"}).status_code == 422
+
+
+def test_a_blocked_supplier_line_also_holds_the_currency() -> None:
+    actor, _, est = _priced_setup("pl12@example.com", currency="EUR")
+    line = _usable(actor, est)[0]
+    got = _put(actor, line, match_suggestion_id=line["candidates"][0]["match_id"]).json()
+    assert "currency_differs" in got["flags"]
+    r = actor.client.patch(f"{API}/estimates/{est['id']}", json={"currency": "EUR"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "currency_locked"
+
+
+def _excl(line_id) -> str:
+    return f"{LINES}/{line_id}"
+
+
+def test_write_permissions_archive_and_frozen() -> None:
+    from app.modules.estimates.models import Estimate
+
+    actor, tender_id, est = _priced_setup("pl13@example.com")
+    line = _usable(actor, est)[0]
+    body = {"exclude_reason": "x"}
+    patch = f"{API}/estimates/{est['id']}"
+    reviewer = add_member(actor, "pl13r@example.com", "reviewer")
+    assert reviewer.client.put(_excl(line["id"]), json=body).status_code == 403
+    assert reviewer.client.post(f"{LINES}/{line['id']}/refresh").status_code == 403
+    assert reviewer.client.patch(patch, json={"vat_rate": "1"}).status_code == 403
+    assert actor.client.put(_excl(uuid4()), json=body).status_code == 404
+    assert (
+        actor.client.patch(f"{API}/estimates/{uuid4()}", json={"vat_rate": "1"}).status_code == 404
+    )
+    other = register("pl13b@example.com")
+    assert other.client.put(_excl(line["id"]), json=body).status_code == 404
+    assert other.client.post(f"{LINES}/{line['id']}/refresh").status_code == 404
+    assert other.client.patch(patch, json={"vat_rate": "1"}).status_code == 404
+
+    def attempts():
+        return (
+            actor.client.put(_excl(line["id"]), json=body),
+            actor.client.post(f"{LINES}/{line['id']}/refresh"),
+            actor.client.patch(patch, json={"vat_rate": "1"}),
+        )
+
+    with session_scope() as s:
+        s.get(Estimate, UUID(est["id"])).status = "reviewed"
+    for r in attempts():
+        assert r.status_code == 409 and r.json()["error"]["code"] == "estimate_frozen"
+    with session_scope() as s:
+        s.get(Estimate, UUID(est["id"])).status = "draft"
+    assert actor.client.post(f"{TENDERS}/{tender_id}/archive").status_code == 200
+    for r in attempts():
+        assert r.status_code == 409 and r.json()["error"]["code"] == "tender_archived"
+
+
+def test_no_computed_flag_is_ever_stored() -> None:
+    actor, _, est = _priced_setup("pl14@example.com")
+    for line in _usable(actor, est)[:3]:
+        _put(actor, line, match_suggestion_id=line["candidates"][0]["match_id"])
+    with session_scope() as s:
+        for row in s.scalars(select(EstimateLine)):
+            assert not {"unreviewed_source", "source_changed"} & set(row.flags or {})
+            assert (row.total is None) == (row.material_cost is None) == (row.markup is None)

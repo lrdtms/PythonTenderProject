@@ -994,6 +994,64 @@
         "title": "EstimateLineDTO",
         "type": "object"
       },
+      "EstimatePatch": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "markup_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cost",
+                  "selling_price"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup Basis"
+          },
+          "markup_percent": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup Percent"
+          },
+          "vat_rate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Rate"
+          }
+        },
+        "title": "EstimatePatch",
+        "type": "object"
+      },
       "EstimateSummaryDTO": {
         "properties": {
           "approved_at": {
@@ -1251,6 +1309,80 @@
           "run"
         ],
         "title": "KindStatusDTO",
+        "type": "object"
+      },
+      "LinePut": {
+        "additionalProperties": false,
+        "description": "Choose the line's price: exactly one of a confirmed match, a manual price or an exclusion.",
+        "properties": {
+          "exclude_reason": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Reason"
+          },
+          "labour_rate": {
+            "anyOf": [
+              {
+                "pattern": "^-?\\d{1,14}(\\.\\d{1,4})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labour Rate"
+          },
+          "manual_unit_price": {
+            "anyOf": [
+              {
+                "pattern": "^-?\\d{1,14}(\\.\\d{1,4})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Unit Price"
+          },
+          "markup_override_percent": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup Override Percent"
+          },
+          "match_suggestion_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Suggestion Id"
+          },
+          "unit_mismatch_acknowledged": {
+            "default": false,
+            "title": "Unit Mismatch Acknowledged",
+            "type": "boolean"
+          }
+        },
+        "title": "LinePut",
         "type": "object"
       },
       "LoginRequest": {
@@ -4280,6 +4412,102 @@
         ]
       }
     },
+    "/api/v1/estimate-lines/{line_id}": {
+      "put": {
+        "operationId": "put_line_api_v1_estimate_lines__line_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinePut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateLineDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Line",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimate-lines/{line_id}/refresh": {
+      "post": {
+        "operationId": "refresh_line_api_v1_estimate_lines__line_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateLineDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Line",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
     "/api/v1/estimates/{estimate_id}": {
       "get": {
         "operationId": "get_estimate_api_v1_estimates__estimate_id__get",
@@ -4318,6 +4546,57 @@
           }
         },
         "summary": "Get Estimate",
+        "tags": [
+          "estimates"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_estimate_api_v1_estimates__estimate_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimatePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Estimate",
         "tags": [
           "estimates"
         ]

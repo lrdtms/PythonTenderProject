@@ -54,6 +54,18 @@ class EstimateRepo(ScopedRepository[Estimate]):
         stmt = stmt.order_by(EstimateLine.position, EstimateLine.id).limit(limit).offset(offset)
         return self.session.scalars(stmt).all()
 
+    def line(self, line_id: UUID, refresh: bool = False) -> EstimateLine:
+        """One line of this organisation; NotFound otherwise. `refresh` re-reads the row."""
+        stmt = select(EstimateLine).where(
+            EstimateLine.organisation_id == self.ctx.organisation_id, EstimateLine.id == line_id
+        )
+        if refresh:
+            stmt = stmt.execution_options(populate_existing=True)
+        row = self.session.scalar(stmt)
+        if row is None:
+            raise NotFound("Estimate line not found")
+        return row
+
     def all_lines(self, estimate_id: UUID) -> Sequence[EstimateLine]:
         """Every line of the estimate in BoQ order."""
         return self.session.scalars(

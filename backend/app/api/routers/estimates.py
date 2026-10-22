@@ -143,3 +143,34 @@ def get_lines(
     tender_id = estimates.tender_of(session, ctx, estimate_id)
     live = _live(session, ctx, tender_id)
     return estimates.list_lines(session, ctx, estimate_id, live, status, limit, offset)
+
+
+def _locked_live(session, ctx, tender_id: UUID) -> estimates.LiveInputs:
+    """Authorise, refuse an archived tender, take the tender lock, then read the live inputs.
+    The estimate row lock is taken afterwards, in the service."""
+    ctx.require(Permission.REVIEW_DATA)
+    refuse_archived(session, ctx, tender_id)
+    suppliers.lock_tender(session, ctx, tender_id)
+    refuse_archived(session, ctx, tender_id, fresh=True)  # an archive may have committed meanwhile
+    return _live(session, ctx, tender_id)
+
+
+@router.patch("/estimates/{estimate_id}", response_model=estimates.EstimateDTO)
+def patch_estimate(estimate_id: UUID, body: estimates.EstimatePatch, ctx: Ctx, session: DbSession):
+    tender_id = estimates.tender_of(session, ctx, estimate_id)
+    live = _locked_live(session, ctx, tender_id)
+    return estimates.patch_estimate(session, ctx, estimate_id, body, live)
+
+
+@router.put("/estimate-lines/{line_id}", response_model=estimates.EstimateLineDTO)
+def put_line(line_id: UUID, body: estimates.LinePut, ctx: Ctx, session: DbSession):
+    tender_id = estimates.line_tender(session, ctx, line_id)
+    live = _locked_live(session, ctx, tender_id)
+    return estimates.price_line(session, ctx, line_id, body, live)
+
+
+@router.post("/estimate-lines/{line_id}/refresh", response_model=estimates.EstimateLineDTO)
+def refresh_line(line_id: UUID, ctx: Ctx, session: DbSession):
+    tender_id = estimates.line_tender(session, ctx, line_id)
+    live = _locked_live(session, ctx, tender_id)
+    return estimates.refresh_line(session, ctx, line_id, live)

@@ -14,6 +14,7 @@ from .calc import Settings, validate_settings
 
 DecimalText = Annotated[str, StringConstraints(pattern=r"^-?\d{1,14}(\.\d{1,4})?$")]
 RateText = Annotated[str, StringConstraints(pattern=r"^\d{1,4}(\.\d{1,2})?$")]
+ReasonText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
 
 
@@ -40,6 +41,56 @@ class PricingDefaultsPut(BaseModel):
                 Decimal(self.vat_rate), self.markup_basis, Decimal(self.default_markup_percent)
             )
         )
+        return self
+
+
+class LinePut(BaseModel):
+    """Choose the line's price: exactly one of a confirmed match, a manual price or an exclusion."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    match_suggestion_id: UUID | None = None
+    manual_unit_price: DecimalText | None = None
+    exclude_reason: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+        | None
+    ) = None
+    labour_rate: DecimalText | None = None
+    markup_override_percent: RateText | None = None
+    unit_mismatch_acknowledged: bool = False
+
+    @model_validator(mode="after")
+    def _check(self) -> LinePut:
+        given = [
+            self.match_suggestion_id,
+            self.manual_unit_price,
+            self.exclude_reason,
+        ]
+        if sum(v is not None for v in given) != 1:
+            raise ValueError(
+                "give exactly one of match_suggestion_id, manual_unit_price, exclude_reason"
+            )
+        if self.manual_unit_price is not None and Decimal(self.manual_unit_price) <= 0:
+            raise ValueError("manual_unit_price must be above 0")
+        if self.labour_rate is not None and Decimal(self.labour_rate) < 0:
+            raise ValueError("labour_rate must not be negative")
+        return self
+
+
+class EstimatePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    currency: Currency | None = None
+    vat_rate: RateText | None = None
+    markup_basis: Literal["cost", "selling_price"] | None = None
+    markup_percent: RateText | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> EstimatePatch:
+        if not self.model_fields_set or any(
+            getattr(self, f) is None for f in self.model_fields_set
+        ):
+            raise ValueError("give at least one setting, none of them null")
         return self
 
 

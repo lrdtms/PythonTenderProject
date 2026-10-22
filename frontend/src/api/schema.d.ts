@@ -297,6 +297,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/estimate-lines/{line_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Line */
+        put: operations["put_line_api_v1_estimate_lines__line_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimate-lines/{line_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Line */
+        post: operations["refresh_line_api_v1_estimate_lines__line_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/estimates/{estimate_id}": {
         parameters: {
             query?: never;
@@ -311,7 +345,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch Estimate */
+        patch: operations["patch_estimate_api_v1_estimates__estimate_id__patch"];
         trace?: never;
     };
     "/api/v1/estimates/{estimate_id}/lines": {
@@ -1255,6 +1290,17 @@ export interface components {
             /** Unit Price Ex Vat */
             unit_price_ex_vat: string | null;
         };
+        /** EstimatePatch */
+        EstimatePatch: {
+            /** Currency */
+            currency?: string | null;
+            /** Markup Basis */
+            markup_basis?: ("cost" | "selling_price") | null;
+            /** Markup Percent */
+            markup_percent?: string | null;
+            /** Vat Rate */
+            vat_rate?: string | null;
+        };
         /** EstimateSummaryDTO */
         EstimateSummaryDTO: {
             /** Approved At */
@@ -1350,6 +1396,27 @@ export interface components {
             /** Kind */
             kind: string;
             run: components["schemas"]["RunDTO"] | null;
+        };
+        /**
+         * LinePut
+         * @description Choose the line's price: exactly one of a confirmed match, a manual price or an exclusion.
+         */
+        LinePut: {
+            /** Exclude Reason */
+            exclude_reason?: string | null;
+            /** Labour Rate */
+            labour_rate?: string | null;
+            /** Manual Unit Price */
+            manual_unit_price?: string | null;
+            /** Markup Override Percent */
+            markup_override_percent?: string | null;
+            /** Match Suggestion Id */
+            match_suggestion_id?: string | null;
+            /**
+             * Unit Mismatch Acknowledged
+             * @default false
+             */
+            unit_mismatch_acknowledged: boolean;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -2658,6 +2725,72 @@ export interface operations {
             };
         };
     };
+    put_line_api_v1_estimate_lines__line_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinePut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateLineDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_line_api_v1_estimate_lines__line_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateLineDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_estimate_api_v1_estimates__estimate_id__get: {
         parameters: {
             query?: never;
@@ -2668,6 +2801,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_estimate_api_v1_estimates__estimate_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimatePatch"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.kernel import Conflict, OrgContext, Permission
+from app.kernel import Conflict, OrgContext, Permission, ValidationFailed
 from app.modules.audit import public as audit
 
 from . import calc
@@ -22,7 +22,9 @@ from .schemas import (
     CandidateInput,
     EstimateDTO,
     EstimateLineDTO,
+    EstimatePatch,
     EstimateSummaryDTO,
+    LinePut,
     LineStatus,
     LiveInputs,
     PricingDefaultsDTO,
@@ -384,3 +386,276 @@ def list_estimates(session: Session, ctx: OrgContext, tender_id: UUID) -> list[E
         )
         for e in EstimateRepo(session, ctx).for_tender(tender_id)
     ]
+
+
+# --- writes ----------------------------------------------------------------------------------
+
+
+def line_tender(session: Session, ctx: OrgContext, line_id: UUID) -> UUID:
+    """The tender of a line's estimate, so the router can lock it. NotFound across
+    organisations."""
+    ctx.require(Permission.READ)
+    repo = EstimateRepo(session, ctx)
+    return repo.get(repo.line(line_id).estimate_id).tender_id
+
+
+def _lock_draft(
+    session: Session, ctx: OrgContext, estimate_id: UUID
+) -> tuple[EstimateRepo, Estimate]:
+    repo = EstimateRepo(session, ctx)
+    est = repo.get_for_update(estimate_id)
+    if est.status != "draft":
+        raise Conflict("This estimate is no longer a draft.", code="estimate_frozen")
+    return repo, est
+
+
+def _blocked(row: EstimateLine) -> bool:
+    return any((row.flags or {}).values())
+
+
+def _set_amounts(row: EstimateLine, amounts: calc.LineAmounts | None) -> None:
+    """All five amounts or none: a line without a total is never counted as priced."""
+    row.material_cost = amounts.material_cost if amounts else None
+    row.labour_cost = amounts.labour_cost if amounts else None
+    row.cost = amounts.cost if amounts else None
+    row.markup = amounts.markup if amounts else None
+    row.total = amounts.total if amounts else None
+
+
+def _price(row: EstimateLine, est: Estimate) -> None:
+    """Recompute `unit_price_ex_vat` (supplier lines) and the amounts from the line's snapshots.
+    A line with a blocker flag, or without a usable quantity or price, gets no amounts."""
+    if row.price_source == "supplier":
+        if _blocked(row) or row.quoted_unit_price is None or row.quoted_includes_vat is None:
+            row.unit_price_ex_vat = None
+        else:
+            row.unit_price_ex_vat = calc.to_ex_vat(
+                row.quoted_unit_price, row.quoted_includes_vat, est.vat_rate
+            )
+    if _blocked(row) or row.unit_price_ex_vat is None:
+        _set_amounts(row, None)
+        return
+    _set_amounts(
+        row,
+        calc.line_amounts(
+            calc.LineInput(
+                row.quantity, row.unit_price_ex_vat, row.labour_rate, row.markup_override_percent
+            ),
+            _settings(est),
+        ),
+    )
+
+
+def _snapshot_boq(row: EstimateLine, boq: BoqInput) -> None:
+    row.section, row.item_no, row.description = boq.section, boq.item_no, boq.description
+    row.unit, row.quantity = boq.unit, boq.quantity
+
+
+def _blockers(est: Estimate, boq: BoqInput, cand: CandidateInput | None) -> dict[str, bool]:
+    """Stored blocker flags only. `unreviewed_source` and `source_changed` are live-only."""
+    flags: dict[str, bool] = {}
+    if boq.quantity is None or boq.quantity <= 0:
+        flags["quantity_missing"] = True
+    if boq.unit is None:
+        flags["unit_missing"] = True
+    if cand is not None:
+        if cand.unit_price is None:
+            flags["price_missing"] = True
+        if cand.currency is None:
+            flags["currency_missing"] = True
+        elif cand.currency != est.currency:
+            flags["currency_differs"] = True
+        if cand.includes_vat is None:
+            flags["vat_basis_unknown"] = True
+    return flags
+
+
+def _snapshot_candidate(row: EstimateLine, cand: CandidateInput) -> None:
+    row.price_source = "supplier"
+    row.match_suggestion_id = cand.match_id
+    row.supplier_id, row.supplier_name = cand.supplier_id, cand.supplier_name
+    row.quotation_item_id = cand.quotation_item_id
+    row.quoted_unit_price = cand.unit_price
+    row.quoted_currency = cand.currency
+    row.quoted_includes_vat = cand.includes_vat
+
+
+def _clear_source(row: EstimateLine) -> None:
+    row.match_suggestion_id = row.supplier_id = row.supplier_name = row.quotation_item_id = None
+    row.quoted_unit_price = row.quoted_currency = row.quoted_includes_vat = None
+    row.unit_price_ex_vat = None
+    row.exclude_reason = None
+    row.unit_mismatch_acknowledged = False
+
+
+def _check_override(est: Estimate, override: Decimal | None) -> None:
+    if override is None:
+        return
+    try:
+        calc.validate_settings(calc.Settings(est.vat_rate, est.markup_basis, override))  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise ValidationFailed(str(exc), code="invalid_markup_override") from exc
+
+
+def _find_candidate(live: LiveInputs, boq_item_id: UUID, match_id: UUID | None) -> CandidateInput:
+    cand = next((c for c in live.candidates.get(boq_item_id, []) if c.match_id == match_id), None)
+    if cand is None:
+        raise Conflict(
+            "That match is not confirmed and current for this line. Reload.", code="stale_match"
+        )
+    return cand
+
+
+def price_line(
+    session: Session, ctx: OrgContext, line_id: UUID, body: LinePut, live: LiveInputs
+) -> EstimateLineDTO:
+    """Set a line's source. PUT semantics: an omitted labour rate or markup override is cleared."""
+    ctx.require(Permission.REVIEW_DATA)
+    estimate_id = EstimateRepo(session, ctx).line(line_id).estimate_id
+    repo, est = _lock_draft(session, ctx, estimate_id)
+    row = repo.line(line_id, refresh=True)
+    override = (
+        Decimal(body.markup_override_percent) if body.markup_override_percent is not None else None
+    )
+    _check_override(est, override)
+    boq = live.boq.get(row.boq_item_id)
+    row.updated_by = ctx.user_id
+    if body.exclude_reason is not None:
+        _clear_source(row)
+        row.price_source = "excluded"
+        row.exclude_reason = body.exclude_reason
+        row.labour_rate = row.markup_override_percent = None
+        row.flags = {}
+        if boq is not None:
+            row.input_hash = input_hash(boq, None)
+        _set_amounts(row, None)
+        audit.record(
+            session, ctx, "estimate_line", row.id, "estimate_line_excluded",
+            {"estimate_id": str(est.id), "boq_item_id": str(row.boq_item_id)},
+        )  # fmt: skip
+        session.flush()
+        return _line_dto(row, live)
+    if boq is None:
+        raise Conflict("This BoQ line is no longer current.", code="stale_match")
+    if boq.quantity is None or boq.quantity <= 0:
+        raise ValidationFailed(
+            "A line without a quantity can only be excluded.", code="quantity_missing"
+        )
+    cand: CandidateInput | None = None
+    if body.match_suggestion_id is not None:
+        cand = _find_candidate(live, row.boq_item_id, body.match_suggestion_id)
+        if cand.unit_mismatch and not body.unit_mismatch_acknowledged:
+            raise ValidationFailed(
+                "The quoted unit differs from the BoQ unit; acknowledge it to use this price.",
+                code="unit_mismatch_unacknowledged",
+            )
+    _clear_source(row)
+    _snapshot_boq(row, boq)
+    row.labour_rate = Decimal(body.labour_rate) if body.labour_rate is not None else None
+    row.markup_override_percent = override
+    if cand is not None:
+        _snapshot_candidate(row, cand)
+        row.unit_mismatch_acknowledged = cand.unit_mismatch and body.unit_mismatch_acknowledged
+    else:
+        row.price_source = "manual"
+        row.unit_price_ex_vat = Decimal(body.manual_unit_price or "0")
+    row.flags = _blockers(est, boq, cand)
+    row.input_hash = input_hash(boq, cand)
+    _price(row, est)
+    audit.record(
+        session, ctx, "estimate_line", row.id, "estimate_line_priced",
+        {
+            "estimate_id": str(est.id),
+            "boq_item_id": str(row.boq_item_id),
+            "source": row.price_source,
+            "match_suggestion_id": str(cand.match_id) if cand else None,
+        },
+    )  # fmt: skip
+    session.flush()
+    session.refresh(row)  # column scale (e.g. 10.5 -> 10.5000) as stored
+    return _line_dto(row, live)
+
+
+def refresh_line(
+    session: Session, ctx: OrgContext, line_id: UUID, live: LiveInputs
+) -> EstimateLineDTO:
+    """Re-snapshot the line from the live BoQ line and the chosen quote item."""
+    ctx.require(Permission.REVIEW_DATA)
+    estimate_id = EstimateRepo(session, ctx).line(line_id).estimate_id
+    repo, est = _lock_draft(session, ctx, estimate_id)
+    row = repo.line(line_id, refresh=True)
+    boq = live.boq.get(row.boq_item_id)
+    if boq is None:
+        raise Conflict("This BoQ line is no longer current.", code="stale_match")
+    cand: CandidateInput | None = None
+    if row.price_source == "supplier":
+        cand = _find_candidate(live, row.boq_item_id, row.match_suggestion_id)
+        if cand.unit_mismatch and not row.unit_mismatch_acknowledged:
+            raise ValidationFailed(
+                "The quoted unit now differs from the BoQ unit; choose the price again.",
+                code="unit_mismatch_unacknowledged",
+            )
+    row.updated_by = ctx.user_id
+    _snapshot_boq(row, boq)
+    if cand is not None:
+        _snapshot_candidate(row, cand)
+    if row.price_source in ("supplier", "manual"):
+        row.flags = _blockers(est, boq, cand)
+        _price(row, est)
+    row.input_hash = input_hash(boq, cand)
+    audit.record(
+        session, ctx, "estimate_line", row.id, "estimate_line_priced",
+        {
+            "estimate_id": str(est.id),
+            "boq_item_id": str(row.boq_item_id),
+            "source": row.price_source,
+            "refreshed": True,
+        },
+    )  # fmt: skip
+    session.flush()
+    session.refresh(row)  # column scale (e.g. 10.5 -> 10.5000) as stored
+    return _line_dto(row, live)
+
+
+def patch_estimate(
+    session: Session, ctx: OrgContext, estimate_id: UUID, body: EstimatePatch, live: LiveInputs
+) -> EstimateDTO:
+    ctx.require(Permission.REVIEW_DATA)
+    repo, est = _lock_draft(session, ctx, estimate_id)
+    rows = repo.all_lines(est.id)
+    currency = body.currency if body.currency is not None else est.currency
+    vat = Decimal(body.vat_rate) if body.vat_rate is not None else est.vat_rate
+    basis = body.markup_basis if body.markup_basis is not None else est.markup_basis
+    pct = Decimal(body.markup_percent) if body.markup_percent is not None else est.markup_percent
+    if currency != est.currency and any(r.price_source in ("supplier", "manual") for r in rows):
+        raise Conflict("The currency cannot change once a line is priced.", code="currency_locked")
+    try:
+        calc.validate_settings(calc.Settings(vat, basis, pct))  # type: ignore[arg-type]
+        for r in rows:
+            if r.markup_override_percent is not None:
+                calc.validate_settings(calc.Settings(vat, basis, r.markup_override_percent))  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise ValidationFailed(str(exc), code="invalid_settings") from exc
+    changed = [
+        name
+        for name, old, new in (
+            ("currency", est.currency, currency),
+            ("vat_rate", est.vat_rate, vat),
+            ("markup_basis", est.markup_basis, basis),
+            ("markup_percent", est.markup_percent, pct),
+        )
+        if old != new
+    ]
+    est.currency, est.vat_rate, est.markup_basis, est.markup_percent = currency, vat, basis, pct
+    for r in rows:
+        if r.price_source in ("supplier", "manual"):
+            _price(r, est)
+    if changed:
+        audit.record(
+            session, ctx, "estimate", est.id, "estimate_settings_changed", {"fields": changed}
+        )
+    session.flush()
+    session.refresh(est)
+    for r in rows:
+        session.refresh(r)
+    return _estimate_dto(est, _lines_of(repo, est, live))

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic.autogenerate import compare_metadata
@@ -62,6 +63,8 @@ REQUESTS = {
         "json": {"description": "hijacked"}
     },
     ("PATCH", "/api/v1/suppliers/{supplier_id}"): lambda: {"json": {"name": "hijacked"}},
+    ("PATCH", "/api/v1/estimates/{estimate_id}"): lambda: {"json": {"vat_rate": "1"}},
+    ("PUT", "/api/v1/estimate-lines/{line_id}"): lambda: {"json": {"exclude_reason": "hijacked"}},
     ("POST", "/api/v1/suppliers/{supplier_id}/merge"): lambda: {
         "json": {"into_id": "00000000-0000-0000-0000-000000000001"}
     },
@@ -107,8 +110,10 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     )
     estimate_b = org_b.client.post(f"/api/v1/tenders/{tender_b}/estimates")
     assert estimate_b.status_code == 201, estimate_b.text
+    line_b = org_b.client.get(f"/api/v1/estimates/{estimate_b.json()['id']}/lines").json()
     known = {
         "estimate_id": estimate_b.json()["id"],
+        "line_id": line_b[0]["id"] if line_b else str(uuid4()),
         "tender_id": tender_b,
         "document_id": uploaded["document"]["id"],
         "version_id": uploaded["version"]["id"],
