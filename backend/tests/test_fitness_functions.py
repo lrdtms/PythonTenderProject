@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
 from alembic.autogenerate import compare_metadata
@@ -113,7 +112,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     line_b = org_b.client.get(f"/api/v1/estimates/{estimate_b.json()['id']}/lines").json()
     known = {
         "estimate_id": estimate_b.json()["id"],
-        "line_id": line_b[0]["id"] if line_b else str(uuid4()),
+        "line_id": line_b[0]["id"],
         "tender_id": tender_b,
         "document_id": uploaded["document"]["id"],
         "version_id": uploaded["version"]["id"],
@@ -167,6 +166,8 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "quotations",
         "quotation-items",
         "match-suggestions",
+        "estimates",
+        "estimate-lines",
     ):
         assert any(needle in p for p in paths), f"no {needle} route was swept"
 
