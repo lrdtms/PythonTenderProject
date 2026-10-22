@@ -1,6 +1,47 @@
 """Public surface of the estimates module."""
 
-from .schemas import PricingDefaultsDTO, PricingDefaultsPut
-from .service import get_defaults, save_defaults
+from .schemas import (
+    BoqInput,
+    CandidateDTO,
+    CandidateInput,
+    EstimateDTO,
+    EstimateLineDTO,
+    EstimateSummaryDTO,
+    LineStatus,
+    LiveInputs,
+    PricingDefaultsDTO,
+    PricingDefaultsPut,
+    TotalsDTO,
+)
+from .service import (
+    create_estimate,
+    get_defaults,
+    get_estimate,
+    input_hash,
+    list_estimates,
+    list_lines,
+    save_defaults,
+    tender_of,
+)
 
-__all__ = ["PricingDefaultsDTO", "PricingDefaultsPut", "get_defaults", "save_defaults"]
+__all__ = [
+    "BoqInput",
+    "CandidateDTO",
+    "CandidateInput",
+    "EstimateDTO",
+    "EstimateLineDTO",
+    "EstimateSummaryDTO",
+    "LineStatus",
+    "LiveInputs",
+    "PricingDefaultsDTO",
+    "PricingDefaultsPut",
+    "TotalsDTO",
+    "create_estimate",
+    "get_defaults",
+    "get_estimate",
+    "input_hash",
+    "list_estimates",
+    "list_lines",
+    "save_defaults",
+    "tender_of",
+]

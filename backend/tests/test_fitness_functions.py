@@ -93,7 +93,22 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         for m in org_b.client.get("/api/v1/members").json()
         if m["email"] == "b2@example.com"
     )
+    assert (
+        org_b.client.put(
+            "/api/v1/pricing-defaults",
+            json={
+                "currency": "ZAR",
+                "vat_rate": "15",
+                "markup_basis": "cost",
+                "default_markup_percent": "10",
+            },
+        ).status_code
+        == 200
+    )
+    estimate_b = org_b.client.post(f"/api/v1/tenders/{tender_b}/estimates")
+    assert estimate_b.status_code == 201, estimate_b.text
     known = {
+        "estimate_id": estimate_b.json()["id"],
         "tender_id": tender_b,
         "document_id": uploaded["document"]["id"],
         "version_id": uploaded["version"]["id"],

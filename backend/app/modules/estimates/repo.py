@@ -54,6 +54,21 @@ class EstimateRepo(ScopedRepository[Estimate]):
         stmt = stmt.order_by(EstimateLine.position, EstimateLine.id).limit(limit).offset(offset)
         return self.session.scalars(stmt).all()
 
+    def all_lines(self, estimate_id: UUID) -> Sequence[EstimateLine]:
+        """Every line of the estimate in BoQ order."""
+        return self.session.scalars(
+            select(EstimateLine)
+            .where(
+                EstimateLine.organisation_id == self.ctx.organisation_id,
+                EstimateLine.estimate_id == estimate_id,
+            )
+            .order_by(EstimateLine.position, EstimateLine.id)
+        ).all()
+
+    def for_tender(self, tender_id: UUID) -> Sequence[Estimate]:
+        """The tender's estimates, newest version first."""
+        return self.find(Estimate.tender_id == tender_id, order_by=Estimate.version.desc())
+
     def add_lines(self, rows: Sequence[EstimateLine]) -> None:
         for row in rows:
             row.organisation_id = self.ctx.organisation_id

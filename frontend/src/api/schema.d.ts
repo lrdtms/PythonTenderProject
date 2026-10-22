@@ -297,6 +297,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/estimates/{estimate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Estimate */
+        get: operations["get_estimate_api_v1_estimates__estimate_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lines */
+        get: operations["get_lines_api_v1_estimates__estimate_id__lines_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -787,6 +821,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenders/{tender_id}/estimates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Estimates */
+        get: operations["list_estimates_api_v1_tenders__tender_id__estimates_get"];
+        put?: never;
+        /** Create Estimate */
+        post: operations["create_estimate_api_v1_tenders__tender_id__estimates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenders/{tender_id}/match": {
         parameters: {
             query?: never;
@@ -1001,6 +1053,34 @@ export interface components {
             /** Unit */
             unit?: string | null;
         };
+        /** CandidateDTO */
+        CandidateDTO: {
+            /** Currency */
+            currency: string | null;
+            /** Includes Vat */
+            includes_vat: boolean | null;
+            /**
+             * Match Id
+             * Format: uuid
+             */
+            match_id: string;
+            /**
+             * Quotation Item Id
+             * Format: uuid
+             */
+            quotation_item_id: string;
+            /**
+             * Supplier Id
+             * Format: uuid
+             */
+            supplier_id: string;
+            /** Supplier Name */
+            supplier_name: string;
+            /** Unit Price */
+            unit_price: string | null;
+            /** Warnings */
+            warnings: string[];
+        };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["Role"];
@@ -1047,6 +1127,162 @@ export interface components {
             tender_id: string;
             /** Title */
             title: string;
+        };
+        /** EstimateDTO */
+        EstimateDTO: {
+            /** Approved At */
+            approved_at: string | null;
+            /** Approved By */
+            approved_by: string | null;
+            /** Based On Version */
+            based_on_version: number | null;
+            /** Changed */
+            changed: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Currency */
+            currency: string;
+            /** Excluded */
+            excluded: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incomplete */
+            incomplete: boolean;
+            /**
+             * Markup Basis
+             * @enum {string}
+             */
+            markup_basis: "cost" | "selling_price";
+            /** Markup Percent */
+            markup_percent: string;
+            /** Priced */
+            priced: number;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tender Id
+             * Format: uuid
+             */
+            tender_id: string;
+            totals: components["schemas"]["TotalsDTO"] | null;
+            /** Unresolved */
+            unresolved: number;
+            /** Vat Rate */
+            vat_rate: string;
+            /** Version */
+            version: number;
+        };
+        /** EstimateLineDTO */
+        EstimateLineDTO: {
+            /**
+             * Boq Item Id
+             * Format: uuid
+             */
+            boq_item_id: string;
+            /** Candidates */
+            candidates: components["schemas"]["CandidateDTO"][];
+            /** Cost */
+            cost: string | null;
+            /** Description */
+            description: string;
+            /** Exclude Reason */
+            exclude_reason: string | null;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item No */
+            item_no: string | null;
+            /** Labour Cost */
+            labour_cost: string | null;
+            /** Labour Rate */
+            labour_rate: string | null;
+            /** Markup */
+            markup: string | null;
+            /** Markup Override Percent */
+            markup_override_percent: string | null;
+            /** Match Suggestion Id */
+            match_suggestion_id: string | null;
+            /** Material Cost */
+            material_cost: string | null;
+            /** Position */
+            position: number;
+            /** Price Source */
+            price_source: string;
+            /** Quantity */
+            quantity: string | null;
+            /** Quoted Currency */
+            quoted_currency: string | null;
+            /** Quoted Includes Vat */
+            quoted_includes_vat: boolean | null;
+            /** Quoted Unit Price */
+            quoted_unit_price: string | null;
+            /** Section */
+            section: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "priced" | "excluded" | "unresolved" | "changed";
+            /** Supplier Id */
+            supplier_id: string | null;
+            /** Supplier Name */
+            supplier_name: string | null;
+            /** Total */
+            total: string | null;
+            /** Unit */
+            unit: string | null;
+            /** Unit Mismatch Acknowledged */
+            unit_mismatch_acknowledged: boolean;
+            /** Unit Price Ex Vat */
+            unit_price_ex_vat: string | null;
+        };
+        /** EstimateSummaryDTO */
+        EstimateSummaryDTO: {
+            /** Approved At */
+            approved_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tender Id
+             * Format: uuid
+             */
+            tender_id: string;
+            totals: components["schemas"]["TotalsDTO"] | null;
+            /** Version */
+            version: number;
         };
         /** ExtractRequest */
         ExtractRequest: {
@@ -1767,6 +2003,19 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** TotalsDTO */
+        TotalsDTO: {
+            /** Markup Total */
+            markup_total: string;
+            /** Subtotal Cost */
+            subtotal_cost: string;
+            /** Subtotal Ex Vat */
+            subtotal_ex_vat: string;
+            /** Total Inc Vat */
+            total_inc_vat: string;
+            /** Vat Total */
+            vat_total: string;
+        };
         /** UploadResultDTO */
         UploadResultDTO: {
             document: components["schemas"]["DocumentDTO"];
@@ -2396,6 +2645,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_estimate_api_v1_estimates__estimate_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lines_api_v1_estimates__estimate_id__lines_get: {
+        parameters: {
+            query?: {
+                status?: ("priced" | "excluded" | "unresolved" | "changed") | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateLineDTO"][];
                 };
             };
             /** @description Validation Error */
@@ -3461,6 +3776,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_estimates_api_v1_tenders__tender_id__estimates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateSummaryDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_estimate_api_v1_tenders__tender_id__estimates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
                 };
             };
             /** @description Validation Error */

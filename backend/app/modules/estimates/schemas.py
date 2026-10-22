@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
@@ -39,3 +41,127 @@ class PricingDefaultsPut(BaseModel):
             )
         )
         return self
+
+
+@dataclass(frozen=True)
+class BoqInput:
+    """A current BoQ line, as the router reads it from the estimating module."""
+
+    id: UUID
+    section: str | None
+    item_no: str | None
+    description: str
+    unit: str | None
+    quantity: Decimal | None
+    review_status: str
+
+
+@dataclass(frozen=True)
+class CandidateInput:
+    """A confirmed, current match, as the router reads it from the suppliers module."""
+
+    match_id: UUID
+    boq_item_id: UUID
+    quotation_item_id: UUID
+    supplier_id: UUID
+    supplier_name: str
+    unit_price: Decimal | None
+    currency: str | None
+    includes_vat: bool | None
+    unit_mismatch: bool
+    quote_item_reviewed: bool
+
+
+@dataclass(frozen=True)
+class LiveInputs:
+    boq: dict[UUID, BoqInput] = field(default_factory=dict)
+    candidates: dict[UUID, list[CandidateInput]] = field(default_factory=dict)
+
+
+LineStatus = Literal["priced", "excluded", "unresolved", "changed"]
+
+
+class CandidateDTO(BaseModel):
+    match_id: UUID
+    supplier_id: UUID
+    supplier_name: str
+    quotation_item_id: UUID
+    unit_price: str | None
+    currency: str | None
+    includes_vat: bool | None
+    warnings: list[str]
+
+
+class EstimateLineDTO(BaseModel):
+    id: UUID
+    boq_item_id: UUID
+    position: int
+    section: str | None
+    item_no: str | None
+    description: str
+    unit: str | None
+    quantity: str | None
+    status: LineStatus
+    price_source: str
+    match_suggestion_id: UUID | None
+    supplier_id: UUID | None
+    supplier_name: str | None
+    quoted_unit_price: str | None
+    quoted_currency: str | None
+    quoted_includes_vat: bool | None
+    unit_price_ex_vat: str | None
+    labour_rate: str | None
+    markup_override_percent: str | None
+    exclude_reason: str | None
+    unit_mismatch_acknowledged: bool
+    material_cost: str | None
+    labour_cost: str | None
+    cost: str | None
+    markup: str | None
+    total: str | None
+    flags: list[str]
+    candidates: list[CandidateDTO]
+
+
+class TotalsDTO(BaseModel):
+    subtotal_cost: str
+    markup_total: str
+    subtotal_ex_vat: str
+    vat_total: str
+    total_inc_vat: str
+
+
+class EstimateSummaryDTO(BaseModel):
+    id: UUID
+    tender_id: UUID
+    version: int
+    status: str
+    currency: str
+    totals: TotalsDTO | None
+    created_at: datetime
+    reviewed_at: datetime | None
+    approved_at: datetime | None
+
+
+class EstimateDTO(BaseModel):
+    id: UUID
+    tender_id: UUID
+    version: int
+    status: str
+    currency: str
+    vat_rate: str
+    markup_basis: Literal["cost", "selling_price"]
+    markup_percent: str
+    based_on_version: int | None
+    totals: TotalsDTO | None
+    priced: int
+    excluded: int
+    unresolved: int
+    changed: int
+    incomplete: bool
+    created_by: UUID
+    created_at: datetime
+    reviewed_by: UUID | None
+    reviewed_at: datetime | None
+    approved_by: UUID | None
+    approved_at: datetime | None
