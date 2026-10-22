@@ -1,0 +1,70 @@
+{
+  "settings": {
+    "vat_rate": "15",
+    "markup_basis": "selling_price",
+    "markup_percent": "10"
+  },
+  "lines": [
+    {
+      "quantity": "7",
+      "unit_price_ex_vat": "33.3333",
+      "labour_rate": "12.0000",
+      "markup_override": "15",
+      "excluded": false
+    },
+    {
+      "quantity": "40",
+      "unit_price_ex_vat": "2.7500",
+      "labour_rate": null,
+      "markup_override": null,
+      "excluded": false
+    },
+    {
+      "quantity": null,
+      "unit_price_ex_vat": null,
+      "labour_rate": null,
+      "markup_override": null,
+      "excluded": true
+    },
+    {
+      "quantity": "5",
+      "unit_price_ex_vat": "19.9950",
+      "labour_rate": "3.3333",
+      "markup_override": "99",
+      "excluded": false
+    }
+  ],
+  "expected": {
+    "lines": [
+      {
+        "material_cost": "233.33",
+        "labour_cost": "84.00",
+        "cost": "317.33",
+        "markup": "56.00",
+        "total": "373.33"
+      },
+      {
+        "material_cost": "110.00",
+        "labour_cost": "0.00",
+        "cost": "110.00",
+        "markup": "12.22",
+        "total": "122.22"
+      },
+      null,
+      {
+        "material_cost": "99.98",
+        "labour_cost": "16.67",
+        "cost": "116.65",
+        "markup": "11548.35",
+        "total": "11665.00"
+      }
+    ],
+    "totals": {
+      "subtotal_cost": "543.98",
+      "markup_total": "11616.57",
+      "subtotal_ex_vat": "12160.55",
+      "vat_total": "1824.08",
+      "total_inc_vat": "13984.63"
+    }
+  }
+}
