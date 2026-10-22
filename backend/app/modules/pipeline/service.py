@@ -80,18 +80,21 @@ def finish_run(
 def fail_run(session: Session, ctx: OrgContext, job_id: UUID, kind: str, error_code: str) -> None:
     """Failure hook: also covers the reaper path. Creates nothing if the run never started."""
     run = RunRepo(session, ctx).for_job(job_id, kind)
-    if run is None:
+    if run is None or run.status == "cancelled":
         return
     run.status, run.error_code = "failed", error_code
     run.finished_at = datetime.now(UTC)
     session.flush()
 
 
-def cancel_runs_for_job(session: Session, ctx: OrgContext, job_id: UUID) -> None:
+def cancel_runs_for_job(
+    session: Session, ctx: OrgContext, job_id: UUID, *, skip_locked: bool = False
+) -> None:
     """Close the run of a cancelled job so the status panel does not show it as still working.
-    A run that already finished is left as it is."""
-    ctx.require(Permission.REVIEW_DATA)
-    for run in RunRepo(session, ctx).find(ExtractionRun.job_id == job_id):
+    A run that already finished is left as it is. The API passes `skip_locked`: a running
+    handler may hold the run's lock, and waiting for it could deadlock with the worker's own
+    heartbeat; the worker closes that run itself when it stops (the handler's on_cancel hook)."""
+    for run in RunRepo(session, ctx).locked_for_job(job_id, skip_locked=skip_locked):
         if run.status in ("queued", "running"):
             run.status = "cancelled"
             run.finished_at = datetime.now(UTC)

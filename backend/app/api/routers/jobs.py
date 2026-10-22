@@ -32,5 +32,5 @@ def cancel_job(job_id: UUID, ctx: Ctx, session: DbSession):
     documents.ensure_job_cancel_allowed(session, ctx, job.job_type, job.subject_id)
     cancelled = jobs.cancel_job(session, ctx, job_id)
     if cancelled.status == "cancelled":
-        pipeline.cancel_runs_for_job(session, ctx, job_id)
+        pipeline.cancel_runs_for_job(session, ctx, job_id, skip_locked=True)
     return cancelled

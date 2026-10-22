@@ -110,12 +110,14 @@ def _ensure_tender_open(
     session: Session,
     ctx: OrgContext,
     tender_id: UUID,
-    message: str = "This tender is archived. Re-open it before uploading documents.",
+    message: str | None = None,
     code: str | None = None,
 ) -> None:
     """An archived tender is read-only: no uploads, new versions or re-processing."""
     if tenders.get_tender(session, ctx, tender_id).status == "archived":
-        raise Conflict(message, code=code)
+        raise Conflict(
+            message or "This tender is archived. Re-open it before uploading documents.", code=code
+        )
 
 
 _STORED_FILES = "documents.stored_files"
@@ -260,6 +262,8 @@ def ensure_job_cancel_allowed(
 ) -> None:
     """Cancelling a job changes the state of an archived tender's work: not allowed there."""
     ctx.require(Permission.REVIEW_DATA)
+    if job_type == INGEST_JOB:  # a cancelled ingest would leave the version stuck unprocessed
+        raise Conflict("Document processing cannot be cancelled.", code="job_not_cancellable")
     _ensure_subject_tender_open(
         session,
         ctx,
@@ -275,7 +279,7 @@ def _ensure_subject_tender_open(
     ctx: OrgContext,
     job_type: str,
     subject_id: UUID,
-    message: str = "This tender is archived. Re-open it before uploading documents.",
+    message: str | None = None,
     code: str | None = None,
 ) -> None:
     if job_type == MATCH_SUPPLIERS_JOB:  # the subject is the tender itself

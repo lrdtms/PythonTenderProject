@@ -265,20 +265,34 @@ def _failer(kind: str):
     return on_failure
 
 
+def _canceller(kind: str):
+    def on_cancel(session: Session, ctx: OrgContext, job: jobs.ClaimedJob) -> None:
+        pipeline.cancel_runs_for_job(session, ctx, job.id)
+
+    return on_cancel
+
+
 HANDLERS: dict[str, JobHandler] = {
     documents.MATCH_SUPPLIERS_JOB: JobHandler(run=match_suppliers),
     documents.INGEST_JOB: JobHandler(
         run=ingest_document, on_failure=ingest_failed, on_start=ingest_started
     ),
     documents.EXTRACT_BOQ_JOB: JobHandler(
-        run=extract_boq, on_failure=_failer("boq"), on_start=_starter("boq")
+        run=extract_boq,
+        on_failure=_failer("boq"),
+        on_start=_starter("boq"),
+        on_cancel=_canceller("boq"),
     ),
     documents.EXTRACT_REQUIREMENTS_JOB: JobHandler(
         run=extract_requirements,
         on_failure=_failer("requirements"),
         on_start=_starter("requirements"),
+        on_cancel=_canceller("requirements"),
     ),
     documents.EXTRACT_QUOTATION_JOB: JobHandler(
-        run=extract_quotation, on_failure=_failer("quotation"), on_start=_starter("quotation")
+        run=extract_quotation,
+        on_failure=_failer("quotation"),
+        on_start=_starter("quotation"),
+        on_cancel=_canceller("quotation"),
     ),
 }

@@ -37,6 +37,9 @@ class JobHandler:
     # Called in its own short transaction right after the claim, before the long work, so
     # clients can see that the job is being worked on (e.g. a version becomes `processing`).
     on_start: Callable[[Session, OrgContext, jobs.ClaimedJob], None] | None = None
+    # Called in its own short transaction when the job stopped because it was cancelled, after
+    # the handler's transaction rolled back: closes records on_start left open (e.g. a run).
+    on_cancel: Callable[[Session, OrgContext, jobs.ClaimedJob], None] | None = None
 
 
 def _context(job: jobs.ClaimedJob) -> OrgContext:
@@ -79,9 +82,11 @@ def process_one(handlers: dict[str, JobHandler]) -> bool:
     except JobCancelled:
         # The cancel already set the status; the handler's transaction was rolled back, so no
         # results were stored. Not a failure: no retry, no failure hook, no completion.
-        log.info("job %s cancelled", job.id)
+        _stopped(handler, ctx, job)
         return True
     except ProcessingFailed as exc:
+        if _cancelled_meanwhile(handler, ctx, job):
+            return True
         _record_failure(handler, ctx, job, exc.error_code, exc.transient)
         return True
     except Exception as exc:  # noqa: BLE001 - an unexpected bug must not kill the worker loop
@@ -90,10 +95,33 @@ def process_one(handlers: dict[str, JobHandler]) -> bool:
         # No traceback and no exception message: either can carry document text (cell values in
         # a failed statement, parser messages). The type name and job id are enough to triage.
         log.error("job %s crashed error_type=%s code=%s", job.id, type(exc).__name__, code)
+        if _cancelled_meanwhile(handler, ctx, job):
+            return True
         _record_failure(handler, ctx, job, code, transient)
         return True
     _complete(job, warnings)
     return True
+
+
+def _stopped(handler: JobHandler, ctx: OrgContext, job: jobs.ClaimedJob) -> None:
+    """The job was cancelled: record nothing as a failure, only close what on_start opened."""
+    if handler.on_cancel is not None:
+        try:
+            with session_scope() as session:
+                set_org(session, ctx.organisation_id)
+                handler.on_cancel(session, ctx, job)
+        except Exception as exc:  # noqa: BLE001 - one bad hook must not stop the worker
+            log.error("job %s cancel hook error_type=%s", job.id, type(exc).__name__)
+    log.info("job %s cancelled", job.id)
+
+
+def _cancelled_meanwhile(handler: JobHandler, ctx: OrgContext, job: jobs.ClaimedJob) -> bool:
+    """A handler failing after its job was cancelled must not requeue or fail it."""
+    with session_scope() as session:
+        cancelled = jobs.is_cancelled(session, job.id)
+    if cancelled:
+        _stopped(handler, ctx, job)
+    return cancelled
 
 
 def _is_transient(exc: Exception) -> bool:

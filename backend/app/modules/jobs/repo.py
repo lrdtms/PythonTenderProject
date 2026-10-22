@@ -180,7 +180,7 @@ class QueueRepo:
     def requeue(self, job_id: UUID, error_code: str, delay_seconds: int) -> None:
         self.session.execute(
             update(Job)
-            .where(Job.id == job_id)
+            .where(Job.id == job_id, Job.status == "running")
             .values(
                 status="queued",
                 error_code=error_code,
