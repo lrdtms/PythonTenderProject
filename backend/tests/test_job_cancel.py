@@ -210,6 +210,8 @@ def _no_boq_items() -> bool:
         return s.scalars(select(BoqItem)).first() is None
 
 
+# The join timeout plus the raise turn a deadlock into a failure: without the raise, progress()
+# would wait on the blocked API thread's job lock and the test would hang.
 def test_cancel_while_the_handler_holds_run_locks_does_not_deadlock() -> None:
     """The cancel runs from a second thread inside extract_boq's last progress call, when the
     handler transaction holds the run-row locks. A regression hangs, so the thread is timed."""
@@ -225,6 +227,8 @@ def test_cancel_while_the_handler_holds_run_locks_does_not_deadlock() -> None:
             th.start()
             th.join(timeout=20)
             outcome["hung"] = int(th.is_alive())
+            if th.is_alive():  # raising rolls the handler back, which frees the thread
+                raise AssertionError("cancel request is still blocked on the handler's run locks")
             progress(done, total)
 
         return real.run(session, ctx, job, cancelling_progress)
