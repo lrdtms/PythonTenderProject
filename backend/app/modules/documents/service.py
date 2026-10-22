@@ -106,10 +106,16 @@ def _store_version(
     return version, job.id
 
 
-def _ensure_tender_open(session: Session, ctx: OrgContext, tender_id: UUID) -> None:
+def _ensure_tender_open(
+    session: Session,
+    ctx: OrgContext,
+    tender_id: UUID,
+    message: str = "This tender is archived. Re-open it before uploading documents.",
+    code: str | None = None,
+) -> None:
     """An archived tender is read-only: no uploads, new versions or re-processing."""
     if tenders.get_tender(session, ctx, tender_id).status == "archived":
-        raise Conflict("This tender is archived. Re-open it before uploading documents.")
+        raise Conflict(message, code=code)
 
 
 _STORED_FILES = "documents.stored_files"
@@ -246,8 +252,34 @@ def ensure_job_retry_allowed(
 ) -> None:
     """Re-processing a document re-writes its pages: not allowed on an archived tender."""
     ctx.require(Permission.UPLOAD_DOCUMENTS)
+    _ensure_subject_tender_open(session, ctx, job_type, subject_id)
+
+
+def ensure_job_cancel_allowed(
+    session: Session, ctx: OrgContext, job_type: str, subject_id: UUID
+) -> None:
+    """Cancelling a job changes the state of an archived tender's work: not allowed there."""
+    ctx.require(Permission.REVIEW_DATA)
+    _ensure_subject_tender_open(
+        session,
+        ctx,
+        job_type,
+        subject_id,
+        "This tender is archived. Re-open it before cancelling work.",
+        "tender_archived",
+    )
+
+
+def _ensure_subject_tender_open(
+    session: Session,
+    ctx: OrgContext,
+    job_type: str,
+    subject_id: UUID,
+    message: str = "This tender is archived. Re-open it before uploading documents.",
+    code: str | None = None,
+) -> None:
     if job_type == MATCH_SUPPLIERS_JOB:  # the subject is the tender itself
-        _ensure_tender_open(session, ctx, subject_id)
+        _ensure_tender_open(session, ctx, subject_id, message, code)
         return
     if job_type != INGEST_JOB and job_type not in EXTRACTION_JOBS:
         return
@@ -255,7 +287,7 @@ def ensure_job_retry_allowed(
     if not found:  # nothing left to protect; the worker reports a missing version itself
         return
     document = DocumentRepo(session, ctx).get(found[0].document_id)
-    _ensure_tender_open(session, ctx, document.tender_id)
+    _ensure_tender_open(session, ctx, document.tender_id, message, code)
 
 
 # --- used by the ingest worker -----------------------------------------------------------------

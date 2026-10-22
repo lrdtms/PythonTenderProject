@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db.session import session_scope, set_org
-from app.kernel import OrgContext, ProcessingFailed
+from app.kernel import JobCancelled, OrgContext, ProcessingFailed
 from app.modules.jobs import public as jobs
 
 log = logging.getLogger("worker")
@@ -74,6 +74,13 @@ def process_one(handlers: dict[str, JobHandler]) -> bool:
         with session_scope() as session:
             set_org(session, ctx.organisation_id)
             warnings = handler.run(session, ctx, job, progress)
+            if jobs.is_cancelled(session, job.id):  # cancelled after the last progress call
+                raise JobCancelled
+    except JobCancelled:
+        # The cancel already set the status; the handler's transaction was rolled back, so no
+        # results were stored. Not a failure: no retry, no failure hook, no completion.
+        log.info("job %s cancelled", job.id)
+        return True
     except ProcessingFailed as exc:
         _record_failure(handler, ctx, job, exc.error_code, exc.transient)
         return True

@@ -87,6 +87,17 @@ def fail_run(session: Session, ctx: OrgContext, job_id: UUID, kind: str, error_c
     session.flush()
 
 
+def cancel_runs_for_job(session: Session, ctx: OrgContext, job_id: UUID) -> None:
+    """Close the run of a cancelled job so the status panel does not show it as still working.
+    A run that already finished is left as it is."""
+    ctx.require(Permission.REVIEW_DATA)
+    for run in RunRepo(session, ctx).find(ExtractionRun.job_id == job_id):
+        if run.status in ("queued", "running"):
+            run.status = "cancelled"
+            run.finished_at = datetime.now(UTC)
+    session.flush()
+
+
 def current_runs(session: Session, ctx: OrgContext, version_id: UUID) -> dict[str, RunDTO]:
     ctx.require(Permission.READ)
     return {k: _dto(r) for k, r in RunRepo(session, ctx).current_for_version(version_id).items()}

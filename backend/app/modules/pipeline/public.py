@@ -3,6 +3,7 @@
 from .routing import KIND_OF_JOB, job_types_for_kind
 from .schemas import ExtractionStatusDTO, KindStatusDTO, RunDTO
 from .service import (
+    cancel_runs_for_job,
     current_runs,
     extraction_status,
     fail_run,
@@ -18,6 +19,7 @@ __all__ = [
     "ExtractionStatusDTO",
     "KindStatusDTO",
     "RunDTO",
+    "cancel_runs_for_job",
     "current_runs",
     "extraction_status",
     "fail_run",
