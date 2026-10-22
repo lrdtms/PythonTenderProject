@@ -1,6 +1,6 @@
 # Known limitations and deferred items
 
-A running list (plan section 5, working agreements) for the final documentation. Each item says what happens today and when it should be dealt with. Last updated 2026-10-16 after Slice 4 phase 1.
+A running list (plan section 5, working agreements) for the final documentation. Each item says what happens today and when it should be dealt with. Last updated 2026-10-22 after Slice 5b.
 
 ## Slice 3 (extraction) and Slice 4 phase 1 (review API)
 
@@ -58,6 +58,29 @@ Measurement caveats are in [spikes/slice-3-scores.md](spikes/slice-3-scores.md):
 - **"Confirm all clear matches" skips** ambiguous rows, rival clear rows (more than one clear row for one BoQ line and supplier), rows whose quotation item or BoQ line was corrected after the match, rows with a quote expiring before the tender closes, and rows where the cable notation differs. Those need an individual decision; the page says so after the run.
 - **Price display mixes stored text and fixed decimals.** The original value of a corrected item is shown as stored (for example "was 54917.00") while current values show four decimals. Candidate prices show the currency code and the VAT basis as quoted ("incl. VAT", "excl. VAT", "VAT not stated"); there is no conversion between currencies or VAT bases.
 - **One worker means a long requirements job delays matching.**
+
+## Slice 5b (the estimate)
+
+From the spec's known limitations:
+
+- One currency per estimate. There is no conversion of currency, VAT basis or units.
+- No preliminaries, contingency or discounts as concepts.
+- No per-supplier totals comparison.
+- The approver may equal the reviewer.
+- A scanned quote needs a manual price typed per line, and manual quotation entry does not exist yet.
+- Markup is on cost only, as spec section 11 says. Spec section 12 records the owner's answer that the markup basis is an option (cost or selling price). The selling-price basis was not exercised at the gate.
+
+Observed or deferred during the build and gate:
+
+- **Currency stays locked** until every priced or manual line is excluded.
+- **Approve can freeze BoQ inputs edited concurrently.** The spec accepts this window.
+- **The audit metadata allowlist drops unknown keys silently.** `version` is dropped, so `estimate_created` loses `tender_id`, `version` and `lines`.
+- **Amounts can overflow.** `DecimalText` allows 14 integer digits, so an extreme price times quantity can overflow the amount columns and return 500 instead of 422.
+- **The estimate page reads all quotation items on each request** to learn review status.
+- **No `boq_missing` flag** for a line whose BoQ line has vanished.
+- **Digits outside ASCII are accepted.** The `RateText` and `DecimalText` patterns use `\d`, which also matches Unicode digits. They should use `[0-9]`.
+- **"Reopen" and "New version" sit side by side** on a reviewed estimate, and their wording can be confused. "New version" is available on a reviewed, not approved, version with no draft, as the spec provides.
+- **"Confirm all clear matches" (Slice 5a) skips rows that still show "Clear match"** where a cable-notation warning applies. At the gate these needed individual confirms. This is pre-existing 5a behaviour.
 
 ## Slice 4 phase 4 (review screen)
 
