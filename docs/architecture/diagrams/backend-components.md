@@ -46,7 +46,7 @@ flowchart TB
     EST2 --> AUD
     SUP --> EST & DOC & AUD
     CHK --> TEN & IDN & AUD
-    REP --> EST & CHK & TEN & AUD
+    REP --> AUD
     QA --> KNW
     IDN --> AUD
     TEN --> AUD

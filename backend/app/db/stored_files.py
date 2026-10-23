@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.kernel import StoragePort
 
-log = logging.getLogger("documents")
+log = logging.getLogger(__name__)
 
 _STORED_FILES = "documents.stored_files"
 

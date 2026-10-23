@@ -36,7 +36,7 @@ Each backend module is a package `modules/<name>/` containing `public.py` (the o
 | `estimates` | M4 | Pricing defaults, estimates and lines, Decimal calculations (pure `calc.py`), review, approval, readiness gate | `get_defaults`, `save_defaults`, `create_estimate(ctx, tender_id, boq)`, `get_estimate`, `list_estimates`, `patch_estimate`, `price_line`, `refresh_line`, `review_estimate`, `reopen_estimate`, `approve_estimate`, `readiness` | pricing_defaults, estimates, estimate_lines |
 | `suppliers` | M4 | Suppliers, quotations, deterministic matching, confirm/reject | `replace_quotation_items(ctx, quotation_id, cands)`, `suggest_matches(ctx, tender_id)`, `decide(ctx, suggestion_id, confirm/reject)` | suppliers, supplier_quotations, quotation_items, match_suggestions |
 | `checklist` | M1 | Requirements review, checklist, tasks, deadlines, reminders | `replace_unreviewed(ctx, version_id, cands)`, `version_of(ctx, id)`, `review_item(ctx, id, action, patch)` (RequirementPatch DTO; correct, confirm, reject), task CRUD | requirements, tasks, reminders |
-| `reporting` | M4 | Excel/PDF exports with status and version | `create_export(ctx, tender_id, kind) -> ExportDTO` (any estimate version; a version that is not approved is labelled DRAFT) | exports |
+| `reporting` | M4 | Excel/PDF exports with status and version | `create_export(session, ctx, storage, tender_id, kind, payload, estimate_id=None, estimate_tender_id=None) -> ExportDTO` (any estimate version; a version that is not approved is labelled DRAFT; the router builds the plain `payload` from estimates, checklist, tenders and identity, so reporting imports only kernel, db and audit; renders synchronously, no job) | exports |
 | `qa` (stretch) | M2 | Grounded Q&A | `ask_stream(ctx, tender_id, question) -> AsyncIterator[Event]` | chat_queries |
 | `worker/` | M2 | Job loop, stage orchestration, leases | job handlers per `job_type` | jobs (queue adapter) |
 | `api/` | each owner for their routers | HTTP, auth dependency, error format, OpenAPI | `/api/v1/...` | none |
@@ -114,7 +114,7 @@ Controls are defined in ADR-0005. Each attack path below names the control and t
 | F8 | **Provenance by construction.** LLM output schemas contain no `document_id`/`page` fields; every persisted candidate has a `SourceRef` or a flag | FR-56, BR-02 |
 | F9 | **Log hygiene.** Process the canary document and assert the canary text is absent from logs and `audit_events` | §4.2, POPIA |
 | F10 | **AI regression (manual/nightly, not per PR).** The §13 evaluation script on the synthetic set; fail the release if critical-field metrics drop more than 3 points. CI uses `FakeLLM` fixtures | §13 |
-| F11 | **Performance smoke.** Upload of a 20 MB file confirmed in < 5 s; Excel export of 1,000 lines in < 10 s; search p95 < 300 ms on 20k chunks | §4.1 |
+| F11 | **Performance smoke.** Upload of a 20 MB file confirmed in < 5 s; Excel export of 1,000 lines in < 10 s (smoke test: `backend/tests/test_exports_perf.py`, which also bounds a 1,000-requirement PDF at 10 s); search p95 < 300 ms on 20k chunks | §4.1 |
 
 ## 7. Team split and parallel work
 
@@ -169,7 +169,8 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 - `estimating.replace_unreviewed(ctx, version_id, candidates) -> ReplaceResult`; never touches reviewed rows. Same contract for `checklist.replace_unreviewed` and `suppliers.replace_quotation_items`.
 - `estimates.calc` is pure (Decimal, configurable VAT, markup; no I/O). The router reads BoQ lines and confirmed matches through `estimating.public` and `suppliers.public`, passes plain inputs to `estimates`, and `estimates` imports only kernel, db and audit. Estimates are versioned, with status draft/reviewed/approved.
 - `suppliers.suggest_matches(ctx, tender_id) -> list[MatchSuggestion(evidence, score, needs_confirmation)]`; `decide(ctx, id, confirm|reject)` records reviewer + time.
-- `reporting.create_export(ctx, tender_id, kind) -> ExportDTO`. Any estimate version; a version that is not approved is labelled DRAFT; audited.
+- `reporting.create_export(session, ctx, storage, tender_id, kind, payload, estimate_id=None, estimate_tender_id=None) -> ExportDTO`. `kind` is `estimate_xlsx` or `checklist_pdf`; `payload` is a plain `EstimateExportInput` or `ChecklistExportInput` that the router builds (reporting never imports another module), and `estimate_tender_id` (keyword) is the tender the chosen estimate really belongs to, which must equal `tender_id`. Any estimate version; a version that is not approved is labelled DRAFT; audited; synchronous. The router fills `generated_by_name` for `get_export` and the download via `identity.public.member_names`. Files are stored under `org/{org}/tenders/{tender}/exports/{export_id}.{xlsx|pdf}` and deleted if the transaction rolls back.
+- Import contracts: `reporting is isolated from the other modules` (it may import only kernel, db and audit) and `export renderers are pure` (`xlsx`, `pdf` and `safe_text` import no sqlalchemy, fastapi, db, infrastructure, audit, `reporting.service` or `reporting.models`).
 - `LLMPort.generate_structured(system, user, json_schema, options) -> StructuredResult(raw_json, done_reason, tokens, latency_ms, model)`.
 - `GET /api/v1/jobs/{id} -> {status, progress_done, progress_total, error_code, warnings[]}`.
 
@@ -201,7 +202,7 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 - SQLAlchemy sync (simpler; FastAPI threadpool) vs async. Recommendation: sync for both API and worker unless Q&A streaming forces async for that route.
 - FastEmbed inside the API image (for query embeddings) vs embedding queries via Ollama: measure RAM.
 - `tsvector` as a generated column with `simple` config, and whether to add an `english` column.
-- PDF report library: ReportLab (pure Python) vs WeasyPrint (needs Pango system libraries in the image).
+- ~~PDF report library~~ Resolved: ReportLab 5.1.0 (see the Slice 6a spec, D7).
 - ~~Tesseract settings~~ Resolved: `eng` pack, 300 DPI, 60 s per-page timeout.
 - Ollama and NVIDIA driver versions that work with Pascal (GTX 1050); the `num_ctx`/`num_gpu` split for 2 GB VRAM.
 - PDF.js integration (`pdfjs-dist` directly vs `react-pdf`) with App Router.
