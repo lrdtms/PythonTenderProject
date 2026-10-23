@@ -8,6 +8,7 @@ from app.api.routers import (
     auth,
     documents,
     estimates,
+    exports,
     extraction,
     jobs,
     matches,
@@ -67,3 +68,4 @@ app.include_router(quotations.router)
 app.include_router(jobs.router)
 app.include_router(matches.router)
 app.include_router(estimates.router)
+app.include_router(exports.router)
