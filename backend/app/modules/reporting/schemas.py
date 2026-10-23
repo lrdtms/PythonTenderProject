@@ -1,10 +1,16 @@
-"""Plain input dataclasses for the export renderers (no database, no framework types)."""
+"""Export value objects: plain renderer inputs (no database, no framework types) and the API
+shapes (`ExportCreate`, `ExportDTO`)."""
 
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+ExportKind = Literal["estimate_xlsx", "checklist_pdf"]
+ExportLabel = Literal["draft", "reviewed", "approved"]
 
 
 @dataclass(frozen=True)
@@ -18,6 +24,15 @@ class ExportTotals:
 
 @dataclass(frozen=True)
 class ExportLine:
+    """One estimate line, exactly as the estimate DTO reports it (the mapper, which is not part
+    of this module, only converts text to Decimal).
+
+    For a "changed" line the input carries the quote values the line was *priced with* (the stored,
+    old values: supplier, quoted price, currency, VAT basis), never the live quote. Amounts are
+    reported by the renderer as empty for every status except "priced", so a changed line never
+    shows a figure; the status "Source changed" and its note tell the reader to re-price it.
+    """
+
     position: int
     section: str | None
     item_no: str | None
@@ -91,3 +106,32 @@ class ChecklistExportInput:
     rejected_count: int
     generated_at: datetime | None = None
     export_id: UUID | None = None
+
+
+class ExportCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ExportKind
+    estimate_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def _estimate_only_for_estimates(self) -> "ExportCreate":
+        if self.estimate_id is not None and self.kind != "estimate_xlsx":
+            raise ValueError("estimate_id is only allowed for an estimate export")
+        return self
+
+
+class ExportDTO(BaseModel):
+    id: UUID
+    tender_id: UUID
+    kind: ExportKind
+    estimate_id: UUID | None
+    estimate_version: int | None
+    label: ExportLabel
+    file_name: str
+    content_type: str
+    file_size: int
+    row_count: int
+    generated_by: UUID
+    generated_by_name: str | None = None
+    generated_at: datetime
