@@ -171,11 +171,34 @@ describe("ChecklistView", () => {
       ).toBeInTheDocument();
     });
 
-    it("says at least while the unreviewed query has another page", async () => {
+    it("uses the singular for a single unreviewed requirement", async () => {
+      setup(unreviewed(1));
+      renderSignedIn(<ChecklistView />);
+      expect(
+        await screen.findByText("1 requirement is not reviewed yet. The report will list it separately and be marked DRAFT."),
+      ).toBeInTheDocument();
+    });
+
+    it("warns that the report may be DRAFT when the unreviewed count cannot be loaded", async () => {
+      const fetchMock = setup([]);
+      const base = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>;
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.startsWith(LIST) && url.includes("review_status=unreviewed") && !url.includes("requirement_type")) {
+          return respond(500, { error: { code: "server_error", message: "Something went wrong." } });
+        }
+        return base(url, init);
+      });
+      renderSignedIn(<ChecklistView />);
+      expect(
+        await screen.findByText("The report may be marked DRAFT if requirements are not reviewed yet."),
+      ).toBeInTheDocument();
+    });
+
+    it("says At least while the unreviewed query has another page", async () => {
       setup(unreviewed(REVIEW_PAGE_SIZE));
       renderSignedIn(<ChecklistView />);
       expect(
-        await screen.findByText(`at least ${REVIEW_PAGE_SIZE} requirements are not reviewed yet. The report will list them separately and be marked DRAFT.`),
+        await screen.findByText(`At least ${REVIEW_PAGE_SIZE} requirements are not reviewed yet. The report will list them separately and be marked DRAFT.`),
       ).toBeInTheDocument();
     });
 

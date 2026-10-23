@@ -46,10 +46,13 @@ export function ChecklistView() {
   const canExport = useCan("export");
   const open = useTenderRequirements(id, { reviewStatus: "unreviewed" }, valid && !!tender.data && canExport);
   const openCount = open.rows.length;
-  const draftNote =
-    open.isSuccess && openCount > 0
-      ? `${open.hasNextPage ? "at least " : ""}${openCount} requirements are not reviewed yet. The report will list them separately and be marked DRAFT.`
-      : undefined;
+  let draftNote: string | undefined;
+  if (open.isError) {
+    draftNote = "The report may be marked DRAFT if requirements are not reviewed yet.";
+  } else if (open.isSuccess && openCount > 0) {
+    const count = `${openCount} ${openCount === 1 ? "requirement is" : "requirements are"}`;
+    draftNote = `${open.hasNextPage ? "At least " : ""}${count} not reviewed yet. The report will list ${openCount === 1 ? "it" : "them"} separately and be marked DRAFT.`;
+  }
 
   // version id -> document title, so each row says where it came from.
   const titles = useMemo(() => {

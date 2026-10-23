@@ -33,6 +33,13 @@ describe("exportErrorText", () => {
     expect(exportErrorText(err(403, "csrf_failed"))).not.toBe(exportErrorText(err(403, "forbidden")));
   });
 
+  it("words a validation error differently from the generic fallback", () => {
+    const generic = exportErrorText(err(500, "weird_code"));
+    const validation = exportErrorText(err(422, "validation_error"));
+    expect(validation).not.toBe(generic);
+    expect(validation).not.toBe(exportErrorText(err(422, "export_too_large")));
+  });
+
   it("falls back for unknown errors", () => {
     const text = exportErrorText(err(500, "weird_code"));
     expect(text).not.toContain("weird_code");

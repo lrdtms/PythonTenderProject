@@ -264,6 +264,13 @@ describe("ErrorNotice", () => {
       expect(screen.queryByText(/marked DRAFT/)).toBeNull();
     });
 
+    it("still offers the download when every line is excluded", async () => {
+      const all = makeEstimate({ id: approved.id, version: 2, status: "approved", priced: 0, excluded: 3 });
+      mockApi(routes({}, all, LINES.map((l) => ({ ...l, status: "excluded" as const }))), exporter);
+      renderSignedIn(<EstimateView />);
+      expect(await screen.findByRole("button", { name: "Download Excel" })).toBeInTheDocument();
+    });
+
     it("marks the label and explains the note for a draft version", async () => {
       mockApi(routes(), exporter);
       renderSignedIn(<EstimateView />);
