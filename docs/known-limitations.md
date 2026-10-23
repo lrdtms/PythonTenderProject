@@ -1,6 +1,6 @@
 # Known limitations and deferred items
 
-A running list (plan section 5, working agreements) for the final documentation. Each item says what happens today and when it should be dealt with. Last updated 2026-10-22 after Slice 5b.
+A running list (plan section 5, working agreements) for the final documentation. Each item says what happens today and when it should be dealt with. Last updated 2026-10-23 after the hosted-model, cancellation and progress work (commits 2037117 to a55f9be).
 
 ## Slice 3 (extraction) and Slice 4 phase 1 (review API)
 
@@ -81,6 +81,20 @@ Observed or deferred during the build and gate:
 - **Digits outside ASCII are accepted.** The `RateText` and `DecimalText` patterns use `\d`, which also matches Unicode digits. They should use `[0-9]`.
 - **"Reopen" and "New version" sit side by side** on a reviewed estimate, and their wording can be confused. "New version" is available on a reviewed, not approved, version with no draft, as the spec provides.
 - **"Confirm all clear matches" (Slice 5a) skips rows that still show "Clear match"** where a cable-notation warning applies. At the gate these needed individual confirms. This is pre-existing 5a behaviour.
+
+## Hosted model and extraction operations (22-23 Oct 2026)
+
+Details, the benchmark and the remaining necessary changes are in [hosted-llm-and-extraction-ops.md](hosted-llm-and-extraction-ops.md).
+
+- **Large documents can lose windows.** On one 73-window document, 22 windows ended `WINDOW_INVALID_OUTPUT` with the hosted model, and the job still completed. The cause is unverified (most likely the 2048-token output cap). Check the window count before trusting a long run.
+- **A capped window costs two billed calls.** The `length` result is retried once with the truncation prompt, and it still fails if the cap is the cause.
+- **Post-window provenance is slow and shows no progress.** The progress bar stays at "N of N" while sources are attached, which can take minutes.
+- **Cancel can land late.** A cancel that arrives after the last heartbeat check can still store results under a cancelled job. One hosted call already in flight completes and is billed.
+- **A crash after cancel can leave a run `running`.** No sweep clears it yet.
+- **Ingest jobs cannot be cancelled** (409 `job_not_cancellable`), so a document cannot be stopped mid-ingest.
+- **A worker restart mid-extraction restarts the whole job** from window 1, sending the text and billing again, unless the job was cancelled first.
+- **The hosted settings are named `kimi`** (`LLM_PROVIDER=kimi`, `LLM_KIMI_*`) but work with any OpenAI-compatible API, such as Mammouth.
+- **Hosted use is limited to synthetic data** until the POPIA assessment is done; one real-looking document was processed with a hosted provider during testing (see the privacy item in the ops document).
 
 ## Slice 4 phase 4 (review screen)
 
