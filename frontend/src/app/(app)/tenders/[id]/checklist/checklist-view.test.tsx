@@ -17,6 +17,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const LIST = `/api/v1/tenders/${ids.tender}/requirements`;
 const me = meWith(["read"], "reviewer");
+const exporter = meWith(["read", "export"], "project_manager");
 
 function routes(over: Record<string, () => Response | Promise<Response>> = {}) {
   return {
@@ -130,5 +131,94 @@ describe("ChecklistView", () => {
     );
     renderSignedIn(<ChecklistView />);
     expect(await screen.findByText(/No document has finished processing yet/)).toBeInTheDocument();
+  });
+
+  describe("export button", () => {
+    const unreviewed = (n: number) =>
+      Array.from({ length: n }, (_, i) => makeRequirement({ id: `u${i}`, description: `Open ${i}`, review_status: "unreviewed" }));
+
+    /** The page list answers `rest`; the separate unreviewed query (review_status=unreviewed, no type filter) answers `open`. */
+    function setup(open: unknown[], rest: unknown[] = [makeRequirement({ id: "c1", description: "Done one", review_status: "confirmed" })], who = exporter) {
+      const fetchMock = mockApi(routes({ [`GET ${LIST}`]: () => respond(200, rest) }), who);
+      const base = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>;
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.startsWith(LIST) && url.includes("review_status=unreviewed") && !url.includes("requirement_type")) return respond(200, open);
+        return base(url, init);
+      });
+      return fetchMock;
+    }
+
+    it("is hidden without the export permission and does not ask for the unreviewed count", async () => {
+      const fetchMock = setup(unreviewed(2), undefined, me);
+      renderSignedIn(<ChecklistView />);
+      await screen.findByText("Done one");
+      expect(screen.queryByRole("button", { name: "Download PDF report" })).toBeNull();
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("review_status=unreviewed"))).toBe(false);
+    });
+
+    it("shows the button without a note when every requirement is reviewed", async () => {
+      setup([]);
+      renderSignedIn(<ChecklistView />);
+      expect(await screen.findByRole("button", { name: "Download PDF report" })).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText(/not reviewed yet/)).toBeNull());
+    });
+
+    it("warns that the report will be DRAFT when there are no non-rejected requirements", async () => {
+      setup([], [makeRequirement({ id: "r1", description: "Dropped", review_status: "rejected" })]);
+      renderSignedIn(<ChecklistView />);
+      expect(await screen.findByText("No reviewed requirements yet. The report will be marked DRAFT.")).toBeInTheDocument();
+    });
+
+    it("shows the count of unreviewed requirements in the note", async () => {
+      setup(unreviewed(3));
+      renderSignedIn(<ChecklistView />);
+      expect(
+        await screen.findByText("3 requirements are not reviewed yet. The report will list them separately and be marked DRAFT."),
+      ).toBeInTheDocument();
+    });
+
+    it("uses the singular for a single unreviewed requirement", async () => {
+      setup(unreviewed(1));
+      renderSignedIn(<ChecklistView />);
+      expect(
+        await screen.findByText("1 requirement is not reviewed yet. The report will list it separately and be marked DRAFT."),
+      ).toBeInTheDocument();
+    });
+
+    it("warns that the report may be DRAFT when the unreviewed count cannot be loaded", async () => {
+      const fetchMock = setup([]);
+      const base = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>;
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.startsWith(LIST) && url.includes("review_status=unreviewed") && !url.includes("requirement_type")) {
+          return respond(500, { error: { code: "server_error", message: "Something went wrong." } });
+        }
+        return base(url, init);
+      });
+      renderSignedIn(<ChecklistView />);
+      expect(
+        await screen.findByText("The report may be marked DRAFT if requirements are not reviewed yet."),
+      ).toBeInTheDocument();
+    });
+
+    it("says At least while the unreviewed query has another page", async () => {
+      setup(unreviewed(REVIEW_PAGE_SIZE));
+      renderSignedIn(<ChecklistView />);
+      expect(
+        await screen.findByText(`At least ${REVIEW_PAGE_SIZE} requirements are not reviewed yet. The report will list them separately and be marked DRAFT.`),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the note when the Review status filter is Confirmed", async () => {
+      const fetchMock = setup(unreviewed(2));
+      renderSignedIn(<ChecklistView />);
+      const note = "2 requirements are not reviewed yet. The report will list them separately and be marked DRAFT.";
+      expect(await screen.findByText(note)).toBeInTheDocument();
+      await userEvent.selectOptions(screen.getByLabelText("Review status"), "confirmed");
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("review_status=confirmed"))).toBe(true),
+      );
+      await screen.findByText("Done one");
+      expect(screen.getByText(note)).toBeInTheDocument();
+    });
   });
 });

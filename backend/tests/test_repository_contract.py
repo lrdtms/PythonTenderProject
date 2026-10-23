@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -27,6 +28,8 @@ from app.modules.estimating import public as estimating
 from app.modules.estimating.models import BoqItem
 from app.modules.identity.models import Membership
 from app.modules.pipeline.models import ExtractionRun
+from app.modules.reporting.models import Export
+from app.modules.reporting.repo import ExportRepo
 from app.modules.suppliers import public as suppliers
 from app.modules.suppliers.models import MatchSuggestion, QuotationItem
 from app.modules.suppliers.models import Supplier as suppliers_model
@@ -73,6 +76,7 @@ EXERCISED = {
     "QuotationItemRepo",
     "MatchRepo",
     "EstimateRepo",
+    "ExportRepo",
 }
 
 
@@ -140,6 +144,7 @@ def _seed(email: str, org: str, secret: str) -> Actor:
                       "mandatory_status": "mandatory", "evidence_quote": f"{secret} clause"}],
                 )  # fmt: skip
         _seed_estimate(s, ctx, UUID(tender), secret)
+        _seed_export(s, ctx, UUID(tender), secret)
     add_member(actor, f"member-{email}", "estimator")
     return actor
 
@@ -173,6 +178,25 @@ def _seed_estimate(s, ctx: OrgContext, tender_id: UUID, secret: str) -> None:
             updated_by=ctx.user_id,
         )
     ])  # fmt: skip
+
+
+def _seed_export(s, ctx: OrgContext, tender_id: UUID, secret: str) -> None:
+    """A checklist export, so the repository contract sees an exports row."""
+    ExportRepo(s, ctx).add(
+        Export(
+            tender_id=tender_id,
+            kind="checklist_pdf",
+            label="draft",
+            file_key=f"org/{ctx.organisation_id}/tenders/{tender_id}/exports/{secret}.pdf",
+            file_name=f"{secret}.pdf",
+            content_type="application/pdf",
+            file_size=1,
+            sha256="0" * 64,
+            row_count=1,
+            generated_by=ctx.user_id,
+            generated_at=datetime.now(UTC),
+        )
+    )
 
 
 def _ctx(actor: Actor) -> OrgContext:

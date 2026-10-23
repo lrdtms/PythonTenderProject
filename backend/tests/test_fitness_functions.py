@@ -3,17 +3,19 @@ F3 (schema tenancy), plus a check that migrations match the models."""
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import ForeignKeyConstraint, create_engine
+from sqlalchemy import ForeignKeyConstraint, create_engine, select
 
 from app.api.main import app as fastapi_app
 from app.db.base import Base
-from app.db.session import get_engine
+from app.db.session import get_engine, session_scope
 
 # Import every module's models so Base.metadata is complete (side effects only).
 from app.modules.audit import models as _audit_models  # noqa: F401
@@ -21,6 +23,7 @@ from app.modules.documents import models as _documents_models  # noqa: F401
 from app.modules.identity import models as _identity_models  # noqa: F401
 from app.modules.jobs import models as _jobs_models  # noqa: F401
 from app.modules.knowledge import models as _knowledge_models  # noqa: F401
+from app.modules.reporting.models import Export
 from app.modules.tenders import models as _tenders_models  # noqa: F401
 from app.worker import handlers
 from app.worker.runner import process_one
@@ -67,6 +70,7 @@ REQUESTS = {
     ("POST", "/api/v1/suppliers/{supplier_id}/merge"): lambda: {
         "json": {"into_id": "00000000-0000-0000-0000-000000000001"}
     },
+    ("POST", "/api/v1/tenders/{tender_id}/exports"): lambda: {"json": {"kind": "checklist_pdf"}},
 }
 SEARCH_PARAMS = {("GET", "/api/v1/tenders/{tender_id}/search"): lambda: {"params": {"q": "secret"}}}
 
@@ -110,8 +114,13 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
     estimate_b = org_b.client.post(f"/api/v1/tenders/{tender_b}/estimates")
     assert estimate_b.status_code == 201, estimate_b.text
     line_b = org_b.client.get(f"/api/v1/estimates/{estimate_b.json()['id']}/lines").json()
+    export_b = org_b.client.post(
+        f"/api/v1/tenders/{tender_b}/exports", json={"kind": "checklist_pdf"}
+    )
+    assert export_b.status_code == 201, export_b.text
     known = {
         "estimate_id": estimate_b.json()["id"],
+        "export_id": export_b.json()["id"],
         "line_id": line_b[0]["id"],
         "tender_id": tender_b,
         "document_id": uploaded["document"]["id"],
@@ -131,6 +140,7 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "seeded-b-rule",
         "seeded-b-quote-line",
         "Seeded B Supplies",
+        export_b.json()["file_name"],
     )
 
     routes = _routes_with_params()
@@ -168,10 +178,18 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "match-suggestions",
         "estimates",
         "estimate-lines",
+        "exports",
     ):
         assert any(needle in p for p in paths), f"no {needle} route was swept"
 
     # Org B's data is intact after Org A's attempts.
+    download_b = org_b.client.get(f"/api/v1/exports/{known['export_id']}/download")
+    assert download_b.status_code == 200
+    with session_scope() as s:
+        row_b = s.scalar(select(Export).where(Export.id == UUID(known["export_id"])))
+        assert hashlib.sha256(download_b.content).hexdigest() == row_b.sha256
+        # Org A's attempts created no export for org B: B still has exactly the one it made.
+        assert len(s.scalars(select(Export).where(Export.tender_id == UUID(tender_b))).all()) == 1
     assert (
         org_b.client.get(f"/api/v1/document-versions/{known['version_id']}/pages/1").status_code
         == 200

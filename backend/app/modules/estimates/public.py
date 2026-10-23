@@ -19,6 +19,7 @@ from .schemas import (
 from .service import (
     approve_estimate,
     create_estimate,
+    export_snapshot,
     get_defaults,
     get_estimate,
     input_hash,
@@ -55,6 +56,7 @@ __all__ = [
     "PricingDefaultsPut",
     "TotalsDTO",
     "create_estimate",
+    "export_snapshot",
     "get_defaults",
     "get_estimate",
     "input_hash",

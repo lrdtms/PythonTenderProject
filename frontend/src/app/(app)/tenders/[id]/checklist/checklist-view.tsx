@@ -10,6 +10,8 @@ import { documentsQueryOptions } from "@/api/documents";
 import { ApiError } from "@/api/errors";
 import { tenderQueryOptions } from "@/api/tenders";
 import type { Requirement } from "@/api/types";
+import { useCan } from "@/components/auth-gate";
+import { ExportButton } from "@/components/export-button";
 import { StatusBadge } from "@/components/status-badge";
 import {
   MANDATORY_STATUSES,
@@ -39,6 +41,24 @@ export function ChecklistView() {
     { reviewStatus: reviewStatus || undefined, requirementType: requirementType || undefined },
     valid && !!tender.data,
   );
+
+  // The DRAFT note must not depend on the filters on screen, so it has its own unfiltered query.
+  const canExport = useCan("export");
+  const open = useTenderRequirements(id, { reviewStatus: "unreviewed" }, valid && !!tender.data && canExport);
+  const openCount = open.rows.length;
+  // With nothing to list (no rows, or every row rejected) the report is DRAFT too.
+  const everything = useTenderRequirements(id, {}, valid && !!tender.data && canExport);
+  const nothingListed =
+    everything.isSuccess && !everything.hasNextPage && everything.rows.every((r) => r.review_status === "rejected");
+  let draftNote: string | undefined;
+  if (open.isError) {
+    draftNote = "The report may be marked DRAFT if requirements are not reviewed yet.";
+  } else if (open.isSuccess && openCount > 0) {
+    const count = `${openCount} ${openCount === 1 ? "requirement is" : "requirements are"}`;
+    draftNote = `${open.hasNextPage ? "At least " : ""}${count} not reviewed yet. The report will list ${openCount === 1 ? "it" : "them"} separately and be marked DRAFT.`;
+  } else if (open.isSuccess && nothingListed) {
+    draftNote = "No reviewed requirements yet. The report will be marked DRAFT.";
+  }
 
   // version id -> document title, so each row says where it came from.
   const titles = useMemo(() => {
@@ -113,6 +133,10 @@ export function ChecklistView() {
       <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
         Requirements from the current version of every document. Open a requirement in review to see its source or change it.
       </p>
+
+      <div className="mb-4">
+        <ExportButton tenderId={id} kind="checklist_pdf" label="Download PDF report" draftNote={draftNote} />
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-3" role="group" aria-label="Filters">
         <label className="text-sm">

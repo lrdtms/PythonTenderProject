@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+
+import { ApiError } from "@/api/errors";
+
+import { exportErrorText } from "./export-words";
+
+const err = (status: number, code: string) => new ApiError(status, code, "server words");
+
+describe("exportErrorText", () => {
+  it.each([
+    [err(409, "no_estimate"), "no_estimate"],
+    [err(422, "export_too_large"), "export_too_large"],
+    [err(403, "forbidden"), "forbidden"],
+    [err(429, "rate_limited"), "rate_limited"],
+    [err(404, "not_found"), "not_found"],
+    [err(0, "network_error"), "network_error"],
+    [err(403, "csrf_failed"), "csrf_failed"],
+    [err(422, "validation_error"), "validation_error"],
+  ])("gives a plain sentence for %#", (error, code) => {
+    const text = exportErrorText(error);
+    expect(text.length).toBeGreaterThan(10);
+    expect(text).not.toContain(code);
+    expect(text).not.toMatch(/_/);
+  });
+
+  it("maps by status when the code is unfamiliar", () => {
+    expect(exportErrorText(err(429, "whatever"))).toBe(exportErrorText(err(429, "rate_limited")));
+    expect(exportErrorText(err(404, "whatever"))).toBe(exportErrorText(err(404, "not_found")));
+  });
+
+  it("does not call a csrf failure a permission problem", () => {
+    expect(exportErrorText(err(403, "csrf_failed"))).toMatch(/refresh/i);
+    expect(exportErrorText(err(403, "csrf_failed"))).not.toBe(exportErrorText(err(403, "forbidden")));
+  });
+
+  it("words a validation error differently from the generic fallback", () => {
+    const generic = exportErrorText(err(500, "weird_code"));
+    const validation = exportErrorText(err(422, "validation_error"));
+    expect(validation).not.toBe(generic);
+    expect(validation).not.toBe(exportErrorText(err(422, "export_too_large")));
+  });
+
+  it("falls back for unknown errors", () => {
+    const text = exportErrorText(err(500, "weird_code"));
+    expect(text).not.toContain("weird_code");
+    expect(exportErrorText(new Error("boom"))).toBe(text);
+    expect(exportErrorText(null)).toBe(text);
+  });
+});

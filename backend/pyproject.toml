@@ -17,6 +17,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "python-docx>=1.2.0",
     "python-multipart>=0.0.32",
+    "reportlab>=5.1.0",
 ]
 
 [dependency-groups]
@@ -84,4 +85,42 @@ forbidden_modules = [
     "app.modules.documents",
     "app.modules.tenders",
     "app.modules.identity",
+]
+
+[[tool.importlinter.contracts]]
+name = "reporting is isolated from the other modules"
+type = "forbidden"
+source_modules = ["app.modules.reporting"]
+forbidden_modules = [
+    "app.modules.estimates",
+    "app.modules.estimating",
+    "app.modules.suppliers",
+    "app.modules.documents",
+    "app.modules.tenders",
+    "app.modules.identity",
+    "app.modules.checklist",
+    "app.modules.knowledge",
+    "app.modules.pipeline",
+    "app.modules.jobs",
+    "app.modules.extraction",
+    "app.modules.billing",
+    "app.modules.qa",
+]
+
+[[tool.importlinter.contracts]]
+name = "export renderers are pure"
+type = "forbidden"
+source_modules = [
+    "app.modules.reporting.xlsx",
+    "app.modules.reporting.pdf",
+    "app.modules.reporting.safe_text",
+]
+forbidden_modules = [
+    "sqlalchemy",
+    "fastapi",
+    "app.db",
+    "app.infrastructure",
+    "app.modules.audit",
+    "app.modules.reporting.service",
+    "app.modules.reporting.models",
 ]
