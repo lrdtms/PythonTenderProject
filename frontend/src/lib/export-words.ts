@@ -3,11 +3,13 @@ import { ApiError } from "@/api/errors";
 const GENERIC = "The file could not be prepared. Try again in a moment.";
 
 const BY_CODE: Record<string, string> = {
-  no_estimate: "This tender has no estimate yet. Create an estimate first, then download it.",
-  export_too_large: "This file would be too large to prepare. Contact support if you need it.",
-  forbidden: "You do not have permission to download files.",
-  rate_limited: "You have asked for several files in a short time. Wait a minute, then try again.",
+  no_estimate: "This tender has no estimate yet. Create one first.",
+  export_too_large: "This is too large to export in one file.",
+  forbidden: "Your role cannot export files.",
+  rate_limited: "You are exporting too quickly. Wait a minute and try again.",
   not_found: "That tender or estimate could not be found. Refresh the page and try again.",
+  csrf_failed: "Your session needs a refresh. Refresh the page and try again.",
+  validation_error: "That estimate cannot be exported from this tender. Refresh the page.",
   network_error: "Could not reach the server. Check your connection and try again.",
 };
 

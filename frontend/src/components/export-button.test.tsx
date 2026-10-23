@@ -39,7 +39,8 @@ describe("ExportButton", () => {
   it("is hidden without the export permission", async () => {
     const fetchMock = setup(() => respond(201, dto("approved")), { draftNote: "A note" }, meWith(["read"]));
     await waitFor(() => expect(callsTo(fetchMock, "GET", "/api/v1/me")).toHaveLength(1));
-    await new Promise((r) => setTimeout(r, 20));
+    await waitFor(() => expect(screen.queryByText(/Loading/)).toBeNull());
+    expect(screen.queryByText("A note")).toBeNull();
     expect(screen.queryByRole("button", { name: "Download Excel" })).toBeNull();
   });
 
@@ -79,13 +80,14 @@ describe("ExportButton", () => {
     expect(link).toHaveAttribute("download", "estimate-v1-approved.xlsx");
     expect(click).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/DRAFT/)).toBeNull();
+    expect(await screen.findByRole("status")).toHaveTextContent("Downloaded estimate-v1-approved.xlsx");
   });
 
   it("marks a non-approved result as DRAFT", async () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     setup(() => respond(201, dto("reviewed")));
     await userEvent.setup().click(await screen.findByRole("button", { name: "Download Excel" }));
-    expect(await screen.findByText(/\(marked DRAFT\)/)).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("(marked DRAFT)");
   });
 
   it("follows the server label, not draftNote, after success", async () => {

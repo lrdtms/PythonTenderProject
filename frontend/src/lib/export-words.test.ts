@@ -14,6 +14,8 @@ describe("exportErrorText", () => {
     [err(429, "rate_limited"), "rate_limited"],
     [err(404, "not_found"), "not_found"],
     [err(0, "network_error"), "network_error"],
+    [err(403, "csrf_failed"), "csrf_failed"],
+    [err(422, "validation_error"), "validation_error"],
   ])("gives a plain sentence for %#", (error, code) => {
     const text = exportErrorText(error);
     expect(text.length).toBeGreaterThan(10);
@@ -24,6 +26,11 @@ describe("exportErrorText", () => {
   it("maps by status when the code is unfamiliar", () => {
     expect(exportErrorText(err(429, "whatever"))).toBe(exportErrorText(err(429, "rate_limited")));
     expect(exportErrorText(err(404, "whatever"))).toBe(exportErrorText(err(404, "not_found")));
+  });
+
+  it("does not call a csrf failure a permission problem", () => {
+    expect(exportErrorText(err(403, "csrf_failed"))).toMatch(/refresh/i);
+    expect(exportErrorText(err(403, "csrf_failed"))).not.toBe(exportErrorText(err(403, "forbidden")));
   });
 
   it("falls back for unknown errors", () => {

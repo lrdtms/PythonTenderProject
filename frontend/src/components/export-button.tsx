@@ -74,7 +74,7 @@ export function ExportButton({ tenderId, kind, estimateId, label, draftNote }: P
         </p>
       )}
       {done && (
-        <p className="text-sm">
+        <p role="status" className="text-sm">
           Downloaded{" "}
           <a className="underline" href={exportDownloadPath(done.id)} download={done.file_name}>
             {done.file_name}
