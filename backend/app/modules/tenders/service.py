@@ -26,6 +26,11 @@ def create_tender(session: Session, ctx: OrgContext, data: TenderCreate) -> Tend
     return _dto(tender)
 
 
+def count_active(session: Session, ctx: OrgContext) -> int:
+    ctx.require(Permission.READ)
+    return TenderRepo(session, ctx).count_active()
+
+
 def list_tenders(
     session: Session, ctx: OrgContext, include_archived: bool = False
 ) -> list[TenderDTO]:

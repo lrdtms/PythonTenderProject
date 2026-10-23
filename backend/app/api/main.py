@@ -18,6 +18,7 @@ from app.api.routers import (
     review,
     suppliers,
     tenders,
+    usage,
 )
 from app.db.session import ping
 from app.infrastructure.model_registry import import_all_models
@@ -71,3 +72,4 @@ app.include_router(matches.router)
 app.include_router(estimates.router)
 app.include_router(exports.router)
 app.include_router(audit.router)
+app.include_router(usage.router)

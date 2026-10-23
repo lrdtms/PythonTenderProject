@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func, select
 
 from app.db.scoped import ScopedRepository
 from app.kernel import NotFound
@@ -29,3 +29,13 @@ class TenderRepo(ScopedRepository[Tender]):
         if row is None:
             raise NotFound("Tender not found")
         return row
+
+    def count_active(self) -> int:
+        return (
+            self.session.scalar(
+                select(func.count(Tender.id)).where(
+                    Tender.organisation_id == self.ctx.organisation_id, Tender.status != "archived"
+                )
+            )
+            or 0
+        )

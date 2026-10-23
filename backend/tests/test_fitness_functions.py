@@ -303,7 +303,7 @@ def test_f2_api_layer_does_not_import_sqlalchemy_models() -> None:
 
 # Tables that are not organisation-owned: the tenant itself, global users, and sessions (which
 # reference the organisation through a composite foreign key to memberships).
-NOT_ORG_OWNED = {"organisations", "users", "sessions"}
+NOT_ORG_OWNED = {"organisations", "users", "sessions", "plans"}
 NULLABLE_ORG = {"audit_events"}  # events outside an organisation (failed login)
 
 

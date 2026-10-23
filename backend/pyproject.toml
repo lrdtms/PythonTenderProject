@@ -108,6 +108,26 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "billing is isolated from the other modules"
+type = "forbidden"
+source_modules = ["app.modules.billing"]
+forbidden_modules = [
+    "app.modules.estimates",
+    "app.modules.estimating",
+    "app.modules.suppliers",
+    "app.modules.documents",
+    "app.modules.tenders",
+    "app.modules.identity",
+    "app.modules.checklist",
+    "app.modules.knowledge",
+    "app.modules.pipeline",
+    "app.modules.jobs",
+    "app.modules.extraction",
+    "app.modules.reporting",
+    "app.modules.qa",
+]
+
+[[tool.importlinter.contracts]]
 name = "export renderers are pure"
 type = "forbidden"
 source_modules = [

@@ -67,7 +67,7 @@ def clean_state() -> Iterator[None]:
         tables = (
             conn.execute(
                 text(
-                    "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'alembic_version'"
+                    "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('alembic_version', 'plans')"
                 )
             )
             .scalars()

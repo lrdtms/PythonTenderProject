@@ -8,6 +8,7 @@ from .service import (
     EXTRACTION_JOBS,
     INGEST_JOB,
     MATCH_SUPPLIERS_JOB,
+    count_uploads_since,
     ensure_job_cancel_allowed,
     ensure_job_retry_allowed,
     get_document,
@@ -17,6 +18,7 @@ from .service import (
     open_version_file,
     processing_info,
     set_processing_status,
+    storage_bytes,
     upload_document,
     upload_new_version,
 )
@@ -32,6 +34,7 @@ __all__ = [
     "ProcessingInfo",
     "UploadResultDTO",
     "VersionDTO",
+    "count_uploads_since",
     "ensure_job_cancel_allowed",
     "ensure_job_retry_allowed",
     "get_document",
@@ -41,6 +44,7 @@ __all__ = [
     "open_version_file",
     "processing_info",
     "set_processing_status",
+    "storage_bytes",
     "upload_document",
     "upload_new_version",
 ]

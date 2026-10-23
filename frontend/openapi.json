@@ -2212,6 +2212,39 @@
         "title": "PageDetailDTO",
         "type": "object"
       },
+      "PlanChange": {
+        "properties": {
+          "plan_code": {
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Plan Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_code"
+        ],
+        "title": "PlanChange",
+        "type": "object"
+      },
+      "PlanOption": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "PlanOption",
+        "type": "object"
+      },
       "PricingDefaultsDTO": {
         "properties": {
           "currency": {
@@ -3673,6 +3706,84 @@
           "job_id"
         ],
         "title": "UploadResultDTO",
+        "type": "object"
+      },
+      "UsageDTO": {
+        "properties": {
+          "available_plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlanOption"
+            },
+            "title": "Available Plans",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UsageItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "plan_code": {
+            "title": "Plan Code",
+            "type": "string"
+          },
+          "plan_name": {
+            "title": "Plan Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_code",
+          "plan_name",
+          "items",
+          "available_plans"
+        ],
+        "title": "UsageDTO",
+        "type": "object"
+      },
+      "UsageItem": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "period": {
+            "enum": [
+              "current",
+              "month"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
+          "resource": {
+            "enum": [
+              "tenders",
+              "uploads",
+              "storage_mb",
+              "exports",
+              "members"
+            ],
+            "title": "Resource",
+            "type": "string"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resource",
+          "label",
+          "used",
+          "limit",
+          "period"
+        ],
+        "title": "UsageItem",
         "type": "object"
       },
       "ValidationError": {
@@ -7460,6 +7571,68 @@
         "summary": "Search",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/api/v1/usage": {
+      "get": {
+        "operationId": "get_usage_api_v1_usage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Usage",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/api/v1/usage/plan": {
+      "put": {
+        "operationId": "switch_plan_api_v1_usage_plan_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Switch Plan",
+        "tags": [
+          "usage"
         ]
       }
     }
