@@ -17,6 +17,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "python-docx>=1.2.0",
     "python-multipart>=0.0.32",
+    "reportlab>=5.1.0",
 ]
 
 [dependency-groups]
