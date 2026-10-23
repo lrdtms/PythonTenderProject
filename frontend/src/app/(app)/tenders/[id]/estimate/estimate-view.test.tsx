@@ -18,6 +18,7 @@ afterEach(() => vi.unstubAllGlobals());
 const estimator = meWith(["read", "review_data"], "estimator");
 const reviewer = meWith(["read"], "reviewer");
 const admin = meWith(["read", "review_data", "manage_pricing"], "admin");
+const exporter = meWith(["read", "export"], "project_manager");
 
 const T = `/api/v1/tenders/${ids.tender}`;
 const draft = makeEstimate();
@@ -249,5 +250,68 @@ describe("ErrorNotice", () => {
     renderSignedIn(<ErrorNotice error={error} />);
     expect(await screen.findByText(/No price has been chosen yet/)).toBeInTheDocument();
     expect(screen.getByText("This estimate has no BoQ lines to price.")).toBeInTheDocument();
+  });
+
+  describe("export button", () => {
+    const EXPORTS = `${T}/exports`;
+    const approved = makeEstimate({ id: "00000000-0000-4000-8000-000000000511", version: 2, status: "approved" });
+    const reviewed = makeEstimate({ id: "00000000-0000-4000-8000-000000000512", version: 3, status: "reviewed" });
+
+    it("offers a plain Excel download with no note for an approved version", async () => {
+      mockApi(routes({}, approved), exporter);
+      renderSignedIn(<EstimateView />);
+      expect(await screen.findByRole("button", { name: "Download Excel" })).toBeInTheDocument();
+      expect(screen.queryByText(/marked DRAFT/)).toBeNull();
+    });
+
+    it("marks the label and explains the note for a draft version", async () => {
+      mockApi(routes(), exporter);
+      renderSignedIn(<EstimateView />);
+      expect(await screen.findByRole("button", { name: "Download Excel (DRAFT)" })).toBeInTheDocument();
+      expect(screen.getByText("This file will be marked DRAFT because version 1 is not approved.")).toBeInTheDocument();
+    });
+
+    it("marks a reviewed version as draft too", async () => {
+      mockApi(routes({}, reviewed), exporter);
+      renderSignedIn(<EstimateView />);
+      expect(await screen.findByRole("button", { name: "Download Excel (DRAFT)" })).toBeInTheDocument();
+      expect(screen.getByText("This file will be marked DRAFT because version 3 is not approved.")).toBeInTheDocument();
+    });
+
+    it("sends the estimate id of the version picked", async () => {
+      const fetchMock = mockApi(
+        routes({
+          [`GET ${T}/estimates`]: () => respond(200, [summaryOf(draft), summaryOf(approved)]),
+          [`GET /api/v1/estimates/${approved.id}`]: () => respond(200, approved),
+          [`GET /api/v1/estimates/${approved.id}/lines`]: () => respond(200, []),
+          [`POST ${EXPORTS}`]: () => respond(201, { id: "x1", file_name: "e.xlsx", label: "approved", kind: "estimate_xlsx" }),
+        }),
+        exporter,
+      );
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+      renderSignedIn(<EstimateView />);
+      await screen.findByRole("button", { name: "Download Excel (DRAFT)" });
+      await userEvent.selectOptions(screen.getByLabelText("Version"), approved.id);
+      await userEvent.click(await screen.findByRole("button", { name: "Download Excel" }));
+      await waitFor(() => expect(callsTo(fetchMock, "POST", EXPORTS)).toHaveLength(1));
+      expect(JSON.parse((callsTo(fetchMock, "POST", EXPORTS)[0][1] as RequestInit).body as string)).toEqual({
+        kind: "estimate_xlsx",
+        estimate_id: approved.id,
+      });
+    });
+
+    it("shows no export button without the export permission", async () => {
+      mockApi(routes(), estimator);
+      renderSignedIn(<EstimateView />);
+      await screen.findByText(/LED panel/);
+      expect(screen.queryByRole("button", { name: /Download Excel/ })).toBeNull();
+    });
+
+    it("shows no export button when the tender has no estimate", async () => {
+      mockApi(routes({ [`GET ${T}/estimates`]: () => respond(200, []) }), exporter);
+      renderSignedIn(<EstimateView />);
+      expect(await screen.findByText(/There is no estimate yet/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Download Excel/ })).toBeNull();
+    });
   });
 });

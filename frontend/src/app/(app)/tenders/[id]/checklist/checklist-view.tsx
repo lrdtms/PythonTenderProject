@@ -10,6 +10,8 @@ import { documentsQueryOptions } from "@/api/documents";
 import { ApiError } from "@/api/errors";
 import { tenderQueryOptions } from "@/api/tenders";
 import type { Requirement } from "@/api/types";
+import { useCan } from "@/components/auth-gate";
+import { ExportButton } from "@/components/export-button";
 import { StatusBadge } from "@/components/status-badge";
 import {
   MANDATORY_STATUSES,
@@ -39,6 +41,15 @@ export function ChecklistView() {
     { reviewStatus: reviewStatus || undefined, requirementType: requirementType || undefined },
     valid && !!tender.data,
   );
+
+  // The DRAFT note must not depend on the filters on screen, so it has its own unfiltered query.
+  const canExport = useCan("export");
+  const open = useTenderRequirements(id, { reviewStatus: "unreviewed" }, valid && !!tender.data && canExport);
+  const openCount = open.rows.length;
+  const draftNote =
+    open.isSuccess && openCount > 0
+      ? `${open.hasNextPage ? "at least " : ""}${openCount} requirements are not reviewed yet. The report will list them separately and be marked DRAFT.`
+      : undefined;
 
   // version id -> document title, so each row says where it came from.
   const titles = useMemo(() => {
@@ -113,6 +124,10 @@ export function ChecklistView() {
       <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
         Requirements from the current version of every document. Open a requirement in review to see its source or change it.
       </p>
+
+      <div className="mb-4">
+        <ExportButton tenderId={id} kind="checklist_pdf" label="Download PDF report" draftNote={draftNote} />
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-3" role="group" aria-label="Filters">
         <label className="text-sm">

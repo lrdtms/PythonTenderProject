@@ -18,6 +18,7 @@ import {
 } from "@/api/estimates";
 import { tenderQueryOptions } from "@/api/tenders";
 import { useCan } from "@/components/auth-gate";
+import { ExportButton } from "@/components/export-button";
 import { StatusBadge } from "@/components/status-badge";
 import { errorText } from "@/lib/estimate-words";
 import { formatDateTime } from "@/lib/format";
@@ -263,6 +264,13 @@ export function EstimateView() {
             label={STATUS_LABEL[e.status] ?? e.status}
           />
           {e.status === "reviewed" ? <StatusBadge tone="warning" label="Not approved" /> : null}
+          <ExportButton
+            tenderId={id}
+            kind="estimate_xlsx"
+            estimateId={e.id}
+            label={e.status === "approved" ? "Download Excel" : "Download Excel (DRAFT)"}
+            draftNote={e.status === "approved" ? undefined : `This file will be marked DRAFT because version ${e.version} is not approved.`}
+          />
         </div>
         <EstimateBody
           key={e.id}
