@@ -7,7 +7,9 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from app.api.deps import Ctx, DbSession
+from app.api.limits import enforce
 from app.kernel import Permission
+from app.modules.billing import public as billing
 from app.modules.suppliers import public as suppliers
 from app.modules.tenders import public as tenders
 
@@ -16,6 +18,7 @@ router = APIRouter(prefix="/api/v1/tenders", tags=["tenders"])
 
 @router.post("", response_model=tenders.TenderDTO, status_code=201)
 def create_tender(body: tenders.TenderCreate, ctx: Ctx, session: DbSession):
+    enforce(session, ctx, billing.Resource.TENDERS)
     return tenders.create_tender(session, ctx, body)
 
 

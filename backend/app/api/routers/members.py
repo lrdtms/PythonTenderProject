@@ -7,7 +7,9 @@ from uuid import UUID
 from fastapi import APIRouter, Response
 
 from app.api.deps import Ctx, DbSession
+from app.api.limits import enforce
 from app.api.ratelimit import limiter
+from app.modules.billing import public as billing
 from app.modules.identity import public as identity
 
 router = APIRouter(prefix="/api/v1/members", tags=["members"])
@@ -22,6 +24,7 @@ def list_members(ctx: Ctx, session: DbSession):
 def create_member(body: identity.CreateMemberRequest, ctx: Ctx, session: DbSession):
     # Per organisation, so the endpoint cannot be used to probe which emails have accounts.
     limiter.check(f"members:{ctx.organisation_id}", limit=20, window_seconds=3600)
+    enforce(session, ctx, billing.Resource.MEMBERS)
     return identity.create_member(session, ctx, body.name, body.email, body.role, body.password)
 
 
@@ -39,6 +42,10 @@ def deactivate(membership_id: UUID, ctx: Ctx, session: DbSession):
 
 @router.post("/{membership_id}/reactivate", response_model=identity.MemberDTO)
 def reactivate(membership_id: UUID, ctx: Ctx, session: DbSession):
+    members = identity.list_members(session, ctx)  # admin only; NotFound-safe below
+    target = next((m for m in members if m.membership_id == membership_id), None)
+    if target is not None and target.status != "active":
+        enforce(session, ctx, billing.Resource.MEMBERS)
     return identity.set_member_status(session, ctx, membership_id, active=True)
 
 
