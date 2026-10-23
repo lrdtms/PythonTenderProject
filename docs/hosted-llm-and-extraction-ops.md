@@ -22,14 +22,14 @@ Two adapter details were added for reasons seen in practice:
 
 Choosing a model: pick a model that answers without reasoning. Check one real-sized window before a long run (see the benchmark below).
 
-Checking spend: the Mammouth key has a $2.00 / 30-day budget cap. `GET /key/info` shows usage (from the Mammouth docs). Keep the key out of the terminal output, for example:
+Checking spend: `GET /key/info` on the Mammouth API returns usage. The key is read into a shell variable so it is never printed, and the command sends the same User-Agent as the adapter, because default agents are blocked:
 
 ```bash
-KEY=$(grep '^LLM_KIMI_API_KEY=' .env | cut -d= -f2-)
-curl -s -H "Authorization: Bearer $KEY" https://api.mammouth.ai/key/info
+KEY=$(grep '^LLM_KIMI_API_KEY=' .env | cut -d= -f2- | tr -d '\r"')
+curl -s -A "IntelTPS/1.0" -H "Authorization: Bearer $KEY" https://api.mammouth.ai/key/info
 ```
 
-UNVERIFIED: the host, path and auth header in that command were not checked against the Mammouth docs in this session; confirm them first. Do not paste the key into logs, chat or commits.
+Checked 22-23 Oct 2026: returns JSON with `info.spend` and `info.max_budget`. The key's budget cap of $2.00 per 30 days is the `info.max_budget` value, an account setting, not something set in this repository. Do not paste the key into logs, chat or commits.
 
 ## Benchmark: one real-sized requirements window
 
@@ -38,7 +38,7 @@ Setup: one requirements window from synthetic pack02 (8 pages, 1 window, 10 grou
 | Model | Time | Reasoning tokens | Finish | Result | Approx. cost |
 |---|---|---|---|---|---|
 | claude-haiku-5-5 | 5.6 s | 0 | stop | Valid JSON, 10 of 10 requirements (rough word-overlap match; precision not scored) | about $0.0007 |
-| qwen3.8-flash | 25.7 s | 2048 | length | Cut off, no JSON | about $0.001 |
+| qwen3.8-flash | 25.7 s | 2048 | length | Cut off, no JSON | not measured |
 | kimi-k2.6 | 23.8 s | 2048 | length | Cut off, no JSON | about $0.008 |
 
 What it shows: the two non-Haiku models ignored the thinking switch, used the whole cap on reasoning and still billed for it. Haiku answered in one call with no reasoning tokens. The sample is one window on one synthetic pack, so it is not an accuracy study.
@@ -50,8 +50,8 @@ Full-document run: a 265-page document (73 windows) on claude-haiku-5-5 ran all 
 ## Operating rules
 
 - **Synthetic data only with any hosted model** until the POPIA assessment is done (project rule, README and PRD). The rule was not kept in every case: see item 11 in the necessary changes.
-- **Check the adapter is really hosted.** A hosted failure falls back to Ollama. Look for `Kimi HTTP` warning lines in the api and worker logs (`docker compose logs worker`). A run that is much slower than expected is often a fallback.
-- **Do not restart the worker during an extraction.** A restart kills the job; the lease expires and the job is retried from window 1, sending the text and billing again. Cancel the job first (below), wait for it to end, then restart.
+- **Check the adapter is really hosted.** A hosted failure falls back to Ollama. Extraction runs in the worker, so look in `docker compose logs worker` for lines containing "falling back" or "using fallback" (this covers "Kimi HTTP … falling back", "Kimi timed out, falling back", "Kimi unreachable, falling back" and "primary LLM failed (…), using fallback"). A run that is much slower than expected is often a fallback.
+- **Do not restart the worker during an extraction.** A restart kills the job; the lease expires and the job is retried from window 1, sending the text and billing again (or fails with `LEASE_EXPIRED` if its attempts are used up). Cancel the job first (below), wait for it to end, then restart.
 - **Watch the spend** with `/key/info` before and after a long run.
 - **Re-uploading a file starts a full billed extraction.** Do not upload the same file again to "refresh" it.
 
@@ -74,7 +74,7 @@ Behaviour:
 - A cancelled job is never overwritten by a later failure: the requeue is guarded by `status='running'`, and `fail_run` never overwrites a cancelled run.
 - Audit event `job_cancelled` records ids and enums only. The audit allow-list gained `job_type` and `subject_id`.
 
-Deadlock found in review (fixed in dd2c6c7): the API held the job row while waiting for run-row locks the handler held; the handler's heartbeat, on a separate connection, then waited on the job row. Postgres could not detect it because the handler connection sat idle in a transaction. The regression test (cancel issued from inside `extract_boq`'s last progress call, from a second thread, 20 s join) now fails in about 25 s instead of hanging (2e2c4aa). The test was shown to fail when the bug was put back.
+Deadlock found in review (fixed in dd2c6c7): the API held the job row while waiting for run-row locks the handler held; the handler's heartbeat, on a separate connection, then waited on the job row. Postgres could not detect it because the handler connection sat idle in a transaction. The regression test (cancel issued from inside `extract_boq`'s last progress call, from a second thread, with a 20 s join) was observed to fail in about 25 s instead of hanging (2e2c4aa). The 20 s join is the only bound in the code; the 25 s figure is what was observed. The test was shown to fail when the bug was put back.
 
 In the Extraction panel (a55f9be), "Cancel" appears on queued and running rows when the user has `review_data` and the tender is not archived, with an inline confirmation. Ingest jobs never appear in that panel, so Cancel is never offered for them.
 
@@ -85,23 +85,23 @@ Limits: see the known limitations section. In short, a cancel can land after the
 The Extraction panel shows a native progress bar and a plain-words line while a kind's job is queued or running (db8af7a). Helpers are `progressBounds`, `progressText` and `attemptText` in `frontend/src/lib/status-text.ts`.
 
 - Requirements: "Reading section N of M".
-- BoQ and quotation: "N of M steps".
+- BoQ and quotation: "N of M steps" in the code, but in practice these always show "Working…", because `extract_boq` and `extract_quotation` only call `progress(1, 1)` and the "N of M steps" form needs a total above 1.
 - No usable count: "Working…".
 - Queued: "Waiting in the queue…".
 - A restarted run shows "Attempt N".
 
-What the numbers mean: `progress_done` counts finished windows. "Section 44 of 73" means 44 windows are done. The count stays at the total during the post-window steps (merge, provenance, store), so the bar can read "73 of 73" for minutes before the run completes. One run showed 73 of 73 at about 14:27 UTC and completed at 14:30:41, about 3.5 minutes after the last window. Where the time goes inside a longer run is UNVERIFIED.
+What the numbers mean: `progress_done` counts finished windows. "Section 44 of 73" means 44 windows are done. The count stays at the total during the post-window steps (merge, provenance, store), so the bar can read "73 of 73" for minutes before the run completes. One run showed 73 of 73 at about 14:27 UTC and completed at 14:30:41, about 3.5 minutes after the last window. Where the time goes inside a longer run is UNVERIFIED; provenance is the likely cost.
 
 ## Necessary changes
 
 Ordered by priority. Size is a rough estimate, not measured.
 
-1. **Investigate and fix the 22 invalid windows on large documents.** Why: on the 73-window run, 22 windows produced no requirements and the job still completed. Confirm the truncation cause on a synthetic dense pack (`pack09_xl`) first, then raise the hosted cap (for example to 4096) and/or reduce items per window. Size: medium.
+1. **Investigate and fix the 22 invalid windows on large documents.** Why: on the 73-window run, 22 windows produced no requirements and the job still completed. Confirm the truncation cause on a synthetic dense pack (generate `pack09_xl` with `eval/synthgen`; it is not committed) first, then raise the hosted cap (for example to 4096) and/or reduce items per window. Size: medium.
 2. **Stop wasting the retry on a capped reasoning reply.** Skip the `error=truncated` retry when the truncated reply is empty or does not start with `{` (reasoning used the whole budget). Add a per-job circuit breaker after two consecutive `length` results. Why: a capped window currently costs two billed calls. Size: small.
-3. **Speed up provenance.** `attach_provenance` calls `locate()` once per requirement, and each call rebuilds the squashed text of all pages and, when there is no exact match, runs a fuzzy search page by page. Compute the squashed page text once per run, then re-measure the post-window time. Size: small to medium.
-4. **Show the post-window phase in the progress display.** Add "Finding sources N of M" and make `progress_done` mean finished windows everywhere. Why: the bar sits at the total for minutes. Size: small.
+3. **Speed up provenance.** `attach_provenance` calls `locate()` once per requirement, and each call rebuilds the squashed text of all pages and, when there is no exact match, runs a fuzzy search page by page. Likely speed-up: compute the squashed page text once per run instead of per requirement; measure first. Size: small to medium.
+4. **Report provenance as its own phase in the progress display.** Show it as done/total over requirements instead of holding the window total. Why: the bar sits at the total for minutes. Size: small.
 5. **Reaper sweep for runs left `running` under a cancelled job** (for example after a crash after cancel). Size: medium.
-6. **Restore a permission check in `cancel_runs_for_job`, or make it private.** Why: a permission check on that function was not confirmed when this document was written (UNVERIFIED against the current code). Size: small.
+6. **Restore a permission check in `cancel_runs_for_job`, or make it private.** Why: `cancel_runs_for_job` (`backend/app/modules/pipeline/service.py`) lost its `ctx.require(Permission.REVIEW_DATA)` in dd2c6c7 (the worker's `on_cancel` calls it too). Today it is only reached after `jobs.cancel_job` has checked the permission. Restore a check that the worker path passes, or make it internal to the module. Size: small.
 7. **Extraction panel polish:** cancel focus handling and clearing a failed-cancel message. Size: small.
 8. **Rename the settings from `kimi` to a generic name** (`LLM_HOSTED_*`), with a migration note in `.env.example` and this document. Size: medium (settings, tests, docs).
 9. **Guard against re-uploading the same file.** Check the document checksum within a tender, and warn across tenders, because each upload starts a full billed extraction. Size: small to medium.

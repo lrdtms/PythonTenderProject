@@ -88,11 +88,11 @@ Details, the benchmark and the remaining necessary changes are in [hosted-llm-an
 
 - **Large documents can lose windows.** On one 73-window document, 22 windows ended `WINDOW_INVALID_OUTPUT` with the hosted model, and the job still completed. The cause is unverified (most likely the 2048-token output cap). Check the window count before trusting a long run.
 - **A capped window costs two billed calls.** The `length` result is retried once with the truncation prompt, and it still fails if the cap is the cause.
-- **Post-window provenance is slow and shows no progress.** The progress bar stays at "N of N" while sources are attached, which can take minutes.
-- **Cancel can land late.** A cancel that arrives after the last heartbeat check can still store results under a cancelled job. One hosted call already in flight completes and is billed.
+- **The post-window phase (merge, provenance, store) can take minutes and shows no progress.** The bar stays at "N of N". Provenance is the likely cost (unverified).
+- **Cancel can land late.** A cancel that arrives after the runner's final `is_cancelled` check, before the commit, can still store results under a cancelled job. One hosted call already in flight completes and is billed.
 - **A crash after cancel can leave a run `running`.** No sweep clears it yet.
 - **Ingest jobs cannot be cancelled** (409 `job_not_cancellable`), so a document cannot be stopped mid-ingest.
-- **A worker restart mid-extraction restarts the whole job** from window 1, sending the text and billing again, unless the job was cancelled first.
+- **A worker restart mid-extraction restarts the whole job** from window 1, sending the text and billing again (or fails with `LEASE_EXPIRED` if its attempts are used up), unless the job was cancelled first.
 - **The hosted settings are named `kimi`** (`LLM_PROVIDER=kimi`, `LLM_KIMI_*`) but work with any OpenAI-compatible API, such as Mammouth.
 - **Hosted use is limited to synthetic data** until the POPIA assessment is done; one real-looking document was processed with a hosted provider during testing (see the privacy item in the ops document).
 
