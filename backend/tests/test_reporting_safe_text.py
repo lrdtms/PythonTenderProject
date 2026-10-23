@@ -42,11 +42,14 @@ def test_xlsx_text_is_inert_and_accepted_by_openpyxl(s):
     assert out.startswith("'") == risky or (cut.startswith("'") and not risky)
     if risky:
         assert out == "'" + cut
+    else:
+        assert out == cut
     wb = Workbook()
     wb.active["A1"] = out
     buf = io.BytesIO()
     wb.save(buf)
-    assert load_workbook(io.BytesIO(buf.getvalue())).active["A1"].value is not None or out == ""
+    cell = load_workbook(io.BytesIO(buf.getvalue())).active["A1"]
+    assert cell.data_type == "s" or out == ""
 
 
 def test_xlsx_text_none_and_limit():
@@ -139,13 +142,17 @@ def test_flag_text_fallback():
     assert words.flag_text("nope") == "Needs attention"
 
 
+def _section(src: str, marker: str) -> str:
+    return src.split(marker)[1].split("\ndef ")[0]
+
+
 def test_every_flag_the_estimates_module_emits_has_a_word():
     src = (
         Path(__file__).parent.parent / "app" / "modules" / "estimates" / "service.py"
     ).read_text()
     found = set(re.findall(r'flags\["(\w+)"\]\s*=\s*True', src))
-    found |= set(re.findall(r'out\.append\("(\w+)"\)', src.split("def _warnings")[1][:600]))
-    found |= set(re.findall(r'flags\.append\("(\w+)"\)', src.split("def _line_dto")[1][:2000]))
+    found |= set(re.findall(r'out\.append\("(\w+)"\)', _section(src, "def _warnings")))
+    found |= set(re.findall(r'flags\.append\("(\w+)"\)', _section(src, "def _line_dto")))
     assert set(FLAG_CODES) <= found
     fallback = words.flag_text("nope")
     missing = [c for c in found if words.flag_text(c) == fallback]
@@ -165,3 +172,31 @@ def test_other_words():
         assert words.price_source_text(s)
     for s in ("cost", "selling_price"):
         assert words.markup_basis_text(s)
+
+
+def test_header_truncation_keeps_ampersands_paired():
+    for s in ("x" * 59 + "&", "&" * 61, "&" * 300):
+        out = xlsx_header_text(s)
+        assert len(out) <= 120 and out.replace("&&", "").count("&") == 0
+
+
+def test_pdf_text_truncation_edges():
+    out = pdf_text("<" * 3000)
+    assert out.endswith("... (truncated, see source)") and out.startswith("&lt;")
+    assert len(out) <= 2_000
+    assert len(pdf_text("x" * 50, limit=10)) <= 10
+
+
+def test_export_filename_validation_and_case():
+    d = date(2026, 1, 2)
+    with pytest.raises(ValueError):
+        export_filename("t", "pptx", None, False, d)
+    with pytest.raises(ValueError):
+        export_filename("t", "estimate", None, False, d)
+    assert export_filename("Greenvale Hall", "checklist", None, False, d).startswith(
+        "greenvale-hall-"
+    )
+
+
+def test_xlsx_text_unicode_space_before_starter():
+    assert xlsx_text("\u00a0=1+1").startswith("'")

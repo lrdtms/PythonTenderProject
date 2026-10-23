@@ -33,13 +33,13 @@ def xlsx_text(value: str | None, limit: int = 32_000) -> str:
     text = _clean(value)
     if len(text) > limit - 4:
         text = text[: limit - 4] + "..."
-    if text.lstrip(" \t\r\n").startswith(_FORMULA_START) or text.startswith(("\t", "\r")):
+    if text.lstrip().startswith(_FORMULA_START) or text.startswith(("\t", "\r")):
         return "'" + text
     return text
 
 
 def xlsx_header_text(value: str | None, limit: int = 60) -> str:
-    return _clean(value).replace("&", "&&")[:limit]
+    return _clean(value)[:limit].replace("&", "&&")
 
 
 def pdf_plain(value: str | None, limit: int = 300) -> str:
@@ -48,17 +48,21 @@ def pdf_plain(value: str | None, limit: int = 300) -> str:
 
 def pdf_text(value: str | None, limit: int = 2_000) -> str:
     text = _clean(value)
-    # Escaping can grow the text, so cut on the escaped length.
     escaped = _escape(_cp1252(text))
     if len(escaped) <= limit:
         return escaped
     room = limit - len(_PDF_MARKER)
-    cut = text
-    while True:
-        cut = cut[: max(0, len(cut) - max(1, len(escaped) - room))]
-        escaped = _escape(_cp1252(cut))
-        if len(escaped) <= room:
-            return escaped + _PDF_MARKER
+    if room <= 0:
+        return _PDF_MARKER[:limit]
+    out: list[str] = []
+    used = 0
+    for ch in text:
+        piece = _escape(_cp1252(ch))
+        if used + len(piece) > room:
+            break
+        out.append(piece)
+        used += len(piece)
+    return "".join(out) + _PDF_MARKER
 
 
 def _escape(text: str) -> str:
@@ -68,13 +72,17 @@ def _escape(text: str) -> str:
 def _slug(title: str) -> str:
     ascii_text = unicodedata.normalize("NFKD", title or "").encode("ascii", "ignore").decode()
     slug = re.sub(r"[^A-Za-z0-9]+", "-", ascii_text).strip("-")[:40].strip("-")
-    return slug or "tender"
+    return slug.lower() or "tender"
 
 
 def export_filename(
     tender_title: str, kind: str, version: int | None, draft: bool, on: date
 ) -> str:
-    parts = [_slug(tender_title), "estimate" if kind == "estimate" else "checklist"]
+    if kind not in ("estimate", "checklist"):
+        raise ValueError(f"unknown export kind: {kind!r}")
+    if kind == "estimate" and version is None:
+        raise ValueError("an estimate export needs a version")
+    parts = [_slug(tender_title), kind]
     if kind == "estimate":
         parts[-1] += f"-v{version}"
     if draft:
