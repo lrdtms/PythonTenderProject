@@ -67,6 +67,10 @@ _LINE_STATUS = {
     "unresolved": "Not priced",
     "changed": "Source changed",
 }
+_MARKUP_BASIS = {
+    "cost": "Percentage on cost",
+    "selling_price": "Percentage on selling price",
+}
 _STATUS = {"draft": "Draft", "reviewed": "Reviewed: not yet approved", "approved": "Approved"}
 _NOTE = (
     "Amounts are values, not formulas. Quotes that include VAT are converted to ex VAT on the "
@@ -118,7 +122,7 @@ class _Book:
                 cell.number_format = fmt
 
 
-def _banner(ws: Worksheet, text: str, columns: int) -> None:
+def _banner(ws: Worksheet, columns: int) -> None:
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=columns)
     cell = ws["A1"]
     cell.fill = PatternFill("solid", fgColor=RED)
@@ -153,7 +157,10 @@ def _notes(line: ExportLine) -> str | None:
     return "; ".join(words.flag_text(f) for f in line.flags) or None
 
 
-def _line_row(book: _Book, ws: Worksheet, row: int, line: ExportLine) -> None:
+def _line_row(
+    book: _Book, ws: Worksheet, row: int, line: ExportLine, default_markup: Decimal
+) -> None:
+    markup_percent = line.markup_percent if line.markup_percent is not None else default_markup
     put = book.put
     put(ws, row, 1, line.position, "General")
     put(ws, row, 2, line.section)
@@ -162,7 +169,7 @@ def _line_row(book: _Book, ws: Worksheet, row: int, line: ExportLine) -> None:
     put(ws, row, 5, line.unit)
     put(ws, row, 6, line.quantity, RATE)
     put(ws, row, 7, line.supplier_name)
-    put(ws, row, 8, _PRICE_SOURCE.get(line.price_source, "Not priced"))
+    put(ws, row, 8, _PRICE_SOURCE[line.price_source])
     if line.status != "excluded":
         put(ws, row, 9, line.quoted_unit_price, RATE)
         put(ws, row, 10, line.quoted_currency)
@@ -177,10 +184,10 @@ def _line_row(book: _Book, ws: Worksheet, row: int, line: ExportLine) -> None:
         put(ws, row, 14, line.material_cost, AMOUNT)
         put(ws, row, 15, line.labour_cost, AMOUNT)
         put(ws, row, 16, line.cost, AMOUNT)
-        put(ws, row, 17, line.markup_percent, PERCENT)
+        put(ws, row, 17, markup_percent, PERCENT)
         put(ws, row, 18, line.markup, AMOUNT)
         put(ws, row, 19, line.total, AMOUNT)
-    put(ws, row, 20, _LINE_STATUS.get(line.status, "Not priced"))
+    put(ws, row, 20, _LINE_STATUS[line.status])
     put(ws, row, 21, _notes(line))
     if line.status == "excluded":
         grey = PatternFill("solid", fgColor=GREY)
@@ -193,7 +200,7 @@ def _write_lines(book: _Book, ws: Worksheet, data: EstimateExportInput) -> None:
     header = 1
     if is_draft(data.status):
         book.put(ws, 1, 1, f"DRAFT: version {data.version} is not approved. Do not submit.")
-        _banner(ws, "", columns)
+        _banner(ws, columns)
         header = 2
     head_fill = PatternFill("solid", fgColor="DDEBF7")
     for i, name in enumerate(LINE_COLUMNS, start=1):
@@ -205,7 +212,7 @@ def _write_lines(book: _Book, ws: Worksheet, data: EstimateExportInput) -> None:
     last = header
     for line in data.lines:
         last += 1
-        _line_row(book, ws, last, line)
+        _line_row(book, ws, last, line, data.markup_percent)
     for i, width in enumerate(_LINE_WIDTHS, start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
     ws.freeze_panes = f"A{header + 1}"
@@ -219,7 +226,7 @@ def _write_summary(book: _Book, ws: Worksheet, data: EstimateExportInput) -> Non
     row = 1
     if is_draft(data.status):
         put(ws, 1, 1, f"DRAFT: version {data.version} is not approved. Do not submit.")
-        _banner(ws, "", 2)
+        _banner(ws, 2)
         row = 2
     put(ws, row, 1, "Tender estimate")
     ws.cell(row=row, column=1).font = Font(bold=True, size=14)
@@ -237,12 +244,12 @@ def _write_summary(book: _Book, ws: Worksheet, data: EstimateExportInput) -> Non
     pair("Reference", data.tender_reference)
     pair("Client", data.client_name or "Not stated")
     pair("Estimate version", data.version, "General")
-    pair("Status", _STATUS.get(data.status, "Draft"))
+    pair("Status", _STATUS[data.status])
     pair("Approved by", _person(data.approved_by_name, data.approved_at, "Not approved"))
     pair("Reviewed by", _person(data.reviewed_by_name, data.reviewed_at, "Not reviewed"))
     pair("Currency", data.currency)
     pair("VAT rate (%)", data.vat_rate, PERCENT)
-    pair("Markup basis", words.markup_basis_text(data.markup_basis))
+    pair("Markup basis", _MARKUP_BASIS[data.markup_basis])
     pair("Default markup (%)", data.markup_percent, PERCENT)
     pair("Lines priced", data.priced, "General")
     pair("Lines excluded", data.excluded, "General")
@@ -262,7 +269,13 @@ def _write_summary(book: _Book, ws: Worksheet, data: EstimateExportInput) -> Non
             label, "Not available" if totals is None else getattr(totals, field), AMOUNT
         )
     if data.incomplete:
-        put(ws, total_row, 3, f"Incomplete: excludes {data.unresolved + data.changed} lines")
+        skipped = data.unresolved + data.changed
+        put(
+            ws,
+            total_row,
+            3,
+            f"Incomplete: excludes {skipped} {'line' if skipped == 1 else 'lines'}",
+        )
         ws.cell(row=total_row, column=3).font = Font(bold=True, color=RED)
     ws.cell(row=total_row, column=1).font = Font(bold=True)
     ws.cell(row=total_row, column=2).font = Font(bold=True)

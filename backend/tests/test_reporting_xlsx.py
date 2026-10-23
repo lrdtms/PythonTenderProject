@@ -413,6 +413,7 @@ def test_header_footer_escaping(title):
         footer = hf.find("m:oddFooter", NS).text
         header = hf.find("m:oddHeader", NS).text
         assert escaped in footer
+        assert len(escaped.replace("&&", "&")) <= 60
         rest = footer.replace(escaped, "")
         assert not re.findall(r"&(?![LCRPN]| )", rest), rest
         for text in (footer, header):
@@ -476,3 +477,16 @@ def test_requires_generated_at_and_export_id():
         render_estimate_xlsx(replace(GOLDEN_INPUT, generated_at=None))
     with pytest.raises(ValueError):
         render_estimate_xlsx(replace(GOLDEN_INPUT, export_id=None))
+
+
+def test_incomplete_singular():
+    data = replace(GOLDEN_INPUT, unresolved=1, changed=0)
+    ws = load_workbook(io.BytesIO(render_estimate_xlsx(data)))["Summary"]
+    assert ws.cell(find_row(ws, "Total incl VAT"), 3).value == "Incomplete: excludes 1 line"
+
+
+def test_effective_markup_is_never_blank():
+    line = replace(GOLDEN_INPUT.lines[0], markup_percent=None)
+    data = replace(GOLDEN_INPUT, lines=(line,), markup_percent=Decimal("12.5"))
+    raw = raw_cells(render_estimate_xlsx(data), 2)
+    assert display(raw["Q3"][1]) == Decimal("12.5")

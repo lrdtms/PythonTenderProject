@@ -336,7 +336,7 @@
     "number_format": "General"
    },
    "B12": {
-    "value": "Markup on cost",
+    "value": "Percentage on cost",
     "type": "s",
     "number_format": "General"
    },
