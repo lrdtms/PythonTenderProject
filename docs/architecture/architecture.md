@@ -36,7 +36,7 @@ Each backend module is a package `modules/<name>/` containing `public.py` (the o
 | `estimates` | M4 | Pricing defaults, estimates and lines, Decimal calculations (pure `calc.py`), review, approval, readiness gate | `get_defaults`, `save_defaults`, `create_estimate(ctx, tender_id, boq)`, `get_estimate`, `list_estimates`, `patch_estimate`, `price_line`, `refresh_line`, `review_estimate`, `reopen_estimate`, `approve_estimate`, `readiness` | pricing_defaults, estimates, estimate_lines |
 | `suppliers` | M4 | Suppliers, quotations, deterministic matching, confirm/reject | `replace_quotation_items(ctx, quotation_id, cands)`, `suggest_matches(ctx, tender_id)`, `decide(ctx, suggestion_id, confirm/reject)` | suppliers, supplier_quotations, quotation_items, match_suggestions |
 | `checklist` | M1 | Requirements review, checklist, tasks, deadlines, reminders | `replace_unreviewed(ctx, version_id, cands)`, `version_of(ctx, id)`, `review_item(ctx, id, action, patch)` (RequirementPatch DTO; correct, confirm, reject), task CRUD | requirements, tasks, reminders |
-| `reporting` | M4 | Excel/PDF exports with status and version | `create_export(ctx, tender_id, kind) -> ExportDTO` (approved-only unless labelled draft) | exports |
+| `reporting` | M4 | Excel/PDF exports with status and version | `create_export(ctx, tender_id, kind) -> ExportDTO` (any estimate version; a version that is not approved is labelled DRAFT) | exports |
 | `qa` (stretch) | M2 | Grounded Q&A | `ask_stream(ctx, tender_id, question) -> AsyncIterator[Event]` | chat_queries |
 | `worker/` | M2 | Job loop, stage orchestration, leases | job handlers per `job_type` | jobs (queue adapter) |
 | `api/` | each owner for their routers | HTTP, auth dependency, error format, OpenAPI | `/api/v1/...` | none |
@@ -169,7 +169,7 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 - `estimating.replace_unreviewed(ctx, version_id, candidates) -> ReplaceResult`; never touches reviewed rows. Same contract for `checklist.replace_unreviewed` and `suppliers.replace_quotation_items`.
 - `estimates.calc` is pure (Decimal, configurable VAT, markup; no I/O). The router reads BoQ lines and confirmed matches through `estimating.public` and `suppliers.public`, passes plain inputs to `estimates`, and `estimates` imports only kernel, db and audit. Estimates are versioned, with status draft/reviewed/approved.
 - `suppliers.suggest_matches(ctx, tender_id) -> list[MatchSuggestion(evidence, score, needs_confirmation)]`; `decide(ctx, id, confirm|reject)` records reviewer + time.
-- `reporting.create_export(ctx, tender_id, kind) -> ExportDTO`. Approved-only content; otherwise the export is labelled DRAFT; audited.
+- `reporting.create_export(ctx, tender_id, kind) -> ExportDTO`. Any estimate version; a version that is not approved is labelled DRAFT; audited.
 - `LLMPort.generate_structured(system, user, json_schema, options) -> StructuredResult(raw_json, done_reason, tokens, latency_ms, model)`.
 - `GET /api/v1/jobs/{id} -> {status, progress_done, progress_total, error_code, warnings[]}`.
 

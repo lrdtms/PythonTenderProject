@@ -1177,3 +1177,37 @@ def test_estimate_audit_rows_keep_their_ids_and_drop_free_text() -> None:
         "version": 2,
         "source": "manual",
     }
+
+
+# --- export_snapshot (Slice 6a) --------------------------------------------------------------
+
+
+def _ctx_of(actor) -> OrgContext:
+    return OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
+
+
+def test_export_snapshot_returns_every_line_in_order_with_matching_counts() -> None:
+    actor, tender_id, est = _priced_setup("ex1@example.com")
+    ctx, tender, estimate = _ctx_of(actor), UUID(tender_id), UUID(est["id"])
+    from app.api import estimate_inputs
+
+    with session_scope() as s:
+        live = estimate_inputs.live_inputs(s, ctx, tender)
+        dto, lines = estimates.export_snapshot(s, ctx, estimate, live)
+        listed = estimates.list_lines(s, ctx, estimate, live, None, 1000, 0)
+    assert [x.id for x in lines] == [x.id for x in listed]
+    assert len(lines) == dto.priced + dto.excluded + dto.unresolved + dto.changed
+    assert dto.unresolved == sum(1 for x in lines if x.status == "unresolved")
+
+
+def test_export_snapshot_on_an_approved_estimate_ignores_live_inputs() -> None:
+    actor, _, est = _ready("ex2@example.com")
+    assert _move(actor, est, "review").status_code == 200
+    approved = _move(actor, est, "approve").json()
+    ctx = _ctx_of(actor)
+    with session_scope() as s:
+        dto, lines = estimates.export_snapshot(s, ctx, UUID(est["id"]), estimates.LiveInputs())
+    assert dto.status == "approved" and dto.totals.model_dump() == approved["totals"]
+    assert all(x.candidates == [] for x in lines)
+    assert {x.status for x in lines} <= {"priced", "excluded"}
+    assert [str(x.id) for x in lines] == [x["id"] for x in _lines(actor, est)]

@@ -93,3 +93,49 @@ def test_approve_racing_a_line_write_is_frozen_and_refuses_the_write() -> None:
     assert write.status_code == 409 and write.json()["error"]["code"] == "estimate_frozen"
     _frozen_totals_match_lines(est["id"])
     assert actor.client.get(f"{API}/estimates/{est['id']}").json()["status"] == "approved"
+
+
+def test_export_snapshot_never_mixes_reviewed_totals_with_draft_lines() -> None:
+    from app.api import estimate_inputs
+    from app.kernel import OrgContext, Role
+    from app.modules.estimates import public as estimates
+    from app.modules.suppliers import public as suppliers
+    from tests.test_estimates_api import _ready
+
+    actor, tender_id, est = _ready("er9@example.com")
+    assert _move(actor, est, "review").status_code == 200
+    priced = next(x for x in _lines(actor, est) if x["status"] == "priced")
+    ctx = OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
+    tender, estimate = UUID(tender_id), UUID(est["id"])
+    holding = threading.Event()
+
+    def writer():
+        with session_scope() as s:
+            suppliers.lock_tender(s, ctx, tender)
+            holding.set()
+            live = estimate_inputs.live_inputs(s, ctx, tender)
+            estimates.reopen_estimate(s, ctx, estimate, live)
+            estimates.price_line(
+                s,
+                ctx,
+                UUID(priced["id"]),
+                estimates.LinePut(manual_unit_price="77.5", markup_override_percent="0"),
+                live,
+            )
+            threading.Event().wait(1.0)  # hold the lock while the reader queues behind it
+
+    def reader():
+        assert holding.wait(10)
+        with session_scope() as s:
+            suppliers.lock_tender(s, ctx, tender)
+            live = estimate_inputs.live_inputs(s, ctx, tender)
+            return estimates.export_snapshot(s, ctx, estimate, live)
+
+    _, (dto, lines) = _together(writer, reader)
+    assert dto.status == "draft", "the reader queued behind the lock, so it sees the reopened state"
+    assert any(x.status == "priced" and x.id == UUID(priced["id"]) for x in lines)
+    # Either-or: a reviewed read would show frozen totals that agree with its lines.
+    if dto.status == "reviewed":
+        assert dto.totals.subtotal_ex_vat == str(
+            sum((Decimal(x.total) for x in lines if x.total), Decimal("0.00"))
+        )

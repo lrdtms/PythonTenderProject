@@ -360,6 +360,18 @@ def get_estimate(
     return _estimate_dto(est, _lines_of(repo, est, live))
 
 
+def export_snapshot(
+    session: Session, ctx: OrgContext, estimate_id: UUID, live: LiveInputs
+) -> tuple[EstimateDTO, list[EstimateLineDTO]]:
+    """The estimate and all its lines in BoQ order from one pass over the same rows, so totals
+    and lines cannot come from different moments. A non-draft estimate ignores `live`."""
+    ctx.require(Permission.READ)
+    repo = EstimateRepo(session, ctx)
+    est = repo.get(estimate_id)
+    rows = _lines_of(repo, est, live)
+    return _estimate_dto(est, rows), [dto for _, dto in rows]
+
+
 def list_lines(
     session: Session,
     ctx: OrgContext,
