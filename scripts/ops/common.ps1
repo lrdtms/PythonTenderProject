@@ -33,14 +33,16 @@ function Assert-Docker {
     if ($LASTEXITCODE -ne 0) { throw 'Docker is not running. Start Docker Desktop and try again.' }
 }
 
-# Runs the stdlib-only preflight with the project's Python. Returns $true when there are no errors.
-function Invoke-Preflight([switch]$Tunnel, [switch]$AcceptHostedLlm) {
+# Runs the stdlib-only preflight with the project's Python and shows its findings. Returns a
+# plain $true / $false (the tool's output goes to the console, never into the return value).
+function Invoke-Preflight([switch]$Tunnel, [switch]$AcceptHostedLlm, [string]$EnvFile = '') {
     $root = Get-RepoRoot
-    $args = @('run', '--project', (Join-Path $root 'backend'), 'python', '-I', (Join-Path $root 'scripts/ops_preflight.py'), '--env-file', (Join-Path $root '.env'))
-    if ($Tunnel) { $args += '--tunnel' }
-    if ($AcceptHostedLlm) { $args += '--accept-hosted-llm' }
-    & uv @args
-    return ($LASTEXITCODE -eq 0)
+    if ($EnvFile -eq '') { $EnvFile = Join-Path $root '.env' }
+    $uvArgs = @('run', '--project', (Join-Path $root 'backend'), 'python', '-I', (Join-Path $root 'scripts/ops_preflight.py'), '--env-file', $EnvFile)
+    if ($Tunnel) { $uvArgs += '--tunnel' }
+    if ($AcceptHostedLlm) { $uvArgs += '--accept-hosted-llm' }
+    & uv @uvArgs | Out-Host
+    return [bool]($LASTEXITCODE -eq 0)
 }
 
 # Poll the public status endpoint until the database reports ok.

@@ -77,3 +77,33 @@ def test_backup_removes_a_partial_directory_and_records_the_manifest() -> None:
     text = (OPS / "backup.ps1").read_text(encoding="utf-8")
     assert "Remove-Item $dir -Recurse" in text
     assert "ops_manifest.py" in text and "files.tar.gz" in text and "pg_dump -Fc" in text
+
+
+def _invoke_preflight(tmp_path: Path, env_text: str, *flags: str) -> str:
+    env = tmp_path / "test.env"
+    env.write_text(env_text, encoding="utf-8")
+    command = (
+        f". '{OPS / 'common.ps1'}'; "
+        f"$r = Invoke-Preflight {' '.join(flags)} -EnvFile '{env}'; "
+        "Write-Output ('RESULT=' + $r.GetType().Name + ':' + $r)"
+    )
+    result = subprocess.run(
+        ["pwsh", "-NoProfile", "-NonInteractive", "-Command", command], capture_output=True, text=True
+    )
+    return result.stdout + result.stderr
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell 7 (pwsh) is not installed")
+def test_invoke_preflight_returns_a_plain_false_for_an_unsafe_tunnel_config(tmp_path: Path) -> None:
+    out = _invoke_preflight(tmp_path, "SECRET_KEY=change-me\nENVIRONMENT=development\n", "-Tunnel")
+    assert "RESULT=Boolean:False" in out
+    assert "weak_secret" in out  # the findings are shown to the person, not swallowed
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell 7 (pwsh) is not installed")
+def test_invoke_preflight_returns_a_plain_true_for_a_safe_config(tmp_path: Path) -> None:
+    safe = (
+        f"SECRET_KEY={'s' * 32}\nPOSTGRES_PASSWORD=a-long-database-password\n"
+        "ENVIRONMENT=production\nCOOKIE_SECURE=true\n"
+    )
+    assert "RESULT=Boolean:True" in _invoke_preflight(tmp_path, safe, "-Tunnel")
