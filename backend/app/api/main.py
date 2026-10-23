@@ -3,7 +3,9 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.api import status
 from app.api.errors import error_body, register_error_handlers
+from app.api.ratelimit import client_ip, limiter
 from app.api.routers import (
     audit,
     auth,
@@ -57,6 +59,13 @@ def health() -> dict[str, str]:
 def health_db() -> dict[str, str]:
     ping()
     return {"status": "ok", "database": "reachable"}
+
+
+@app.get("/api/v1/health/status")
+def health_status(request: Request) -> dict[str, str]:
+    """Public and minimal (parts as words only); rate-limited per client address."""
+    limiter.check(f"status:{client_ip(request)}", limit=30, window_seconds=60)
+    return status.get_status()
 
 
 app.include_router(auth.router)
