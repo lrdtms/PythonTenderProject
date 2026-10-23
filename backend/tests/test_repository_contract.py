@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from collections.abc import Iterator
+from decimal import Decimal
 from uuid import UUID
 
 import pytest
@@ -20,6 +21,8 @@ from app.db.scoped import ScopedRepository
 from app.db.session import session_scope
 from app.kernel import NotFound, OrgContext, Role
 from app.modules.checklist import public as checklist
+from app.modules.estimates.models import Estimate, EstimateLine
+from app.modules.estimates.repo import EstimateRepo
 from app.modules.estimating import public as estimating
 from app.modules.estimating.models import BoqItem
 from app.modules.identity.models import Membership
@@ -69,6 +72,7 @@ EXERCISED = {
     "QuotationRepo",
     "QuotationItemRepo",
     "MatchRepo",
+    "EstimateRepo",
 }
 
 
@@ -135,8 +139,40 @@ def _seed(email: str, org: str, secret: str) -> Actor:
                     [{"description": f"{secret} rule", "requirement_type": "other",
                       "mandatory_status": "mandatory", "evidence_quote": f"{secret} clause"}],
                 )  # fmt: skip
+        _seed_estimate(s, ctx, UUID(tender), secret)
     add_member(actor, f"member-{email}", "estimator")
     return actor
+
+
+def _seed_estimate(s, ctx: OrgContext, tender_id: UUID, secret: str) -> None:
+    """Saved pricing defaults and a draft estimate with one line over the seeded BoQ item."""
+    repo = EstimateRepo(s, ctx)
+    repo.save_defaults("ZAR", Decimal("15.00"), "cost", Decimal("10.00"), ctx.user_id)
+    estimate = repo.add(
+        Estimate(
+            organisation_id=ctx.organisation_id,
+            tender_id=tender_id,
+            version=1,
+            currency="ZAR",
+            vat_rate=Decimal("15.00"),
+            markup_basis="cost",
+            markup_percent=Decimal("10.00"),
+            created_by=ctx.user_id,
+        )
+    )
+    boq_item_id = s.scalars(
+        select(BoqItem.id).where(BoqItem.organisation_id == ctx.organisation_id)
+    ).first()
+    repo.add_lines([
+        EstimateLine(
+            estimate_id=estimate.id,
+            boq_item_id=boq_item_id,
+            position=0,
+            description=f"{secret} cable",
+            price_source="manual",
+            updated_by=ctx.user_id,
+        )
+    ])  # fmt: skip
 
 
 def _ctx(actor: Actor) -> OrgContext:
@@ -245,6 +281,26 @@ def test_repositories_never_return_another_organisations_rows() -> None:
         assert repos["QuotationItemRepo"].for_versions([version_b]) == []
         assert repos["BoqRepo"].protected(version_b, boq_b) == []
         repos["MatchRepo"].lock_tender(UUID(int=1))
+        estimate_b = b_ids["EstimateRepo"][0]
+        est_tender_b = s.get(Estimate, estimate_b).tender_id
+        line_b = s.scalars(
+            select(EstimateLine.id).where(EstimateLine.organisation_id == org_b)
+        ).all()
+        assert line_b
+        with pytest.raises(NotFound):
+            repos["EstimateRepo"].get_for_update(estimate_b)
+        assert repos["EstimateRepo"].latest_version(est_tender_b) == 0
+        assert repos["EstimateRepo"].draft_for(est_tender_b) is None
+        assert repos["EstimateRepo"].for_tender(est_tender_b) == []
+        assert repos["EstimateRepo"].lines(estimate_b, 50, 0) == []
+        assert repos["EstimateRepo"].lines(estimate_b, 50, 0, "manual") == []
+        assert repos["EstimateRepo"].all_lines(estimate_b) == []
+        for line_id in line_b:
+            for refresh in (False, True):
+                with pytest.raises(NotFound):
+                    repos["EstimateRepo"].line(line_id, refresh)
+        defaults_c = repos["EstimateRepo"].defaults()
+        assert defaults_c is not None and defaults_c.organisation_id == ctx_c.organisation_id
         assert repos["RunRepo"].current_for_version(version_b) == {}
         assert repos["RunRepo"].for_job(job_subject_b, "boq") is None
         assert repos["JobRepo"].latest_for_subject(job_subject_b) is None

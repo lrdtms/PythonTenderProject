@@ -1,12 +1,23 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { type UseMutationResult, useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "@/api/errors";
-import { anyJobActive, extractionQueryOptions, useRequestExtraction } from "@/api/extraction";
-import type { KindStatus } from "@/api/types";
-import { jobErrorText, jobStatusLabel, jobTone, kindLabel, warningText } from "@/lib/status-text";
+import { anyJobActive, extractionQueryOptions, useCancelJob, useRequestExtraction } from "@/api/extraction";
+import type { Job, KindStatus } from "@/api/types";
+import {
+  attemptText,
+  cancelFailureText,
+  isTerminalJob,
+  jobErrorText,
+  jobStatusLabel,
+  jobTone,
+  kindLabel,
+  progressBounds,
+  progressText,
+  warningText,
+} from "@/lib/status-text";
 
 import { useCan } from "./auth-gate";
 import { StaleNote } from "./stale-note";
@@ -46,8 +57,73 @@ function countText(kind: string, counts: Record<string, unknown>, kept = 0): str
   return count === null ? null : `${count} ${count === 1 ? "requirement" : "requirements"}`;
 }
 
-function KindRow({ item }: { item: KindStatus }) {
+function JobBar({ kind, job }: { kind: string; job: Job }) {
+  const text = progressText(kind, job);
+  const attempt = attemptText(job.attempt_count);
+  const { done, total } = progressBounds(job);
+  const determinate = job.status === "running" && total > 0;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-zinc-700 dark:text-zinc-300">
+      <progress
+        aria-label={`${kindLabel(kind)} extraction progress`}
+        className="align-middle"
+        {...(determinate ? { value: done, max: total } : {})}
+      />
+      {text ? <span>{text}</span> : null}
+      {attempt ? <span className="text-zinc-500 dark:text-zinc-400">{attempt}</span> : null}
+    </div>
+  );
+}
+
+const BUTTON = "rounded border px-3 py-1 text-sm disabled:opacity-50";
+
+/** Cancel for an active job, with an inline confirmation. Only one row's cancel is in flight at a time. */
+function CancelControl({ job, cancel }: { job: Job; cancel: UseMutationResult<Job, Error, string> }) {
+  const [confirming, setConfirming] = useState(false);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (confirming) confirmRef.current?.focus();
+  }, [confirming]);
+  const cancelling = cancel.isPending && cancel.variables === job.id;
+  if (!confirming) {
+    return (
+      <button type="button" disabled={cancel.isPending} className={BUTTON} onClick={() => setConfirming(true)}>
+        Cancel
+      </button>
+    );
+  }
+  return (
+    <span role="group" aria-label="Confirm cancellation" aria-live="polite" className="flex flex-wrap items-center gap-2 rounded border p-2">
+      <span>Cancel this extraction? Work already done on this run is discarded.</span>
+      <button
+        ref={confirmRef}
+        type="button"
+        disabled={cancel.isPending}
+        className={BUTTON}
+        onClick={() => cancel.mutate(job.id, { onSettled: () => setConfirming(false) })}
+      >
+        Yes, cancel
+      </button>
+      <button type="button" disabled={cancel.isPending} className={BUTTON} onClick={() => setConfirming(false)}>
+        Keep going
+      </button>
+      {cancelling ? <span className="text-zinc-600 dark:text-zinc-400">Cancelling…</span> : null}
+    </span>
+  );
+}
+
+function KindRow({
+  item,
+  canCancel,
+  cancel,
+}: {
+  item: KindStatus;
+  canCancel: boolean;
+  cancel: UseMutationResult<Job, Error, string>;
+}) {
   const job = item.job;
+  const cancelable = canCancel && job !== null && !isTerminalJob(job.status);
+  const cancelFailed = job !== null && cancel.isError && cancel.variables === job.id;
   const warnings = [...(job?.warnings ?? []), ...(item.run?.warnings ?? [])];
   const counts = item.run?.counts
     ? countText(item.kind, item.run.counts as Record<string, unknown>, keptCount(item.run.warnings ?? job?.warnings ?? []))
@@ -60,8 +136,15 @@ function KindRow({ item }: { item: KindStatus }) {
         <span className="font-medium">{kindLabel(item.kind)}</span>
         {job ? <StatusBadge tone={jobTone(job.status)} label={jobStatusLabel(job.status)} /> : null}
         {counts ? <span>{counts}</span> : null}
+        {cancelable && job ? <CancelControl job={job} cancel={cancel} /> : null}
       </div>
+      {job && progressText(item.kind, job) !== null ? <JobBar kind={item.kind} job={job} /> : null}
       {job?.status === "failed" ? <p className="text-red-700 dark:text-red-300">{jobErrorText(job.error_code)}</p> : null}
+      {cancelFailed ? (
+        <p role="alert" className="text-red-700 dark:text-red-300">
+          {cancelFailureText(cancel.error instanceof ApiError ? cancel.error.code : null)}
+        </p>
+      ) : null}
       {unique.length > 0 ? (
         <ul className="list-disc pl-5 text-amber-800 dark:text-amber-300">
           {unique.map((t) => (
@@ -79,6 +162,7 @@ export function ExtractionPanel({ versionId, ready, archived = false, pollMs }: 
   const canRun = useCan("review_data") && !archived;
   const status = useQuery({ ...extractionQueryOptions(versionId, pollMs), enabled: ready });
   const request = useRequestExtraction(versionId);
+  const cancel = useCancelJob(versionId);
   const [deep, setDeep] = useState(false);
   if (!ready) return null;
   if (status.isPending) return <p role="status" className="text-sm text-zinc-500">Checking extraction…</p>;
@@ -101,7 +185,7 @@ export function ExtractionPanel({ versionId, ready, archived = false, pollMs }: 
       {kinds.length > 0 ? (
         <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {kinds.map((k) => (
-            <KindRow key={k.kind} item={k} />
+            <KindRow key={k.kind} item={k} canCancel={canRun} cancel={cancel} />
           ))}
         </ul>
       ) : null}

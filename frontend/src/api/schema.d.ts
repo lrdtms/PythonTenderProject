@@ -297,6 +297,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/estimate-lines/{line_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Line */
+        put: operations["put_line_api_v1_estimate_lines__line_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimate-lines/{line_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Line */
+        post: operations["refresh_line_api_v1_estimate_lines__line_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Estimate */
+        get: operations["get_estimate_api_v1_estimates__estimate_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Estimate */
+        patch: operations["patch_estimate_api_v1_estimates__estimate_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Estimate */
+        post: operations["approve_estimate_api_v1_estimates__estimate_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lines */
+        get: operations["get_lines_api_v1_estimates__estimate_id__lines_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reopen Estimate */
+        post: operations["reopen_estimate_api_v1_estimates__estimate_id__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/estimates/{estimate_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Estimate */
+        post: operations["review_estimate_api_v1_estimates__estimate_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -342,6 +462,23 @@ export interface paths {
         get: operations["get_job_api_v1_jobs__job_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Job */
+        post: operations["cancel_job_api_v1_jobs__job_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -517,6 +654,24 @@ export interface paths {
         head?: never;
         /** Change Role */
         patch: operations["change_role_api_v1_members__membership_id__role_patch"];
+        trace?: never;
+    };
+    "/api/v1/pricing-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Pricing Defaults */
+        get: operations["get_pricing_defaults_api_v1_pricing_defaults_get"];
+        /** Put Pricing Defaults */
+        put: operations["put_pricing_defaults_api_v1_pricing_defaults_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/quotation-items/{quotation_item_id}": {
@@ -769,6 +924,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenders/{tender_id}/estimates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Estimates */
+        get: operations["list_estimates_api_v1_tenders__tender_id__estimates_get"];
+        put?: never;
+        /** Create Estimate */
+        post: operations["create_estimate_api_v1_tenders__tender_id__estimates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenders/{tender_id}/match": {
         parameters: {
             query?: never;
@@ -983,6 +1156,34 @@ export interface components {
             /** Unit */
             unit?: string | null;
         };
+        /** CandidateDTO */
+        CandidateDTO: {
+            /** Currency */
+            currency: string | null;
+            /** Includes Vat */
+            includes_vat: boolean | null;
+            /**
+             * Match Id
+             * Format: uuid
+             */
+            match_id: string;
+            /**
+             * Quotation Item Id
+             * Format: uuid
+             */
+            quotation_item_id: string;
+            /**
+             * Supplier Id
+             * Format: uuid
+             */
+            supplier_id: string;
+            /** Supplier Name */
+            supplier_name: string;
+            /** Unit Price */
+            unit_price: string | null;
+            /** Warnings */
+            warnings: string[];
+        };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["Role"];
@@ -1029,6 +1230,184 @@ export interface components {
             tender_id: string;
             /** Title */
             title: string;
+        };
+        /** EstimateDTO */
+        EstimateDTO: {
+            /** Approved At */
+            approved_at: string | null;
+            /** Approved By */
+            approved_by: string | null;
+            /** Approved By Name */
+            approved_by_name?: string | null;
+            /** Based On Version */
+            based_on_version: number | null;
+            /** Changed */
+            changed: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Currency */
+            currency: string;
+            /** Currency Locked */
+            currency_locked: boolean;
+            /** Excluded */
+            excluded: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incomplete */
+            incomplete: boolean;
+            /**
+             * Markup Basis
+             * @enum {string}
+             */
+            markup_basis: "cost" | "selling_price";
+            /** Markup Percent */
+            markup_percent: string;
+            /** Priced */
+            priced: number;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tender Id
+             * Format: uuid
+             */
+            tender_id: string;
+            totals: components["schemas"]["TotalsDTO"] | null;
+            /** Unresolved */
+            unresolved: number;
+            /** Vat Rate */
+            vat_rate: string;
+            /** Version */
+            version: number;
+        };
+        /** EstimateLineDTO */
+        EstimateLineDTO: {
+            /**
+             * Boq Item Id
+             * Format: uuid
+             */
+            boq_item_id: string;
+            /** Candidates */
+            candidates: components["schemas"]["CandidateDTO"][];
+            /** Cost */
+            cost: string | null;
+            /** Description */
+            description: string;
+            /** Exclude Reason */
+            exclude_reason: string | null;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item No */
+            item_no: string | null;
+            /** Labour Cost */
+            labour_cost: string | null;
+            /** Labour Rate */
+            labour_rate: string | null;
+            /** Markup */
+            markup: string | null;
+            /** Markup Override Percent */
+            markup_override_percent: string | null;
+            /** Match Suggestion Id */
+            match_suggestion_id: string | null;
+            /** Material Cost */
+            material_cost: string | null;
+            /** Position */
+            position: number;
+            /** Price Source */
+            price_source: string;
+            /** Quantity */
+            quantity: string | null;
+            /** Quoted Currency */
+            quoted_currency: string | null;
+            /** Quoted Includes Vat */
+            quoted_includes_vat: boolean | null;
+            /** Quoted Unit Price */
+            quoted_unit_price: string | null;
+            /** Section */
+            section: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "priced" | "excluded" | "unresolved" | "changed";
+            /** Supplier Id */
+            supplier_id: string | null;
+            /** Supplier Name */
+            supplier_name: string | null;
+            /** Total */
+            total: string | null;
+            /** Unit */
+            unit: string | null;
+            /** Unit Mismatch Acknowledged */
+            unit_mismatch_acknowledged: boolean;
+            /** Unit Price Ex Vat */
+            unit_price_ex_vat: string | null;
+        };
+        /** EstimatePatch */
+        EstimatePatch: {
+            /** Currency */
+            currency?: string | null;
+            /** Markup Basis */
+            markup_basis?: ("cost" | "selling_price") | null;
+            /** Markup Percent */
+            markup_percent?: string | null;
+            /** Vat Rate */
+            vat_rate?: string | null;
+        };
+        /** EstimateSummaryDTO */
+        EstimateSummaryDTO: {
+            /** Approved At */
+            approved_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Current Approved
+             * @default false
+             */
+            is_current_approved: boolean;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tender Id
+             * Format: uuid
+             */
+            tender_id: string;
+            totals: components["schemas"]["TotalsDTO"] | null;
+            /** Version */
+            version: number;
         };
         /** ExtractRequest */
         ExtractRequest: {
@@ -1096,6 +1475,27 @@ export interface components {
             /** Kind */
             kind: string;
             run: components["schemas"]["RunDTO"] | null;
+        };
+        /**
+         * LinePut
+         * @description Choose the line's price: exactly one of a confirmed match, a manual price or an exclusion.
+         */
+        LinePut: {
+            /** Exclude Reason */
+            exclude_reason?: string | null;
+            /** Labour Rate */
+            labour_rate?: string | null;
+            /** Manual Unit Price */
+            manual_unit_price?: string | null;
+            /** Markup Override Percent */
+            markup_override_percent?: string | null;
+            /** Match Suggestion Id */
+            match_suggestion_id?: string | null;
+            /**
+             * Unit Mismatch Acknowledged
+             * @default false
+             */
+            unit_mismatch_acknowledged: boolean;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1282,6 +1682,39 @@ export interface components {
             text: string;
             /** Text Source */
             text_source: string;
+        };
+        /** PricingDefaultsDTO */
+        PricingDefaultsDTO: {
+            /** Currency */
+            currency: string;
+            /** Default Markup Percent */
+            default_markup_percent: string;
+            /**
+             * Markup Basis
+             * @enum {string}
+             */
+            markup_basis: "cost" | "selling_price";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Vat Rate */
+            vat_rate: string;
+        };
+        /** PricingDefaultsPut */
+        PricingDefaultsPut: {
+            /** Currency */
+            currency: string;
+            /** Default Markup Percent */
+            default_markup_percent: string;
+            /**
+             * Markup Basis
+             * @enum {string}
+             */
+            markup_basis: "cost" | "selling_price";
+            /** Vat Rate */
+            vat_rate: string;
         };
         /** QuotationDTO */
         QuotationDTO: {
@@ -1715,6 +2148,19 @@ export interface components {
             status?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /** TotalsDTO */
+        TotalsDTO: {
+            /** Markup Total */
+            markup_total: string;
+            /** Subtotal Cost */
+            subtotal_cost: string;
+            /** Subtotal Ex Vat */
+            subtotal_ex_vat: string;
+            /** Total Inc Vat */
+            total_inc_vat: string;
+            /** Vat Total */
+            vat_total: string;
         };
         /** UploadResultDTO */
         UploadResultDTO: {
@@ -2358,6 +2804,266 @@ export interface operations {
             };
         };
     };
+    put_line_api_v1_estimate_lines__line_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinePut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateLineDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_line_api_v1_estimate_lines__line_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                line_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateLineDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_estimate_api_v1_estimates__estimate_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_estimate_api_v1_estimates__estimate_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimatePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_estimate_api_v1_estimates__estimate_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lines_api_v1_estimates__estimate_id__lines_get: {
+        parameters: {
+            query?: {
+                status?: ("priced" | "excluded" | "unresolved" | "changed") | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateLineDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_estimate_api_v1_estimates__estimate_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_estimate_api_v1_estimates__estimate_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                estimate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -2403,6 +3109,37 @@ export interface operations {
         };
     };
     get_job_api_v1_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_job_api_v1_jobs__job_id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2747,6 +3484,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pricing_defaults_api_v1_pricing_defaults_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingDefaultsDTO"];
+                };
+            };
+        };
+    };
+    put_pricing_defaults_api_v1_pricing_defaults_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PricingDefaultsPut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingDefaultsDTO"];
                 };
             };
             /** @description Validation Error */
@@ -3357,6 +4147,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_estimates_api_v1_tenders__tender_id__estimates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateSummaryDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_estimate_api_v1_tenders__tender_id__estimates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDTO"];
                 };
             };
             /** @description Validation Error */

@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.kernel import Conflict, OrgContext, Permission
+from app.modules.audit import public as audit
 
 from .models import Job
 from .repo import JobRepo, QueueRepo
@@ -66,6 +67,23 @@ def retry_job(session: Session, ctx: OrgContext, job_id: UUID) -> JobDTO:
     return _dto(fresh)
 
 
+def cancel_job(session: Session, ctx: OrgContext, job_id: UUID) -> JobDTO:
+    """Cancel a queued or running job. A job that already finished is returned unchanged. A
+    running job notices at its next progress heartbeat and stops without storing anything."""
+    ctx.require(Permission.REVIEW_DATA)
+    job, previous = JobRepo(session, ctx).cancel(job_id)  # NotFound for another organisation
+    if previous is not None:
+        audit.record(
+            session,
+            ctx,
+            "job",
+            job.id,
+            "job_cancelled",
+            {"job_type": job.job_type, "subject_id": str(job.subject_id), "old_status": previous},
+        )
+    return _dto(job)
+
+
 # --- worker side (system level) ----------------------------------------------------------------
 
 
@@ -96,6 +114,10 @@ def claim_next(session: Session, lease_seconds: int) -> ClaimedJob | None:
 
 def heartbeat(session: Session, job_id: UUID, done: int, total: int, lease_seconds: int) -> None:
     QueueRepo(session).heartbeat(job_id, done, total, lease_seconds)
+
+
+def is_cancelled(session: Session, job_id: UUID) -> bool:
+    return QueueRepo(session).status_of(job_id) == "cancelled"
 
 
 def complete(session: Session, job_id: UUID, warnings: list[Any]) -> None:

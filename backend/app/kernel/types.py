@@ -25,6 +25,8 @@ class Permission(StrEnum):
     MANAGE_TASKS = "manage_tasks"
     EXPORT = "export"
     VIEW_AUDIT = "view_audit"
+    APPROVE_ESTIMATE = "approve_estimate"
+    MANAGE_PRICING = "manage_pricing"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -46,6 +48,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.MANAGE_TASKS,
             Permission.EXPORT,
             Permission.VIEW_AUDIT,
+            Permission.APPROVE_ESTIMATE,
         }
     ),
     Role.REVIEWER: frozenset({Permission.READ}),

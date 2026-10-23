@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from app.config import get_settings
 from app.infrastructure.llm import (
     FakeLLM,
     FallbackLLM,
@@ -148,9 +149,42 @@ def test_kimi_request_and_response(server) -> None:
     assert result.raw_json == '{"requirements": []}'
     assert (result.done_reason, result.tokens_in, result.tokens_out) == ("stop", 42, 7)
     assert seen["model"] == "kimi-k2.6" and seen["stream"] is False
+    # A hosted model that ignores "thinking: disabled" must still be bounded (billed tokens).
+    assert seen["max_tokens"] == get_settings().llm_num_predict > 0
     assert seen["messages"][0] == {"role": "system", "content": "sys"}
     assert seen["response_format"]["type"] == "json_schema"
     assert seen["response_format"]["json_schema"]["schema"] == SCHEMA
+
+
+def test_kimi_request_does_not_use_the_default_python_user_agent() -> None:
+    """Some gateways (Mammouth behind Cloudflare, error 1010) refuse urllib's own agent."""
+    seen: dict[str, str] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            self.rfile.read(int(self.headers["Content-Length"]))
+            seen["agent"] = self.headers.get("User-Agent", "")
+            data = json.dumps(
+                {"choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}]}
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        _kimi(f"http://127.0.0.1:{httpd.server_address[1]}").generate_structured(
+            "sys", "usr", SCHEMA
+        )
+    finally:
+        httpd.shutdown()
+    assert seen["agent"].startswith("IntelTPS/")
+    assert "urllib" not in seen["agent"]
 
 
 def test_kimi_unreachable_is_unavailable() -> None:

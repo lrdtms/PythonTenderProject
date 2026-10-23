@@ -44,6 +44,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               Members
             </Link>
           ) : null}
+          {me.permissions.includes("manage_pricing") ? (
+            <Link href="/settings/pricing" className="text-sm hover:underline">
+              Pricing
+            </Link>
+          ) : null}
         </nav>
         <div className="flex items-center gap-4 text-sm">
           <span>{me.organisation_name}</span>

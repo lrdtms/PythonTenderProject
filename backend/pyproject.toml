@@ -73,3 +73,15 @@ name = "Kernel and extraction are pure (no web framework, no ORM)"
 type = "forbidden"
 source_modules = ["app.kernel", "app.modules.extraction"]
 forbidden_modules = ["fastapi", "sqlalchemy"]
+
+[[tool.importlinter.contracts]]
+name = "estimates is isolated from the other modules"
+type = "forbidden"
+source_modules = ["app.modules.estimates"]
+forbidden_modules = [
+    "app.modules.estimating",
+    "app.modules.suppliers",
+    "app.modules.documents",
+    "app.modules.tenders",
+    "app.modules.identity",
+]

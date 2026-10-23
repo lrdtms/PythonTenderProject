@@ -349,6 +349,81 @@
         "title": "BoqPatch",
         "type": "object"
       },
+      "CandidateDTO": {
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "includes_vat": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Includes Vat"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "quotation_item_id": {
+            "format": "uuid",
+            "title": "Quotation Item Id",
+            "type": "string"
+          },
+          "supplier_id": {
+            "format": "uuid",
+            "title": "Supplier Id",
+            "type": "string"
+          },
+          "supplier_name": {
+            "title": "Supplier Name",
+            "type": "string"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "match_id",
+          "supplier_id",
+          "supplier_name",
+          "quotation_item_id",
+          "unit_price",
+          "currency",
+          "includes_vat",
+          "warnings"
+        ],
+        "title": "CandidateDTO",
+        "type": "object"
+      },
       "ChangeRoleRequest": {
         "properties": {
           "role": {
@@ -454,6 +529,637 @@
           "created_at"
         ],
         "title": "DocumentDTO",
+        "type": "object"
+      },
+      "EstimateDTO": {
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "approved_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By Name"
+          },
+          "based_on_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Based On Version"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "currency_locked": {
+            "title": "Currency Locked",
+            "type": "boolean"
+          },
+          "excluded": {
+            "title": "Excluded",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incomplete": {
+            "title": "Incomplete",
+            "type": "boolean"
+          },
+          "markup_basis": {
+            "enum": [
+              "cost",
+              "selling_price"
+            ],
+            "title": "Markup Basis",
+            "type": "string"
+          },
+          "markup_percent": {
+            "title": "Markup Percent",
+            "type": "string"
+          },
+          "priced": {
+            "title": "Priced",
+            "type": "integer"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "reviewed_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By Name"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tender_id": {
+            "format": "uuid",
+            "title": "Tender Id",
+            "type": "string"
+          },
+          "totals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TotalsDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unresolved": {
+            "title": "Unresolved",
+            "type": "integer"
+          },
+          "vat_rate": {
+            "title": "Vat Rate",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tender_id",
+          "version",
+          "status",
+          "currency",
+          "vat_rate",
+          "markup_basis",
+          "markup_percent",
+          "based_on_version",
+          "totals",
+          "priced",
+          "excluded",
+          "unresolved",
+          "changed",
+          "incomplete",
+          "created_by",
+          "created_at",
+          "reviewed_by",
+          "reviewed_at",
+          "approved_by",
+          "approved_at",
+          "currency_locked"
+        ],
+        "title": "EstimateDTO",
+        "type": "object"
+      },
+      "EstimateLineDTO": {
+        "properties": {
+          "boq_item_id": {
+            "format": "uuid",
+            "title": "Boq Item Id",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateDTO"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "exclude_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Reason"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item No"
+          },
+          "labour_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labour Cost"
+          },
+          "labour_rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labour Rate"
+          },
+          "markup": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup"
+          },
+          "markup_override_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup Override Percent"
+          },
+          "match_suggestion_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Suggestion Id"
+          },
+          "material_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Cost"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "price_source": {
+            "title": "Price Source",
+            "type": "string"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "quoted_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quoted Currency"
+          },
+          "quoted_includes_vat": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quoted Includes Vat"
+          },
+          "quoted_unit_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quoted Unit Price"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "status": {
+            "enum": [
+              "priced",
+              "excluded",
+              "unresolved",
+              "changed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "unit_mismatch_acknowledged": {
+            "title": "Unit Mismatch Acknowledged",
+            "type": "boolean"
+          },
+          "unit_price_ex_vat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price Ex Vat"
+          }
+        },
+        "required": [
+          "id",
+          "boq_item_id",
+          "position",
+          "section",
+          "item_no",
+          "description",
+          "unit",
+          "quantity",
+          "status",
+          "price_source",
+          "match_suggestion_id",
+          "supplier_id",
+          "supplier_name",
+          "quoted_unit_price",
+          "quoted_currency",
+          "quoted_includes_vat",
+          "unit_price_ex_vat",
+          "labour_rate",
+          "markup_override_percent",
+          "exclude_reason",
+          "unit_mismatch_acknowledged",
+          "material_cost",
+          "labour_cost",
+          "cost",
+          "markup",
+          "total",
+          "flags",
+          "candidates"
+        ],
+        "title": "EstimateLineDTO",
+        "type": "object"
+      },
+      "EstimatePatch": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "markup_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cost",
+                  "selling_price"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup Basis"
+          },
+          "markup_percent": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup Percent"
+          },
+          "vat_rate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Rate"
+          }
+        },
+        "title": "EstimatePatch",
+        "type": "object"
+      },
+      "EstimateSummaryDTO": {
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_current_approved": {
+            "default": false,
+            "title": "Is Current Approved",
+            "type": "boolean"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tender_id": {
+            "format": "uuid",
+            "title": "Tender Id",
+            "type": "string"
+          },
+          "totals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TotalsDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tender_id",
+          "version",
+          "status",
+          "currency",
+          "totals",
+          "created_at",
+          "reviewed_at",
+          "approved_at"
+        ],
+        "title": "EstimateSummaryDTO",
         "type": "object"
       },
       "ExtractRequest": {
@@ -635,6 +1341,80 @@
           "run"
         ],
         "title": "KindStatusDTO",
+        "type": "object"
+      },
+      "LinePut": {
+        "additionalProperties": false,
+        "description": "Choose the line's price: exactly one of a confirmed match, a manual price or an exclusion.",
+        "properties": {
+          "exclude_reason": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Reason"
+          },
+          "labour_rate": {
+            "anyOf": [
+              {
+                "pattern": "^-?\\d{1,14}(\\.\\d{1,4})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labour Rate"
+          },
+          "manual_unit_price": {
+            "anyOf": [
+              {
+                "pattern": "^-?\\d{1,14}(\\.\\d{1,4})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Unit Price"
+          },
+          "markup_override_percent": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markup Override Percent"
+          },
+          "match_suggestion_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Suggestion Id"
+          },
+          "unit_mismatch_acknowledged": {
+            "default": false,
+            "title": "Unit Mismatch Acknowledged",
+            "type": "boolean"
+          }
+        },
+        "title": "LinePut",
         "type": "object"
       },
       "LoginRequest": {
@@ -1169,6 +1949,80 @@
           "tables"
         ],
         "title": "PageDetailDTO",
+        "type": "object"
+      },
+      "PricingDefaultsDTO": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "default_markup_percent": {
+            "title": "Default Markup Percent",
+            "type": "string"
+          },
+          "markup_basis": {
+            "enum": [
+              "cost",
+              "selling_price"
+            ],
+            "title": "Markup Basis",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "vat_rate": {
+            "title": "Vat Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "vat_rate",
+          "markup_basis",
+          "default_markup_percent",
+          "updated_at"
+        ],
+        "title": "PricingDefaultsDTO",
+        "type": "object"
+      },
+      "PricingDefaultsPut": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "default_markup_percent": {
+            "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+            "title": "Default Markup Percent",
+            "type": "string"
+          },
+          "markup_basis": {
+            "enum": [
+              "cost",
+              "selling_price"
+            ],
+            "title": "Markup Basis",
+            "type": "string"
+          },
+          "vat_rate": {
+            "pattern": "^\\d{1,4}(\\.\\d{1,2})?$",
+            "title": "Vat Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "vat_rate",
+          "markup_basis",
+          "default_markup_percent"
+        ],
+        "title": "PricingDefaultsPut",
         "type": "object"
       },
       "QuotationDTO": {
@@ -2505,6 +3359,39 @@
         "title": "TenderUpdate",
         "type": "object"
       },
+      "TotalsDTO": {
+        "properties": {
+          "markup_total": {
+            "title": "Markup Total",
+            "type": "string"
+          },
+          "subtotal_cost": {
+            "title": "Subtotal Cost",
+            "type": "string"
+          },
+          "subtotal_ex_vat": {
+            "title": "Subtotal Ex Vat",
+            "type": "string"
+          },
+          "total_inc_vat": {
+            "title": "Total Inc Vat",
+            "type": "string"
+          },
+          "vat_total": {
+            "title": "Vat Total",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subtotal_cost",
+          "markup_total",
+          "subtotal_ex_vat",
+          "vat_total",
+          "total_inc_vat"
+        ],
+        "title": "TotalsDTO",
+        "type": "object"
+      },
       "UploadResultDTO": {
         "properties": {
           "document": {
@@ -3557,6 +4444,417 @@
         ]
       }
     },
+    "/api/v1/estimate-lines/{line_id}": {
+      "put": {
+        "operationId": "put_line_api_v1_estimate_lines__line_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinePut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateLineDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Line",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimate-lines/{line_id}/refresh": {
+      "post": {
+        "operationId": "refresh_line_api_v1_estimate_lines__line_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateLineDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Line",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimates/{estimate_id}": {
+      "get": {
+        "operationId": "get_estimate_api_v1_estimates__estimate_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Estimate",
+        "tags": [
+          "estimates"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_estimate_api_v1_estimates__estimate_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimatePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Estimate",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimates/{estimate_id}/approve": {
+      "post": {
+        "operationId": "approve_estimate_api_v1_estimates__estimate_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Estimate",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimates/{estimate_id}/lines": {
+      "get": {
+        "operationId": "get_lines_api_v1_estimates__estimate_id__lines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "priced",
+                    "excluded",
+                    "unresolved",
+                    "changed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EstimateLineDTO"
+                  },
+                  "title": "Response Get Lines Api V1 Estimates  Estimate Id  Lines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lines",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimates/{estimate_id}/reopen": {
+      "post": {
+        "operationId": "reopen_estimate_api_v1_estimates__estimate_id__reopen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reopen Estimate",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
+    "/api/v1/estimates/{estimate_id}/review": {
+      "post": {
+        "operationId": "review_estimate_api_v1_estimates__estimate_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "estimate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Estimate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Estimate",
+        "tags": [
+          "estimates"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "health_api_v1_health_get",
@@ -3639,6 +4937,49 @@
           }
         },
         "summary": "Get Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_job_api_v1_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Job",
         "tags": [
           "jobs"
         ]
@@ -4083,6 +5424,66 @@
         "summary": "Change Role",
         "tags": [
           "members"
+        ]
+      }
+    },
+    "/api/v1/pricing-defaults": {
+      "get": {
+        "operationId": "get_pricing_defaults_api_v1_pricing_defaults_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingDefaultsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Pricing Defaults",
+        "tags": [
+          "estimates"
+        ]
+      },
+      "put": {
+        "operationId": "put_pricing_defaults_api_v1_pricing_defaults_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricingDefaultsPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingDefaultsDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Pricing Defaults",
+        "tags": [
+          "estimates"
         ]
       }
     },
@@ -4947,6 +6348,94 @@
         "summary": "Upload Document",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/api/v1/tenders/{tender_id}/estimates": {
+      "get": {
+        "operationId": "list_estimates_api_v1_tenders__tender_id__estimates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tender_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tender Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EstimateSummaryDTO"
+                  },
+                  "title": "Response List Estimates Api V1 Tenders  Tender Id  Estimates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Estimates",
+        "tags": [
+          "estimates"
+        ]
+      },
+      "post": {
+        "operationId": "create_estimate_api_v1_tenders__tender_id__estimates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tender_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tender Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDTO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Estimate",
+        "tags": [
+          "estimates"
         ]
       }
     },

@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.db.scoped import ScopedRepository
+from app.kernel import JobCancelled, NotFound
 
 from .models import ACTIVE_STATUSES, Job
 
@@ -72,6 +73,27 @@ class JobRepo(ScopedRepository[Job]):
         )
         return existing[0]
 
+    def cancel(self, job_id: UUID) -> tuple[Job, str | None]:
+        """Cancel a queued or running job under a row lock. A job in any other state is left
+        as it is. Returns the job and the status it had when it was cancelled (None if it was
+        not changed)."""
+        job = self.session.scalar(
+            self._select()
+            .where(Job.id == job_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if job is None:
+            raise NotFound("Job not found")
+        if job.status not in ACTIVE_STATUSES:
+            return job, None
+        previous = job.status
+        job.status = "cancelled"
+        job.completed_at = datetime.now(UTC)
+        job.leased_until = None
+        self.session.flush()
+        return job, previous
+
 
 class QueueRepo:
     """Worker-side operations (not organisation-scoped: the worker serves every organisation)."""
@@ -124,7 +146,8 @@ class QueueRepo:
         return self.session.get(Job, row[0])
 
     def heartbeat(self, job_id: UUID, done: int, total: int, lease_seconds: int) -> None:
-        self.session.execute(
+        """Extend the lease and record progress. Raises JobCancelled when the job was cancelled."""
+        result = self.session.execute(
             update(Job)
             .where(Job.id == job_id, Job.status == "running")
             .values(
@@ -133,13 +156,18 @@ class QueueRepo:
                 leased_until=datetime.now(UTC) + timedelta(seconds=lease_seconds),
             )
         )
+        if result.rowcount == 0 and self.status_of(job_id) == "cancelled":
+            raise JobCancelled
+
+    def status_of(self, job_id: UUID) -> str | None:
+        return self.session.scalar(select(Job.status).where(Job.id == job_id))
 
     def finish(
         self, job_id: UUID, status: str, warnings: list[Any], error_code: str | None
     ) -> None:
         self.session.execute(
             update(Job)
-            .where(Job.id == job_id)
+            .where(Job.id == job_id, Job.status != "cancelled")
             .values(
                 status=status,
                 warnings=warnings,
@@ -152,7 +180,7 @@ class QueueRepo:
     def requeue(self, job_id: UUID, error_code: str, delay_seconds: int) -> None:
         self.session.execute(
             update(Job)
-            .where(Job.id == job_id)
+            .where(Job.id == job_id, Job.status == "running")
             .values(
                 status="queued",
                 error_code=error_code,

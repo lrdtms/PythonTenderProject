@@ -16,6 +16,13 @@ class RunRepo(ScopedRepository[ExtractionRun]):
         rows = self.find(ExtractionRun.job_id == job_id, ExtractionRun.kind == kind, limit=1)
         return rows[0] if rows else None
 
+    def locked_for_job(self, job_id: UUID, *, skip_locked: bool) -> list[ExtractionRun]:
+        """The job's runs, row-locked. With `skip_locked`, rows another transaction holds are
+        left out instead of waited for."""
+        stmt = self._select().where(ExtractionRun.job_id == job_id)
+        stmt = stmt.with_for_update(skip_locked=skip_locked)
+        return list(self.session.scalars(stmt).all())
+
     def current_for_version(self, version_id: UUID) -> dict[str, ExtractionRun]:
         """The latest run per kind (later rows overwrite earlier ones)."""
         rows = self.find(

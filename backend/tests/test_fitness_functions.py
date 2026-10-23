@@ -62,6 +62,8 @@ REQUESTS = {
         "json": {"description": "hijacked"}
     },
     ("PATCH", "/api/v1/suppliers/{supplier_id}"): lambda: {"json": {"name": "hijacked"}},
+    ("PATCH", "/api/v1/estimates/{estimate_id}"): lambda: {"json": {"vat_rate": "1"}},
+    ("PUT", "/api/v1/estimate-lines/{line_id}"): lambda: {"json": {"exclude_reason": "hijacked"}},
     ("POST", "/api/v1/suppliers/{supplier_id}/merge"): lambda: {
         "json": {"into_id": "00000000-0000-0000-0000-000000000001"}
     },
@@ -93,7 +95,24 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         for m in org_b.client.get("/api/v1/members").json()
         if m["email"] == "b2@example.com"
     )
+    assert (
+        org_b.client.put(
+            "/api/v1/pricing-defaults",
+            json={
+                "currency": "ZAR",
+                "vat_rate": "15",
+                "markup_basis": "cost",
+                "default_markup_percent": "10",
+            },
+        ).status_code
+        == 200
+    )
+    estimate_b = org_b.client.post(f"/api/v1/tenders/{tender_b}/estimates")
+    assert estimate_b.status_code == 201, estimate_b.text
+    line_b = org_b.client.get(f"/api/v1/estimates/{estimate_b.json()['id']}/lines").json()
     known = {
+        "estimate_id": estimate_b.json()["id"],
+        "line_id": line_b[0]["id"],
         "tender_id": tender_b,
         "document_id": uploaded["document"]["id"],
         "version_id": uploaded["version"]["id"],
@@ -147,6 +166,8 @@ def test_f1_every_route_with_an_id_refuses_another_organisations_data() -> None:
         "quotations",
         "quotation-items",
         "match-suggestions",
+        "estimates",
+        "estimate-lines",
     ):
         assert any(needle in p for p in paths), f"no {needle} route was swept"
 
@@ -321,19 +342,37 @@ def test_migrations_match_the_models() -> None:
         (
             "reviewer",
             {"read"},
-            {"edit_tenders", "manage_members", "upload_documents", "review_data"},
+            {
+                "edit_tenders",
+                "manage_members",
+                "upload_documents",
+                "review_data",
+                "approve_estimate",
+                "manage_pricing",
+            },
         ),
         (
             "estimator",
             {"read", "edit_tenders", "upload_documents", "review_data"},
-            {"manage_members"},
+            {"manage_members", "approve_estimate", "manage_pricing"},
         ),
         (
             "project_manager",
-            {"read", "edit_tenders", "manage_tasks"},
-            {"upload_documents", "manage_members"},
+            {"read", "edit_tenders", "manage_tasks", "approve_estimate"},
+            {"upload_documents", "manage_members", "manage_pricing"},
         ),
-        ("admin", {"read", "manage_members", "edit_tenders", "view_audit"}, set()),
+        (
+            "admin",
+            {
+                "read",
+                "manage_members",
+                "edit_tenders",
+                "view_audit",
+                "approve_estimate",
+                "manage_pricing",
+            },
+            set(),
+        ),
     ],
 )
 def test_role_permission_matrix(role: str, allowed: set[str], denied: set[str]) -> None:

@@ -54,3 +54,8 @@ class ProcessingFailed(Exception):
         super().__init__(message or error_code)
         self.error_code = error_code
         self.transient = transient
+
+
+class JobCancelled(Exception):
+    """Raised inside a running job when it was cancelled: the worker stops without recording a
+    failure, and the handler's uncommitted work is rolled back."""

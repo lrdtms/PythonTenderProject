@@ -82,6 +82,10 @@ export function TenderWorkspace() {
         <Link href={`/tenders/${id}/suppliers`} className="underline">
           Compare suppliers
         </Link>
+        {" · "}
+        <Link href={`/tenders/${id}/estimate`} className="underline">
+          Estimate
+        </Link>
       </p>
 
       {!archived ? <UploadForm tenderId={id} /> : null}

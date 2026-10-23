@@ -16,7 +16,8 @@ flowchart TB
         DOC["documents<br/>uploads, versions, file links"]
         KNW["knowledge<br/>parse, OCR, chunk, embed,<br/>hybrid search (only path)"]
         EXT["extraction<br/>BoQ table parser, LLM prompts,<br/>schemas, validators (pure core)"]
-        EST["estimating<br/>BoQ items, Decimal calcs, estimates"]
+        EST["estimating<br/>BoQ items and review"]
+        EST2["estimates<br/>pricing, estimates, pure calc.py"]
         SUP["suppliers<br/>quotations, matching, decisions"]
         CHK["checklist<br/>requirements, tasks, deadlines"]
         REP["reporting<br/>Excel/PDF exports"]
@@ -36,12 +37,13 @@ flowchart TB
         STO["storage: LocalVolume,<br/>(later) Blob/S3"]
     end
 
-    API --> IDN & BIL & TEN & DOC & EST & SUP & CHK & REP & QA & AUD & KNW
+    API --> IDN & BIL & TEN & DOC & EST & EST2 & SUP & CHK & REP & QA & AUD & KNW
     WRK --> DOC & KNW & EXT & EST & SUP & CHK & REP & AUD
 
     DOC --> TEN & BIL & AUD
     KNW --> DOC
     EST --> TEN & AUD
+    EST2 --> AUD
     SUP --> EST & DOC & AUD
     CHK --> TEN & IDN & AUD
     REP --> EST & CHK & TEN & AUD

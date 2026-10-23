@@ -1,7 +1,10 @@
 """Public surface of the jobs module."""
 
+from app.kernel import JobCancelled
+
 from .schemas import ClaimedJob, JobDTO
 from .service import (
+    cancel_job,
     claim_next,
     complete,
     enqueue,
@@ -11,6 +14,7 @@ from .service import (
     get_for_worker,
     get_job,
     heartbeat,
+    is_cancelled,
     latest_job_for_subject,
     reap_exhausted,
     retry_job,
@@ -18,7 +22,9 @@ from .service import (
 
 __all__ = [
     "ClaimedJob",
+    "JobCancelled",
     "JobDTO",
+    "cancel_job",
     "claim_next",
     "complete",
     "enqueue",
@@ -28,6 +34,7 @@ __all__ = [
     "get_for_worker",
     "get_job",
     "heartbeat",
+    "is_cancelled",
     "latest_job_for_subject",
     "reap_exhausted",
     "retry_job",
