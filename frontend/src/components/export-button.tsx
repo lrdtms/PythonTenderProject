@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useId, useRef } from "react";
 
 import { type Export, exportDownloadPath, useCreateExport } from "@/api/exports";
 import { useCan } from "@/components/auth-gate";
@@ -32,6 +32,7 @@ export function ExportButton({ tenderId, kind, estimateId, label, draftNote }: P
   const client = useQueryClient();
   const create = useCreateExport(tenderId);
   const busy = useRef(false);
+  const noteId = useId();
 
   if (!allowed) return null;
 
@@ -43,8 +44,12 @@ export function ExportButton({ tenderId, kind, estimateId, label, draftNote }: P
       {
         onSuccess: (file) => {
           startDownload(file);
-          void client.invalidateQueries({ queryKey: ["estimates"] });
-          void client.invalidateQueries({ queryKey: ["estimate"] });
+          if (kind === "checklist_pdf") {
+            void client.invalidateQueries({ queryKey: ["checklist", tenderId, "unreviewed"] });
+          } else {
+            void client.invalidateQueries({ queryKey: ["estimates"] });
+            void client.invalidateQueries({ queryKey: ["estimate"] });
+          }
         },
         onSettled: () => {
           busy.current = false;
@@ -54,34 +59,42 @@ export function ExportButton({ tenderId, kind, estimateId, label, draftNote }: P
   };
 
   const done = create.isSuccess ? create.data : null;
+  const showNote = !!draftNote && !done;
 
   return (
     <div className="flex flex-col gap-1">
-      {draftNote && !done && <p className="text-sm text-gray-700">{draftNote}</p>}
+      {showNote && (
+        <p id={noteId} className="text-sm font-medium text-amber-800 dark:text-amber-300">
+          {draftNote}
+        </p>
+      )}
       <div>
         <button
           type="button"
           className="rounded border px-3 py-1 text-sm disabled:opacity-50"
           disabled={create.isPending}
+          aria-describedby={showNote ? noteId : undefined}
           onClick={run}
         >
           {create.isPending ? "Preparing file" : label}
         </button>
       </div>
       {create.isError && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
           {exportErrorText(create.error)}
         </p>
       )}
-      {done && (
-        <p role="status" className="text-sm">
-          Downloaded{" "}
-          <a className="underline" href={exportDownloadPath(done.id)} download={done.file_name}>
-            {done.file_name}
-          </a>
-          {done.label !== "approved" && " (marked DRAFT)"}
-        </p>
-      )}
+      <p role="status" aria-live="polite" className="text-sm text-zinc-800 dark:text-zinc-200">
+        {done && (
+          <>
+            Downloaded{" "}
+            <a className="underline" href={exportDownloadPath(done.id)} download={done.file_name}>
+              {done.file_name}
+            </a>
+            {done.label !== "approved" && " (marked DRAFT)"}
+          </>
+        )}
+      </p>
     </div>
   );
 }

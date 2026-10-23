@@ -46,12 +46,18 @@ export function ChecklistView() {
   const canExport = useCan("export");
   const open = useTenderRequirements(id, { reviewStatus: "unreviewed" }, valid && !!tender.data && canExport);
   const openCount = open.rows.length;
+  // With nothing to list (no rows, or every row rejected) the report is DRAFT too.
+  const everything = useTenderRequirements(id, {}, valid && !!tender.data && canExport);
+  const nothingListed =
+    everything.isSuccess && !everything.hasNextPage && everything.rows.every((r) => r.review_status === "rejected");
   let draftNote: string | undefined;
   if (open.isError) {
     draftNote = "The report may be marked DRAFT if requirements are not reviewed yet.";
   } else if (open.isSuccess && openCount > 0) {
     const count = `${openCount} ${openCount === 1 ? "requirement is" : "requirements are"}`;
     draftNote = `${open.hasNextPage ? "At least " : ""}${count} not reviewed yet. The report will list ${openCount === 1 ? "it" : "them"} separately and be marked DRAFT.`;
+  } else if (open.isSuccess && nothingListed) {
+    draftNote = "No reviewed requirements yet. The report will be marked DRAFT.";
   }
 
   // version id -> document title, so each row says where it came from.

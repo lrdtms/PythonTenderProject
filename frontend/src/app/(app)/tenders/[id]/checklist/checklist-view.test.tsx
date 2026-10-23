@@ -163,6 +163,12 @@ describe("ChecklistView", () => {
       await waitFor(() => expect(screen.queryByText(/not reviewed yet/)).toBeNull());
     });
 
+    it("warns that the report will be DRAFT when there are no non-rejected requirements", async () => {
+      setup([], [makeRequirement({ id: "r1", description: "Dropped", review_status: "rejected" })]);
+      renderSignedIn(<ChecklistView />);
+      expect(await screen.findByText("No reviewed requirements yet. The report will be marked DRAFT.")).toBeInTheDocument();
+    });
+
     it("shows the count of unreviewed requirements in the note", async () => {
       setup(unreviewed(3));
       renderSignedIn(<ChecklistView />);

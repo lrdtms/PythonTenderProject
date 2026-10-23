@@ -307,6 +307,29 @@ describe("ErrorNotice", () => {
       });
     });
 
+    it("resets the export state when another version is shown, so the DRAFT note returns", async () => {
+      mockApi(
+        routes({
+          [`GET ${T}/estimates`]: () => respond(200, [summaryOf(reviewed), summaryOf(approved)]),
+          [`GET /api/v1/estimates/${approved.id}`]: () => respond(200, approved),
+          [`GET /api/v1/estimates/${approved.id}/lines`]: () => respond(200, []),
+          [`GET /api/v1/estimates/${reviewed.id}`]: () => respond(200, reviewed),
+          [`GET /api/v1/estimates/${reviewed.id}/lines`]: () => respond(200, []),
+          [`POST ${EXPORTS}`]: () => respond(201, { id: "x1", file_name: "v2.xlsx", label: "approved", kind: "estimate_xlsx" }),
+        }),
+        exporter,
+      );
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+      renderSignedIn(<EstimateView />);
+      await screen.findByRole("button", { name: "Download Excel (DRAFT)" });
+      await userEvent.selectOptions(screen.getByLabelText("Version"), approved.id);
+      await userEvent.click(await screen.findByRole("button", { name: "Download Excel" }));
+      await screen.findByText(/Downloaded/);
+      await userEvent.selectOptions(screen.getByLabelText("Version"), reviewed.id);
+      expect(await screen.findByText("This file will be marked DRAFT because version 3 is not approved.")).toBeInTheDocument();
+      expect(screen.queryByText(/Downloaded/)).toBeNull();
+    });
+
     it("shows no export button without the export permission", async () => {
       mockApi(routes(), estimator);
       renderSignedIn(<EstimateView />);

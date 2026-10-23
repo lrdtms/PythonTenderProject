@@ -1,4 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +48,33 @@ describe("ExportButton", () => {
   it("shows the draft note before any click", async () => {
     setup(() => respond(201, dto("draft")), { draftNote: "This file will be marked DRAFT." });
     expect(await screen.findByText("This file will be marked DRAFT.")).toBeInTheDocument();
+  });
+
+  it("gives the draft note and the error a dark-theme text class", async () => {
+    setup(() => respond(409, errorBody("no_estimate", "x")), { draftNote: "This file will be marked DRAFT." });
+    const note = await screen.findByText("This file will be marked DRAFT.");
+    expect(note.className).toMatch(/dark:text-/);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Download Excel" }));
+    expect((await screen.findByRole("alert")).className).toMatch(/dark:text-/);
+  });
+
+  it("ties the note to the button and keeps a live region mounted", async () => {
+    setup(() => respond(201, dto("draft")), { draftNote: "This file will be marked DRAFT." });
+    const note = await screen.findByText("This file will be marked DRAFT.");
+    const button = screen.getByRole("button", { name: "Download Excel" });
+    expect(button.getAttribute("aria-describedby")).toBe(note.id);
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
+  it("invalidates the unreviewed-count query after a checklist export, not the estimate queries", async () => {
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    setup(() => respond(201, { ...dto("draft"), kind: "checklist_pdf" }), { kind: "checklist_pdf" });
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Download Excel" }));
+    await screen.findByText(/Downloaded/);
+    const keys = spy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+    expect(keys).toContain(JSON.stringify(["checklist", TENDER, "unreviewed"]));
+    expect(keys).not.toContain(JSON.stringify(["estimates"]));
   });
 
   it("creates once even on a double click, shows Preparing file and disables", async () => {

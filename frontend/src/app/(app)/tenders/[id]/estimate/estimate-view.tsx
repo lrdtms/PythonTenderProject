@@ -265,6 +265,7 @@ export function EstimateView() {
           />
           {e.status === "reviewed" ? <StatusBadge tone="warning" label="Not approved" /> : null}
           <ExportButton
+            key={e.id}
             tenderId={id}
             kind="estimate_xlsx"
             estimateId={e.id}
