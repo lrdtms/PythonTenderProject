@@ -67,3 +67,27 @@ class EstimateExportInput:
     lines: tuple[ExportLine, ...]
     generated_at: datetime | None = None
     export_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class ChecklistRow:
+    requirement_type: str
+    mandatory_status: str
+    description: str
+    review_status: str
+    document_title: str
+    page_number: int | None
+    evidence_verified: bool
+
+
+@dataclass(frozen=True)
+class ChecklistExportInput:
+    tender_title: str
+    tender_reference: str | None
+    client_name: str | None
+    closing_at: datetime | None
+    generated_by_name: str
+    rows: tuple[ChecklistRow, ...]
+    rejected_count: int
+    generated_at: datetime | None = None
+    export_id: UUID | None = None
