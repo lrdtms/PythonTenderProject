@@ -153,3 +153,28 @@ describe("AppShell pricing link", () => {
     expect(screen.queryByRole("link", { name: "Pricing" })).toBeNull();
   });
 });
+
+describe("AppShell audit link", () => {
+  async function renderWith(permissions: string[]) {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/me") return respond(200, { ...ME, permissions });
+      throw new Error(`unexpected request ${url}`);
+    });
+    renderWithClient(
+      <AuthGate>
+        <AppShell>content</AppShell>
+      </AuthGate>,
+    );
+    await screen.findByText("content");
+  }
+
+  it("is shown to someone who may view the audit trail", async () => {
+    await renderWith(["read", "view_audit"]);
+    expect(screen.getByRole("link", { name: "Audit" })).toHaveAttribute("href", "/audit");
+  });
+
+  it("is hidden from everyone else", async () => {
+    await renderWith(["read", "manage_members"]);
+    expect(screen.queryByRole("link", { name: "Audit" })).toBeNull();
+  });
+});
