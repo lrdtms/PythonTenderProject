@@ -19,3 +19,5 @@ Spec requirement: "Dependency and vulnerability monitoring" (base spec section 4
 - **Not exposed at runtime.** The chain is a devDependency used by ESLint to match file globs from our own config. It is not in the production image (the frontend Docker image copies only the standalone build output), and no user input reaches it.
 
 Decision: accept and document. CI gates on the runtime audit only. Re-check when a patched `braces` or a new `eslint-config-next` is released (`npm audit` after `npm update`).
+
+2026-10-23: reportlab 5.1.0 added for the PDF checklist report (Slice 6a); `pip-audit` on the exported runtime dependencies reported no known vulnerabilities, with reportlab in the exported set (slice 6a gate, commit b917d37).

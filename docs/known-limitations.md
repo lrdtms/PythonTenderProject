@@ -82,6 +82,28 @@ Observed or deferred during the build and gate:
 - **"Reopen" and "New version" sit side by side** on a reviewed estimate, and their wording can be confused. "New version" is available on a reviewed, not approved, version with no draft, as the spec provides.
 - **"Confirm all clear matches" (Slice 5a) skips rows that still show "Clear match"** where a cable-notation warning applies. At the gate these needed individual confirms. This is pre-existing 5a behaviour.
 
+## Slice 6a (exports)
+
+From the spec's known limitations (spec section 11):
+
+- **A reviewer cannot download.** The role matrix gives reviewers no `export` permission (spec D5). It is a one-line change if the owner wants reviewers to download approved files.
+- **A programmatic download of an error response saves the JSON body under the file name.** This happens on an expired session or a deleted file. The page shows the plain-words result of the create call; the download itself is not probed first.
+- **The download is an audited GET under a SameSite=Lax cookie.** A cross-site top-level link can add `export_downloaded` rows for a logged-in user. Nothing leaks, because the file goes to the user's own browser.
+- **The PDF uses the built-in Helvetica.** Characters outside WinAnsi print as `?`. Embedded TrueType (for example DejaVu) is the follow-up.
+- **The checklist PDF does not print the evidence quote.**
+- **The checklist export reads without a lock.** A review edit landing during the read may be half-included; the file shows its generated time and counts.
+- **Timestamps in files are UTC.** South African users read UTC+2; the files label times as UTC and do not convert them.
+- **No export history list, no delete, no retention.** Every click keeps a file; disk growth is bounded only by the rate limit.
+- **No section subtotals in the workbook.** The Lines sheet has a Section filter instead.
+- **A description or supplier name beginning with `=`, `+`, `-` or `@` shows a leading apostrophe in Excel.** This is the accepted cost of keeping the text inert.
+- **Values beyond 15 significant digits are text in the workbook.** The Summary says so when it happens.
+- **The workbook has not been opened in every spreadsheet application.** The Slice 6a gate had no spreadsheet application available, so it checked the workbook by reading the XML and with openpyxl only.
+
+From the Slice 6a gate (`docs/spikes/slice-6a-gate.md`):
+
+- **BoQ line text edits do not mark an estimate line "Source changed".** The line stays "Priced" until Refresh, and the edited text reaches the estimate and any export only on Refresh. This is existing Slice 5b behaviour.
+- **No Excel or desktop PDF viewer was available for the gate.** The workbook was checked by XML and openpyxl, and the PDF with PyMuPDF only. Opening both in a real desktop application is still to be done.
+
 ## Hosted model and extraction operations (22-23 Oct 2026)
 
 Details, the benchmark and the remaining necessary changes are in [hosted-llm-and-extraction-ops.md](hosted-llm-and-extraction-ops.md).
