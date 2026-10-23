@@ -225,6 +225,9 @@ def test_f1_lists_never_mix_organisations() -> None:
     assert [t["title"] for t in a.client.get("/api/v1/tenders").json()] == ["A tender"]
     assert [t["title"] for t in b.client.get("/api/v1/tenders").json()] == ["B tender"]
     assert [m["email"] for m in a.client.get("/api/v1/members").json()] == ["a@example.com"]
+    a_ids = {e["id"] for e in a.client.get("/api/v1/audit", params={"limit": 100}).json()["items"]}
+    b_ids = {e["id"] for e in b.client.get("/api/v1/audit", params={"limit": 100}).json()["items"]}
+    assert a_ids and b_ids and not a_ids & b_ids
 
 
 # --- F2: raw SQL only in repositories; layering helpers ----------------------------------------

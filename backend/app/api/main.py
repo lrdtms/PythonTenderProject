@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.errors import error_body, register_error_handlers
 from app.api.routers import (
+    audit,
     auth,
     documents,
     estimates,
@@ -69,3 +70,4 @@ app.include_router(jobs.router)
 app.include_router(matches.router)
 app.include_router(estimates.router)
 app.include_router(exports.router)
+app.include_router(audit.router)

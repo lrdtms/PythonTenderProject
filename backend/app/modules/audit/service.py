@@ -7,9 +7,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.kernel import OrgContext
+from app.kernel import OrgContext, Permission
 
 from .models import AuditEvent
+from .repo import AuditRepo, encode_cursor
+from .schemas import AuditEventDTO, AuditFacets, AuditFilters, AuditPage
 
 # Metadata keys that may be stored. Anything else is dropped so document text and secrets
 # can never reach the audit trail by accident.
@@ -49,3 +51,30 @@ def record(
             event_metadata=_safe(metadata),
         )
     )
+
+
+def _dto(e: AuditEvent) -> AuditEventDTO:
+    return AuditEventDTO(
+        id=e.id,
+        created_at=e.created_at,
+        user_id=e.user_id,
+        entity_type=e.entity_type,
+        entity_id=e.entity_id,
+        action=e.action,
+        metadata=_safe(e.event_metadata),
+    )
+
+
+def list_events(
+    session: Session, ctx: OrgContext, filters: AuditFilters, cursor: str | None, limit: int
+) -> AuditPage:
+    ctx.require(Permission.VIEW_AUDIT)
+    rows, more = AuditRepo(session, ctx).page(filters, cursor, limit)
+    next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id) if more else None
+    return AuditPage(items=[_dto(r) for r in rows], next_cursor=next_cursor)
+
+
+def facets(session: Session, ctx: OrgContext) -> AuditFacets:
+    ctx.require(Permission.VIEW_AUDIT)
+    types, actions = AuditRepo(session, ctx).facets()
+    return AuditFacets(entity_types=types, actions=actions)
