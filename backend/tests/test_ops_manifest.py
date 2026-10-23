@@ -138,3 +138,14 @@ def test_missing_pieces_are_reported_not_crashed(tmp_path: Path) -> None:
     (directory / "files.tar.gz").unlink()
     result = _verify(directory, counts)
     assert result.returncode == 1 and "files.tar.gz is missing" in result.stdout
+
+
+def test_checksums_subcommand_catches_a_tampered_dump_before_any_restore(tmp_path: Path) -> None:
+    directory, counts = _backup_dir(tmp_path)
+    _write(directory, counts)
+    ok = _run("checksums", "--dir", str(directory))
+    assert ok.returncode == 0 and "match" in ok.stdout
+    (directory / "db.dump").write_bytes(b"dump-bytez")
+    bad = _run("checksums", "--dir", str(directory))
+    assert bad.returncode == 1 and "db_sha256 differs from the manifest" in bad.stdout
+    assert _run("checksums", "--dir", str(directory / "nowhere")).returncode == 1

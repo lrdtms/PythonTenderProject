@@ -2,7 +2,9 @@
 
     python scripts/ops_manifest.py write  --dir D --counts-tsv F --file-count N --alembic-head H --git-commit C
     python scripts/ops_manifest.py verify --dir D --counts-tsv F --file-count N
+    python scripts/ops_manifest.py checksums --dir D
 
+`checksums` re-hashes the dump and the archive only (a fast check before any restore work).
 `--counts-tsv` holds one `table<TAB>row count` line per table. `verify` re-hashes the dump and
 the archive in D (catching a tampered or truncated file) and compares the counts from the
 restored copy with the ones recorded at backup time. Exit code 1 on any mismatch.
@@ -122,9 +124,31 @@ def _verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _checksums(args: argparse.Namespace) -> int:
+    directory = Path(args.dir)
+    manifest_path = directory / MANIFEST
+    if not manifest_path.is_file():
+        print(f"error: no {MANIFEST} in {directory}")
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    problems = []
+    for name, key in ((DUMP, "db_sha256"), (ARCHIVE, "files_sha256")):
+        if not (directory / name).is_file():
+            problems.append(f"{name} is missing from {directory}")
+        elif sha256_file(directory / name) != manifest.get(key):
+            problems.append(f"{key} differs from the manifest")
+    for problem in problems:
+        print(f"mismatch: {problem}")
+    if not problems:
+        print("checksums match the manifest")
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+    check = sub.add_parser("checksums")
+    check.add_argument("--dir", required=True)
     for name in ("write", "verify"):
         p = sub.add_parser(name)
         p.add_argument("--dir", required=True)
@@ -134,7 +158,8 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--alembic-head", required=True)
             p.add_argument("--git-commit", default="unknown")
     args = parser.parse_args(argv)
-    return _write(args) if args.command == "write" else _verify(args)
+    handlers = {"write": _write, "verify": _verify, "checksums": _checksums}
+    return handlers[args.command](args)
 
 
 if __name__ == "__main__":

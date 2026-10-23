@@ -10,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "scripts" / "ops"
-SCRIPTS = ["common.ps1", "start-demo.ps1", "tunnel.ps1"]
+SCRIPTS = ["common.ps1", "start-demo.ps1", "tunnel.ps1", "backup.ps1", "restore.ps1"]
 
 
 @pytest.mark.parametrize("name", SCRIPTS)
@@ -57,3 +57,23 @@ def test_tunnel_runs_preflight_in_tunnel_mode_and_reports_missing_cloudflared() 
 def test_ops_state_directories_are_ignored_by_git() -> None:
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "backups/" in ignored and ".demo/" in ignored
+
+
+def test_restore_refuses_apply_without_a_named_project_and_guards_the_live_one() -> None:
+    text = (OPS / "restore.ps1").read_text(encoding="utf-8")
+    assert "-Apply needs -Project" in text
+    assert "IKnowThisReplacesLiveData" in text and "Refusing to replace the live project" in text
+    assert "exactly one of -Verify or -Apply" in text
+
+
+def test_restore_verify_never_touches_the_live_database() -> None:
+    text = (OPS / "restore.ps1").read_text(encoding="utf-8")
+    verify_branch = text.split("if ($Verify) {", 2)[1].split("} else {", 1)[0]
+    assert "inteltps_verify" in text and "$scratchDb" in verify_branch
+    assert "DROP DATABASE IF EXISTS $name" not in verify_branch
+
+
+def test_backup_removes_a_partial_directory_and_records_the_manifest() -> None:
+    text = (OPS / "backup.ps1").read_text(encoding="utf-8")
+    assert "Remove-Item $dir -Recurse" in text
+    assert "ops_manifest.py" in text and "files.tar.gz" in text and "pg_dump -Fc" in text

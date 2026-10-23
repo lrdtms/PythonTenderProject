@@ -61,3 +61,42 @@ function Get-DemoDir {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
     return $dir
 }
+
+# ---- Compose and database helpers (backup / restore) ------------------------------------------
+
+$script:Compose = @()
+
+# Select the Compose project (and optional extra -f files) for every Invoke-Compose call.
+function Set-ComposeTarget([string]$Project, [string[]]$ComposeFile = @('docker-compose.yml')) {
+    $script:Compose = @('compose', '-p', $Project)
+    # `pwsh -File` hands a comma list over as one string, so split it here.
+    foreach ($f in ($ComposeFile | ForEach-Object { $_ -split ',' } | Where-Object { $_ })) {
+        $script:Compose += @('-f', (Join-Path (Get-RepoRoot) $f.Trim()))
+    }
+}
+
+function Invoke-Compose { & docker @script:Compose @args }
+
+# Run psql in the db container, SQL from stdin (no shell quoting). Returns output lines.
+function Invoke-Psql([string]$Sql, [string]$Database = '') {
+    $user = (Invoke-Compose exec -T db printenv POSTGRES_USER).Trim()
+    if ($Database -eq '') { $Database = (Invoke-Compose exec -T db printenv POSTGRES_DB).Trim() }
+    $out = $Sql | & docker @script:Compose exec -T db psql -v ON_ERROR_STOP=1 -U $user -d $Database -At -F "`t"
+    if ($LASTEXITCODE -ne 0) { throw "psql failed: $Sql" }
+    return $out
+}
+
+# One "table<TAB>rows" line per public table, exact counts.
+function Get-TableCounts([string]$Database = '') {
+    $sql = "SELECT table_name, (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1;"
+    return Invoke-Psql $sql $Database
+}
+
+# Run a Python tool from scripts/ with the project's interpreter.
+function Invoke-OpsPython([string]$Script, [string[]]$ScriptArgs) {
+    $root = Get-RepoRoot
+    & uv run --project (Join-Path $root 'backend') python -I (Join-Path $root "scripts/$Script") @ScriptArgs | Out-Host
+    return $LASTEXITCODE
+}
+
+function Get-FilesVolume([string]$Project) { "${Project}_files" }
