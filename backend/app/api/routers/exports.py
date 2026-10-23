@@ -13,6 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from app.api import estimate_inputs
 from app.api.deps import Ctx, DbSession, Storage
@@ -43,8 +44,8 @@ def _decimal(text: str | None) -> Decimal | None:
     return None if text is None else Decimal(text)
 
 
-def _user_name(session, ctx: OrgContext) -> str:
-    return identity.member_names(session, ctx, {ctx.user_id}).get(ctx.user_id) or "Unknown user"
+def _user_name(session: Session, ctx: OrgContext) -> str | None:
+    return identity.member_names(session, ctx, {ctx.user_id}).get(ctx.user_id)
 
 
 def _choose_version(
@@ -63,9 +64,11 @@ def _choose_version(
 
 
 def _estimate_payload(
-    session, ctx: OrgContext, tender: tenders.TenderDTO, estimate_id: UUID | None
+    session: Session, ctx: OrgContext, tender: tenders.TenderDTO, estimate_id: UUID | None
 ) -> tuple[reporting.EstimateExportInput, UUID, UUID]:
     """The payload, the chosen estimate id and the tender that estimate belongs to."""
+    # Deliberate: with no estimate_id the version is chosen before the lock (a later move is
+    # caught by the status re-read below).
     chosen = _choose_version(estimates.list_estimates(session, ctx, tender.id), estimate_id)
     live = estimates.LiveInputs()
     if chosen.status != "approved":
@@ -143,7 +146,7 @@ def _estimate_payload(
 
 
 def _checklist_payload(
-    session, ctx: OrgContext, tender: tenders.TenderDTO
+    session: Session, ctx: OrgContext, tender: tenders.TenderDTO
 ) -> reporting.ChecklistExportInput:
     docs = [d for d in documents.list_documents(session, ctx, tender.id) if d.current_version]
     order: dict[UUID, int] = {}

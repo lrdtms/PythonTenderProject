@@ -197,9 +197,9 @@ def test_perf_1000_rows() -> None:
 
 def test_rejected_row_raises() -> None:
     d = data((row(), row(review_status="rejected")))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unsupported review status"):
         render_checklist_pdf(d)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unsupported review status"):
         checklist_label(d)
 
 

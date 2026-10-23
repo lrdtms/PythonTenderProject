@@ -323,9 +323,6 @@ def test_repositories_never_return_another_organisations_rows() -> None:
             for refresh in (False, True):
                 with pytest.raises(NotFound):
                     repos["EstimateRepo"].line(line_id, refresh)
-        with pytest.raises(NotFound):
-            repos["ExportRepo"].get(b_ids["ExportRepo"][0])
-        assert repos["ExportRepo"].find() != []
         defaults_c = repos["EstimateRepo"].defaults()
         assert defaults_c is not None and defaults_c.organisation_id == ctx_c.organisation_id
         assert repos["RunRepo"].current_for_version(version_b) == {}

@@ -17,6 +17,8 @@ from app.modules.reporting.models import Export
 from app.modules.reporting.repo import ExportRepo
 from tests.conftest import make_tender, register
 
+ESTIMATE_COLS = "ck_exports_ck_exports_estimate_cols"
+
 
 def _ctx(actor) -> OrgContext:
     return OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
@@ -54,11 +56,12 @@ def _export(ctx: OrgContext, tender_id: str, **over) -> Export:
     return Export(**{**values, **over})
 
 
-def _refused(ctx: OrgContext, entity: Export) -> None:
+def _refused(ctx: OrgContext, entity: Export, constraint: str) -> None:
     with session_scope() as session:
         repo = ExportRepo(session, ctx)
-        with pytest.raises(IntegrityError), session.begin_nested():
+        with pytest.raises(IntegrityError) as exc, session.begin_nested():
             repo.add(entity)
+        assert exc.value.orig.diag.constraint_name == constraint  # type: ignore[union-attr]
 
 
 def test_valid_estimate_and_checklist_exports_are_stored() -> None:
@@ -94,7 +97,7 @@ def test_checklist_with_one_estimate_column_is_refused(which: str) -> None:
         session.commit()
         est_id = estimate.id
     extra = {"estimate_id": est_id} if which == "id_only" else {"estimate_version": 1}
-    _refused(ctx, _export(ctx, tender_id, **extra))
+    _refused(ctx, _export(ctx, tender_id, **extra), ESTIMATE_COLS)
 
 
 @pytest.mark.parametrize("which", ["id_only", "version_only", "neither"])
@@ -110,21 +113,25 @@ def test_estimate_export_needs_both_estimate_columns(which: str) -> None:
         "version_only": {"estimate_version": 1},
         "neither": {},
     }[which]
-    _refused(ctx, _export(ctx, tender_id, kind="estimate_xlsx", label="approved", **extra))
+    _refused(
+        ctx,
+        _export(ctx, tender_id, kind="estimate_xlsx", label="approved", **extra),
+        ESTIMATE_COLS,
+    )
 
 
 @pytest.mark.parametrize(
-    "over",
+    ("over", "constraint"),
     [
-        {"label": "reviewed"},  # a checklist is only draft or approved
-        {"label": "final"},
-        {"kind": "checklist_docx"},
+        ({"label": "reviewed"}, "ck_exports_ck_exports_checklist_label"),  # draft or approved
+        ({"label": "final"}, "ck_exports_ck_exports_checklist_label"),
+        ({"kind": "checklist_docx"}, "ck_exports_ck_exports_estimate_cols"),
     ],
 )
-def test_bad_kind_or_label_is_refused(over: dict) -> None:
-    actor = register(f"exp4{abs(hash(str(over))) % 10000}@example.com")
+def test_bad_kind_or_label_is_refused(over: dict, constraint: str) -> None:
+    actor = register(f"exp4{uuid4().hex[:8]}@example.com")
     ctx, tender_id = _ctx(actor), make_tender(actor)
-    _refused(ctx, _export(ctx, tender_id, **over))
+    _refused(ctx, _export(ctx, tender_id, **over), constraint)
 
 
 def test_unknown_label_on_an_estimate_export_is_refused() -> None:
@@ -144,6 +151,7 @@ def test_unknown_label_on_an_estimate_export_is_refused() -> None:
             estimate_id=est_id,
             estimate_version=1,
         ),
+        "ck_exports_ck_exports_label",
     )
 
 
@@ -164,13 +172,24 @@ def test_estimate_of_another_organisation_is_refused() -> None:
             estimate_id=est_b,
             estimate_version=1,
         ),
+        "fk_exports_estimate",
     )
+
+
+def test_tender_of_another_organisation_is_refused() -> None:
+    a, b = register("exp6c@example.com", org="Org A"), register("exp6d@example.com", org="Org B")
+    ctx_a, tender_b = _ctx(a), make_tender(b)
+    _refused(ctx_a, _export(ctx_a, tender_b), "fk_exports_tender")
 
 
 def test_generator_must_be_a_member_of_the_organisation() -> None:
     a, b = register("exp7a@example.com", org="Org A"), register("exp7b@example.com", org="Org B")
     ctx_a, tender_a = _ctx(a), make_tender(a)
-    _refused(ctx_a, _export(ctx_a, tender_a, generated_by=UUID(b.me["user_id"])))
+    _refused(
+        ctx_a,
+        _export(ctx_a, tender_a, generated_by=UUID(b.me["user_id"])),
+        "fk_exports_generator_membership",
+    )
 
 
 def test_another_organisation_cannot_read_the_export() -> None:

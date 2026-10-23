@@ -256,7 +256,9 @@ def test_export_waits_for_the_lock_and_sees_a_consistent_reopened_state() -> Non
         holder = pool.submit(hold_and_change)
         assert holding.wait(30)
         export = pool.submit(lambda: _create(actor, tender_id))
-        time.sleep(1.0)
+        # Best effort: the assertions after the release are what prove the ordering, this only
+        # gives the export request time to reach the lock.
+        time.sleep(0.5)
         assert not export.done(), "the export did not wait for the tender lock"
         release.set()
         holder.result(30)
@@ -274,6 +276,38 @@ def test_export_waits_for_the_lock_and_sees_a_consistent_reopened_state() -> Non
             assert _dec(row[18]) == _dec(ln["total"])
         else:
             assert row[18] is None
+
+
+def test_export_waits_for_the_lock_and_sees_an_estimate_approved_meanwhile() -> None:
+    actor, tender_id, est = _ready("xf3@example.com")
+    assert _move(actor, est, "review").status_code == 200
+    ctx = OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
+    holding = threading.Event()
+    release = threading.Event()
+
+    def hold_and_approve() -> None:
+        from app.api import estimate_inputs
+
+        with session_scope() as s:
+            suppliers.lock_tender(s, ctx, UUID(tender_id))
+            holding.set()
+            live = estimate_inputs.live_inputs(s, ctx, UUID(tender_id))
+            estimates.approve_estimate(s, ctx, UUID(est["id"]), live)
+            release.wait(30)
+
+    with ThreadPoolExecutor(2) as pool:
+        holder = pool.submit(hold_and_approve)
+        assert holding.wait(30)
+        export = pool.submit(lambda: _create(actor, tender_id))
+        time.sleep(0.5)  # best effort; the label below proves the ordering
+        assert not export.done(), "the export did not wait for the tender lock"
+        release.set()
+        holder.result(30)
+        made = export.result(30)
+    assert made.status_code == 201, made.text
+    assert made.json()["label"] == "approved"
+    assert "DRAFT" not in made.json()["file_name"]
+    assert _summary(_book(_download(actor, made.json()["id"])))["Status"] == "Approved"
 
 
 # --- checklist PDF ---------------------------------------------------------------------------
@@ -329,13 +363,13 @@ def _all_requirements(actor, tender_id: str) -> dict[str, dict]:
 
 def test_checklist_pdf_orders_rows_and_handles_review_states() -> None:
     actor, tender_id, first, second = _checklist_tender("xp1@example.com")
-    _seed_requirements(actor, first, [_req("FIRSTLATE", 5), _req("FIRSTEARLY", 1)])
+    _seed_requirements(actor, first, [_req("FIRSTLATE", 5), _req("FIRSTEARLY", 3)])
     _seed_requirements(
         actor,
         second,
         [
-            _req("SECONDREJECT", 0),
-            _req("SECONDCONFIRM", 1),
+            _req("SECONDREJECT", 4),
+            _req("SECONDCONFIRM", 0),
             _req("SECONDCORRECT", 2, "eligibility"),
             _req("SECONDPENDING", 3),
         ],
@@ -356,7 +390,8 @@ def test_checklist_pdf_orders_rows_and_handles_review_states() -> None:
     assert "SECONDPENDING" in text and "Not yet reviewed (1)" in text
     assert text.index("Not yet reviewed (1)") < text.index("SECONDPENDING")
     assert "FIXED" in text and "Eligibility" in text
-    # document order, then source order, inside a type
+    # document order, then source order inside a document. SECONDCONFIRM has the lowest source
+    # order of all, so ordering by source order alone would put it first.
     listed = actor.client.get(f"{TENDERS}/{tender_id}/documents").json()
     names = [d["current_version"]["filename"] for d in listed]
     assert sorted(names) == ["first.pdf", "second.pdf"]

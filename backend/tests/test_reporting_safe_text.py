@@ -38,7 +38,7 @@ def test_xlsx_text_is_inert_and_accepted_by_openpyxl(s):
     assert len(out) <= 32_000
     cleaned = _cleaned(s)
     cut = cleaned if len(cleaned) <= 32_000 - 4 else cleaned[: 32_000 - 4] + "..."
-    risky = cut.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")) or cut.startswith(("\t", "\r"))
+    risky = cut.lstrip().startswith(("=", "+", "-", "@")) or cut.startswith(("\t", "\r"))
     assert out.startswith("'") == risky or (cut.startswith("'") and not risky)
     if risky:
         assert out == "'" + cut

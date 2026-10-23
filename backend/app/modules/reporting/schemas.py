@@ -78,7 +78,7 @@ class EstimateExportInput:
     reviewed_at: datetime | None
     approved_by_name: str | None
     approved_at: datetime | None
-    generated_by_name: str
+    generated_by_name: str | None
     lines: tuple[ExportLine, ...]
     generated_at: datetime | None = None
     export_id: UUID | None = None
@@ -101,7 +101,7 @@ class ChecklistExportInput:
     tender_reference: str | None
     client_name: str | None
     closing_at: datetime | None
-    generated_by_name: str
+    generated_by_name: str | None
     rows: tuple[ChecklistRow, ...]
     rejected_count: int
     generated_at: datetime | None = None
