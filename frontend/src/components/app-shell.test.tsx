@@ -178,3 +178,19 @@ describe("AppShell audit link", () => {
     expect(screen.queryByRole("link", { name: "Audit" })).toBeNull();
   });
 });
+
+describe("AppShell usage link", () => {
+  it("is shown to everyone", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/me") return respond(200, { ...ME, permissions: ["read"] });
+      throw new Error(`unexpected request ${url}`);
+    });
+    renderWithClient(
+      <AuthGate>
+        <AppShell>content</AppShell>
+      </AuthGate>,
+    );
+    await screen.findByText("content");
+    expect(screen.getByRole("link", { name: "Usage" })).toHaveAttribute("href", "/settings/usage");
+  });
+});

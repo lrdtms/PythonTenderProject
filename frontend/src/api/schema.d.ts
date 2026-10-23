@@ -1138,6 +1138,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Usage */
+        get: operations["get_usage_api_v1_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/usage/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Switch Plan */
+        put: operations["switch_plan_api_v1_usage_plan_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1866,6 +1900,18 @@ export interface components {
             /** Text Source */
             text_source: string;
         };
+        /** PlanChange */
+        PlanChange: {
+            /** Plan Code */
+            plan_code: string;
+        };
+        /** PlanOption */
+        PlanOption: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+        };
         /** PricingDefaultsDTO */
         PricingDefaultsDTO: {
             /** Currency */
@@ -2354,6 +2400,36 @@ export interface components {
              */
             job_id: string;
             version: components["schemas"]["VersionDTO"];
+        };
+        /** UsageDTO */
+        UsageDTO: {
+            /** Available Plans */
+            available_plans: components["schemas"]["PlanOption"][];
+            /** Items */
+            items: components["schemas"]["UsageItem"][];
+            /** Plan Code */
+            plan_code: string;
+            /** Plan Name */
+            plan_name: string;
+        };
+        /** UsageItem */
+        UsageItem: {
+            /** Label */
+            label: string;
+            /** Limit */
+            limit: number;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "current" | "month";
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "tenders" | "uploads" | "storage_mb" | "exports" | "members";
+            /** Used */
+            used: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -4747,6 +4823,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchHitDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_api_v1_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageDTO"];
+                };
+            };
+        };
+    };
+    switch_plan_api_v1_usage_plan_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageDTO"];
                 };
             };
             /** @description Validation Error */

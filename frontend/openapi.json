@@ -5523,6 +5523,29 @@
         "summary": "Health Db"
       }
     },
+    "/api/v1/health/status": {
+      "get": {
+        "description": "Public and minimal (parts as words only); rate-limited per client address.",
+        "operationId": "health_status_api_v1_health_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Status Api V1 Health Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Status"
+      }
+    },
     "/api/v1/jobs/{job_id}": {
       "get": {
         "operationId": "get_job_api_v1_jobs__job_id__get",

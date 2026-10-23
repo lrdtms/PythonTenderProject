@@ -44,6 +44,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               Members
             </Link>
           ) : null}
+          <Link href="/settings/usage" className="text-sm hover:underline">
+            Usage
+          </Link>
           {me.permissions.includes("view_audit") ? (
             <Link href="/audit" className="text-sm hover:underline">
               Audit
