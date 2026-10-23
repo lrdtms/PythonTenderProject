@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
@@ -20,8 +19,6 @@ from .models import DOCUMENT_KINDS, Document, DocumentVersion
 from .repo import DocumentRepo, VersionRepo
 from .schemas import DocumentDTO, ProcessingInfo, UploadResultDTO, VersionDTO
 from .sniff import MIME, safe_filename, sniff
-
-log = logging.getLogger("documents")
 
 INGEST_JOB = "ingest_document"
 EXTRACT_BOQ_JOB = "extract_boq"

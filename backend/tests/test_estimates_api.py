@@ -1197,7 +1197,8 @@ def test_export_snapshot_returns_every_line_in_order_with_matching_counts() -> N
         listed = estimates.list_lines(s, ctx, estimate, live, None, 1000, 0)
     assert [x.id for x in lines] == [x.id for x in listed]
     assert len(lines) == dto.priced + dto.excluded + dto.unresolved + dto.changed
-    assert dto.unresolved == sum(1 for x in lines if x.status == "unresolved")
+    for status in ("priced", "excluded", "unresolved", "changed"):
+        assert getattr(dto, status) == sum(1 for x in lines if x.status == status), status
 
 
 def test_export_snapshot_on_an_approved_estimate_ignores_live_inputs() -> None:
@@ -1210,4 +1211,6 @@ def test_export_snapshot_on_an_approved_estimate_ignores_live_inputs() -> None:
     assert dto.status == "approved" and dto.totals.model_dump() == approved["totals"]
     assert all(x.candidates == [] for x in lines)
     assert {x.status for x in lines} <= {"priced", "excluded"}
-    assert [str(x.id) for x in lines] == [x["id"] for x in _lines(actor, est)]
+    assert [(str(x.id), x.status) for x in lines] == [
+        (x["id"], x["status"]) for x in _lines(actor, est)
+    ]

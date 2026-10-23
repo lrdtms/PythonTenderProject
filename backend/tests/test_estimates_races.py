@@ -95,47 +95,68 @@ def test_approve_racing_a_line_write_is_frozen_and_refuses_the_write() -> None:
     assert actor.client.get(f"{API}/estimates/{est['id']}").json()["status"] == "approved"
 
 
-def test_export_snapshot_never_mixes_reviewed_totals_with_draft_lines() -> None:
+def _export_race(email: str, writer_first: bool):
     from app.api import estimate_inputs
     from app.kernel import OrgContext, Role
     from app.modules.estimates import public as estimates
     from app.modules.suppliers import public as suppliers
     from tests.test_estimates_api import _ready
 
-    actor, tender_id, est = _ready("er9@example.com")
+    actor, tender_id, est = _ready(email)
     assert _move(actor, est, "review").status_code == 200
     priced = next(x for x in _lines(actor, est) if x["status"] == "priced")
     ctx = OrgContext(UUID(actor.me["user_id"]), UUID(actor.org_id), Role.ADMIN)
     tender, estimate = UUID(tender_id), UUID(est["id"])
-    holding = threading.Event()
+    first_has_lock, second_may_go = threading.Event(), threading.Event()
 
-    def writer():
+    def write(s):
+        live = estimate_inputs.live_inputs(s, ctx, tender)
+        estimates.reopen_estimate(s, ctx, estimate, live)
+        body = estimates.LinePut(manual_unit_price="77.5", markup_override_percent="0")
+        estimates.price_line(s, ctx, UUID(priced["id"]), body, live)
+
+    def read(s):
+        live = estimate_inputs.live_inputs(s, ctx, tender)
+        return estimates.export_snapshot(s, ctx, estimate, live)
+
+    def first():
         with session_scope() as s:
             suppliers.lock_tender(s, ctx, tender)
-            holding.set()
-            live = estimate_inputs.live_inputs(s, ctx, tender)
-            estimates.reopen_estimate(s, ctx, estimate, live)
-            estimates.price_line(
-                s,
-                ctx,
-                UUID(priced["id"]),
-                estimates.LinePut(manual_unit_price="77.5", markup_override_percent="0"),
-                live,
-            )
-            threading.Event().wait(1.0)  # hold the lock while the reader queues behind it
+            first_has_lock.set()
+            # let the second transaction reach (and block on) the lock before we finish
+            assert second_may_go.wait(10)
+            threading.Event().wait(0.5)
+            return (write if writer_first else read)(s)
 
-    def reader():
-        assert holding.wait(10)
+    def second():
+        assert first_has_lock.wait(10)
         with session_scope() as s:
+            second_may_go.set()
             suppliers.lock_tender(s, ctx, tender)
-            live = estimate_inputs.live_inputs(s, ctx, tender)
-            return estimates.export_snapshot(s, ctx, estimate, live)
+            return (read if writer_first else write)(s)
 
-    _, (dto, lines) = _together(writer, reader)
-    assert dto.status == "draft", "the reader queued behind the lock, so it sees the reopened state"
-    assert any(x.status == "priced" and x.id == UUID(priced["id"]) for x in lines)
-    # Either-or: a reviewed read would show frozen totals that agree with its lines.
-    if dto.status == "reviewed":
-        assert dto.totals.subtotal_ex_vat == str(
-            sum((Decimal(x.total) for x in lines if x.total), Decimal("0.00"))
-        )
+    out = _together(first, second)
+    dto, lines = out[1] if writer_first else out[0]
+    return priced, dto, lines
+
+
+def _assert_totals_match(dto, lines) -> None:
+    expected = sum((Decimal(x.total) for x in lines if x.total is not None), Decimal("0.00"))
+    assert dto.totals.subtotal_ex_vat == str(expected), "totals do not match the lines"
+
+
+def test_export_snapshot_after_a_reopen_and_price_sees_the_draft_entirely() -> None:
+    priced, dto, lines = _export_race("er9@example.com", writer_first=True)
+    assert dto.status == "draft"
+    line = next(x for x in lines if str(x.id) == priced["id"])
+    assert Decimal(line.unit_price_ex_vat) == Decimal("77.5")
+    assert line.total != priced["total"]
+    _assert_totals_match(dto, lines)
+
+
+def test_export_snapshot_before_a_reopen_sees_the_reviewed_state_entirely() -> None:
+    priced, dto, lines = _export_race("er10@example.com", writer_first=False)
+    assert dto.status == "reviewed"
+    line = next(x for x in lines if str(x.id) == priced["id"])
+    assert line.unit_price_ex_vat == priced["unit_price_ex_vat"] and line.total == priced["total"]
+    _assert_totals_match(dto, lines)
