@@ -31,7 +31,7 @@ def _fetch_tags(url: str, timeout: float) -> bool:
 def _model() -> str:
     global _model_cache
     settings = get_settings()
-    if settings.llm_provider != "ollama":
+    if settings.llm_provider == "fake":
         return "not_configured"
     now = time.monotonic()
     if _model_cache and now - _model_cache[0] < MODEL_CACHE_S:

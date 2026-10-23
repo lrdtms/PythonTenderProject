@@ -64,6 +64,17 @@ def test_model_not_configured_when_provider_is_fake(client: TestClient) -> None:
     assert client.get(URL).json()["model"] == "not_configured"
 
 
+def test_hosted_provider_still_reports_the_local_model_server(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """kimi falls back to the local Ollama, so the local server is what the status reports."""
+    monkeypatch.setattr(
+        status, "get_settings", lambda: Settings(llm_provider="kimi", llm_base_url="http://llm:1")
+    )
+    monkeypatch.setattr(status, "_fetch_tags", lambda url, timeout: True)
+    assert client.get(URL).json()["model"] == "ok"
+
+
 def test_model_ok_and_down_with_a_two_second_timeout(
     client: TestClient, ollama, monkeypatch: pytest.MonkeyPatch
 ) -> None:
