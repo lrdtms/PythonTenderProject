@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pdfplumber
+import pytest
 
 from app.kernel.vocab import REQUIREMENT_TYPES
 from app.modules.reporting.pdf import checklist_label, render_checklist_pdf
@@ -79,6 +80,9 @@ def test_opens_and_page_one_content() -> None:
     ):
         assert needle in first
     assert checklist_label(d) == "approved"
+    assert "Type MANDATORY Conditional Information only Total" in first
+    assert "Technical 1 0 1 2" in first
+    assert "0 not yet reviewed" in first
 
 
 def test_type_order_words_and_source_cell() -> None:
@@ -144,7 +148,9 @@ def test_markup_renders_literally() -> None:
     assert "? 5 ?" in text
     with pdfplumber.open(io.BytesIO(pdf)) as doc:
         assert all(p.images == [] for p in doc.pages)
-        assert "Smith & Sons" in doc.pages[0].extract_text()
+        page = doc.pages[0]
+        footer = page.within_bbox((0, page.height - 40, page.width, page.height)).extract_text()
+        assert "Smith & Sons" in footer and "&amp;" not in footer
         assert "Smith & Sons" in (doc.metadata.get("Title") or "")
 
 
@@ -158,14 +164,17 @@ def test_long_text_truncates_and_lays_out() -> None:
 
 def test_footer_page_numbers_and_repeated_header() -> None:
     rows = tuple(row(description=f"Requirement number {i}") for i in range(300))
-    ps = pages(render_checklist_pdf(data(rows)))
+    pdf = render_checklist_pdf(data(rows))
+    ps = pages(pdf)
     n = len(ps)
     assert n > 1
     for i, p in enumerate(ps, 1):
         assert f"Page {i} of {n}" in p
         assert str(EXPORT_ID) in p
-    for p in ps[1:]:
-        assert "Requirement" in p and "Review" in p and "Source" in p
+    with pdfplumber.open(io.BytesIO(pdf)) as doc:
+        for page in doc.pages[1:]:
+            top = page.within_bbox((0, 55, page.width, 95)).extract_text()
+            assert "Mandatory Requirement Review Source" in top
 
 
 def test_deterministic() -> None:
@@ -184,3 +193,21 @@ def test_perf_1000_rows() -> None:
     pdf = render_checklist_pdf(data(rows))
     assert time.perf_counter() - start < 8
     assert pdf.startswith(b"%PDF")
+
+
+def test_rejected_row_raises() -> None:
+    d = data((row(), row(review_status="rejected")))
+    with pytest.raises(ValueError):
+        render_checklist_pdf(d)
+    with pytest.raises(ValueError):
+        checklist_label(d)
+
+
+def test_long_footer_title_stays_clear_of_page_number() -> None:
+    pdf = render_checklist_pdf(data(tender_title="W" * 70))
+    with pdfplumber.open(io.BytesIO(pdf)) as doc:
+        page = doc.pages[0]
+        words_ = page.within_bbox((0, page.height - 40, page.width, page.height)).extract_words()
+        title = next(w for w in words_ if w["text"].startswith("W"))
+        number = next(w for w in words_ if w["text"] == "Page")
+        assert title["x1"] < number["x0"]

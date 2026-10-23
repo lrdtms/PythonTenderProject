@@ -13,6 +13,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
@@ -34,13 +35,21 @@ _MANDATORY = {
 }
 _REVIEW = {"confirmed": "Confirmed", "corrected": "Corrected"}
 _UNREVIEWED = "unreviewed"
+_FOOTER_TITLE_WIDTH = 180
 _DRAFT_LINE = "DRAFT: not every requirement has been reviewed by a person"
 
 
 def checklist_label(data: ChecklistExportInput) -> Literal["draft", "approved"]:
-    if data.rows and all(r.review_status != _UNREVIEWED for r in data.rows):
-        return "approved"
-    return "draft"
+    _check_statuses(data)
+    listed = any(r.review_status in _REVIEW for r in data.rows)
+    unreviewed = any(r.review_status == _UNREVIEWED for r in data.rows)
+    return "approved" if listed and not unreviewed else "draft"
+
+
+def _check_statuses(data: ChecklistExportInput) -> None:
+    for r in data.rows:
+        if r.review_status not in _REVIEW and r.review_status != _UNREVIEWED:
+            raise ValueError(f"unsupported review status for a checklist row: {r.review_status!r}")
 
 
 def _utc(value: datetime) -> datetime:
@@ -81,6 +90,10 @@ def _styles() -> dict[str, ParagraphStyle]:
 def _numbered_canvas(data: ChecklistExportInput) -> Callable[..., Canvas]:
     """A two-pass canvas class that stamps the footer once the page count is known."""
     title = pdf_plain(data.tender_title, 70)
+    if stringWidth(title, "Helvetica", 8) > _FOOTER_TITLE_WIDTH:
+        while title and stringWidth(title + "...", "Helvetica", 8) > _FOOTER_TITLE_WIDTH:
+            title = title[:-1]
+        title += "..."
     export_id = pdf_plain(str(data.export_id))
 
     class NumberedCanvas(Canvas):
@@ -161,7 +174,7 @@ def _table(rows: list[ChecklistRow], st: dict[str, ParagraphStyle]) -> Table:
     ]
     for r in rows:
         mandatory = _MANDATORY.get(r.mandatory_status) or words.mandatory_text(r.mandatory_status)
-        review = _REVIEW.get(r.review_status) or words.review_status_text(r.review_status)
+        review = _REVIEW.get(r.review_status, "Not yet reviewed")
         body.append(
             [
                 _para(mandatory, cell),
@@ -216,7 +229,7 @@ def render_checklist_pdf(data: ChecklistExportInput) -> bytes:
     story.append(Spacer(1, 6))
     if listed:
         story.append(_count_table(listed, st))
-    if not data.rows:
+    if not listed and not unreviewed:
         story.append(Spacer(1, 12))
         story.append(_para("No requirements to list.", st["tender"]))
     for t in REQUIREMENT_TYPES:
