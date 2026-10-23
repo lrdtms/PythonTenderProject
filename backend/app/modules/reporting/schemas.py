@@ -60,7 +60,7 @@ class ExportLine:
 @dataclass(frozen=True)
 class EstimateExportInput:
     tender_title: str
-    tender_reference: str
+    tender_reference: str | None
     client_name: str | None
     version: int
     status: Literal["draft", "reviewed", "approved"]

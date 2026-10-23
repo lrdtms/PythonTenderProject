@@ -33,6 +33,7 @@ GOLDEN = json.loads((FIXTURES / "golden_estimate.json").read_text(encoding="utf-
 CORPUS = json.loads((FIXTURES / "injection_corpus.json").read_text(encoding="utf-8"))
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 REPORTING = Path(__file__).parent.parent / "app" / "modules" / "reporting"
+ROUTERS = Path(__file__).parent.parent / "app" / "api" / "routers"
 BANNER = "DRAFT: version 2 is not approved. Do not submit."
 
 
@@ -266,6 +267,21 @@ def _unmarked(wb) -> None:
     assert "DRAFT" not in wb.properties.title
 
 
+def test_approved_without_a_name_says_unknown_user_not_not_approved():
+    data = replace(approved(), approved_by_name=None, reviewed_by_name=None)
+    wb = load_workbook(io.BytesIO(render_estimate_xlsx(data)))
+    summary = wb["Summary"]
+    by = summary.cell(find_row(summary, "Approved by"), 2).value
+    assert by.startswith("Unknown user, ") and "Not approved" not in by
+    assert summary.cell(find_row(summary, "Reviewed by"), 2).value.startswith("Unknown user, ")
+
+
+def test_missing_reference_says_not_stated():
+    data = replace(GOLDEN_INPUT, tender_reference=None)
+    summary = load_workbook(io.BytesIO(render_estimate_xlsx(data)))["Summary"]
+    assert summary.cell(find_row(summary, "Reference"), 2).value == "Not stated"
+
+
 @pytest.mark.parametrize("status", ["draft", "reviewed", "approved"])
 def test_draft_label(status):
     data = approved() if status == "approved" else replace(GOLDEN_INPUT, status=status)
@@ -444,8 +460,9 @@ def test_aware_datetimes_as_text():
 
 
 def test_no_float_in_reporting_money_path():
-    for name in ("xlsx.py", "schemas.py"):
-        tree = ast.parse((REPORTING / name).read_text(encoding="utf-8"))
+    for path in (REPORTING / "xlsx.py", REPORTING / "schemas.py", ROUTERS / "exports.py"):
+        name = path.name
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             assert not (isinstance(node, ast.Name) and node.id == "float"), name
             assert not (isinstance(node, ast.Constant) and isinstance(node.value, float)), name

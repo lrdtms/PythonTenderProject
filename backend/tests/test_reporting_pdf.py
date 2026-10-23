@@ -80,8 +80,8 @@ def test_opens_and_page_one_content() -> None:
     ):
         assert needle in first
     assert checklist_label(d) == "approved"
-    assert "Type MANDATORY Conditional Information only Total" in first
-    assert "Technical 1 0 1 2" in first
+    assert "Type MANDATORY Conditional Information only Other Total" in first
+    assert "Technical 1 0 1 0 2" in first
     assert "0 not yet reviewed" in first
 
 
@@ -103,6 +103,17 @@ def test_type_order_words_and_source_cell() -> None:
     assert "Tender Spec, page 4" in text
     assert "Tender Spec, page not recorded" in text
     assert "(source not verified)" in text
+
+
+def test_unknown_requirement_type_is_listed_under_other_not_dropped() -> None:
+    d = data(
+        (row(requirement_type="weird", description="Strange row"), row(mandatory_status="odd"))
+    )
+    text = flat(render_checklist_pdf(d))
+    assert "Strange row" in text
+    assert "Other (1)" in text
+    # the unknown mandatory status is counted in the Other column, so the row sums to the total
+    assert "Technical 0 0 0 1 1" in text
 
 
 def test_approved_has_no_draft_anywhere() -> None:

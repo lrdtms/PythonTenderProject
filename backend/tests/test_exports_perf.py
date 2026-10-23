@@ -164,7 +164,7 @@ def test_f11_checklist_pdf_of_1000_requirements_is_fast() -> None:
         {
             "description": f"The tenderer shall provide item {i}",
             "requirement_type": "document",
-            "mandatory_status": "mandatory" if i % 2 else "optional",
+            "mandatory_status": "mandatory" if i % 2 else "conditional",
             "evidence_quote": f"quote {i}",
             "source_order": i,
         }

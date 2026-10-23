@@ -147,7 +147,7 @@ def _page_setup(ws: Worksheet, data: EstimateExportInput, landscape: bool) -> No
 
 def _person(name: str | None, when: datetime | None, missing: str) -> str:
     if not name:
-        return missing
+        return f"Unknown user, {_when(when)}" if when else missing
     return f"{name}, {_when(when)}" if when else name
 
 
@@ -241,7 +241,7 @@ def _write_summary(book: _Book, ws: Worksheet, data: EstimateExportInput) -> Non
         return row - 1
 
     pair("Tender", data.tender_title)
-    pair("Reference", data.tender_reference)
+    pair("Reference", data.tender_reference or "Not stated")
     pair("Client", data.client_name or "Not stated")
     pair("Estimate version", data.version, "General")
     pair("Status", _STATUS[data.status])

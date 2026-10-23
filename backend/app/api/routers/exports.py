@@ -124,7 +124,7 @@ def _estimate_payload(
     )
     payload = reporting.EstimateExportInput(
         tender_title=tender.title,
-        tender_reference=tender.reference_number or "",
+        tender_reference=tender.reference_number,
         client_name=tender.client_name,
         version=dto.version,
         status=dto.status,  # type: ignore[arg-type]

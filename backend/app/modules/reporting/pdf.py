@@ -27,12 +27,19 @@ WATERMARK = colors.HexColor("#F4CCCC")
 GREY = colors.HexColor("#D9D9D9")
 MARGIN = 15 * mm
 _COL_WIDTHS = (24 * mm, 80 * mm, 26 * mm, 50 * mm)
-_COUNT_WIDTHS = (40 * mm, 30 * mm, 30 * mm, 35 * mm, 20 * mm)
+_COUNT_WIDTHS = (34 * mm, 28 * mm, 28 * mm, 32 * mm, 18 * mm, 18 * mm)
 _MANDATORY = {
     "mandatory": "MANDATORY",
     "conditional": "Conditional",
     "informational": "Information only",
 }
+
+
+def _type_of(r: ChecklistRow) -> str:
+    """A requirement type outside the vocabulary is reported under "other", never dropped."""
+    return r.requirement_type if r.requirement_type in REQUIREMENT_TYPES else "other"
+
+
 _REVIEW = {"confirmed": "Confirmed", "corrected": "Corrected"}
 _UNREVIEWED = "unreviewed"
 _FOOTER_TITLE_WIDTH = 180
@@ -188,13 +195,14 @@ def _table(rows: list[ChecklistRow], st: dict[str, ParagraphStyle]) -> Table:
 
 def _count_table(listed: list[ChecklistRow], st: dict[str, ParagraphStyle]) -> Table:
     statuses = tuple(_MANDATORY)
-    head = ("Type", *(_MANDATORY[s] for s in statuses), "Total")
+    head = ("Type", *(_MANDATORY[s] for s in statuses), "Other", "Total")
     body: list[list[Flowable]] = [[_para(h, st["head"]) for h in head]]
     for t in REQUIREMENT_TYPES:
-        of_type = [r for r in listed if r.requirement_type == t]
+        of_type = [r for r in listed if _type_of(r) == t]
         if not of_type:
             continue
         counts = [sum(1 for r in of_type if r.mandatory_status == s) for s in statuses]
+        counts.append(len(of_type) - sum(counts))
         cells = [t.capitalize(), *map(str, counts), str(len(of_type))]
         body.append([_para(c, st["cell"]) for c in cells])
     return _grid(Table(body, colWidths=_COUNT_WIDTHS))
@@ -233,7 +241,7 @@ def render_checklist_pdf(data: ChecklistExportInput) -> bytes:
         story.append(Spacer(1, 12))
         story.append(_para("No requirements to list.", st["tender"]))
     for t in REQUIREMENT_TYPES:
-        of_type = [r for r in listed if r.requirement_type == t]
+        of_type = [r for r in listed if _type_of(r) == t]
         if of_type:
             story.append(_para(f"{t.capitalize()} ({len(of_type)})", st["section"]))
             story.append(_table(of_type, st))
