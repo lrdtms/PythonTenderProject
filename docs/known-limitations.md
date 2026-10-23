@@ -104,6 +104,18 @@ From the Slice 6a gate (`docs/spikes/slice-6a-gate.md`):
 - **BoQ line text edits do not mark an estimate line "Source changed".** The line stays "Priced" until Refresh, and the edited text reaches the estimate and any export only on Refresh. This is existing Slice 5b behaviour.
 - **No Excel or desktop PDF viewer was available for the gate.** The workbook was checked by XML and openpyxl, and the PDF with PyMuPDF only. Opening both in a real desktop application is still to be done.
 
+Deferred from the Slice 6a final review (none blocks merge):
+
+- **Duplicated and unused helpers.** Some helpers are duplicated between the xlsx and PDF writers, and a few `words.py` helpers are unused.
+- **The 5,000-row cap is checked after the rows are read.** An oversized estimate costs the read before it is refused.
+- **A stored file handle can leak if the commit fails.** The file may stay on disk with no `exports` row.
+- **Some parameters in `app/api/estimate_inputs.py` are untyped.**
+- **Two race tests use sleeps.** Polling `pg_locks` would be steadier.
+- **The session key name `documents.stored_files` is unchanged.** It no longer matches where the helper lives.
+- **Changed-line quote columns in the workbook are not specified.**
+- **No sha256 or size CHECK constraints on `exports`.** Optional hardening.
+- **The browser gate ran before the final fix wave.** Only automated checks ran after it; the dark-theme fix is checked by a class assertion.
+
 ## Hosted model and extraction operations (22-23 Oct 2026)
 
 Details, the benchmark and the remaining necessary changes are in [hosted-llm-and-extraction-ops.md](hosted-llm-and-extraction-ops.md).
