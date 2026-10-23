@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 from app.db.stored_files import delete_on_rollback
 from app.kernel import NotFound, OrgContext, Permission, StoragePort, ValidationFailed
 from app.modules.audit import public as audit
-from app.modules.identity import public as identity
 
 from .models import Export
 from .pdf import checklist_label, render_checklist_pdf
@@ -42,7 +41,7 @@ def max_rows() -> int:
     return MAX_ROWS
 
 
-def _dto(row: Export, names: dict[UUID, str]) -> ExportDTO:
+def _dto(row: Export, generated_by_name: str | None = None) -> ExportDTO:
     return ExportDTO(
         id=row.id,
         tender_id=row.tender_id,
@@ -55,13 +54,9 @@ def _dto(row: Export, names: dict[UUID, str]) -> ExportDTO:
         file_size=row.file_size,
         row_count=row.row_count,
         generated_by=row.generated_by,
-        generated_by_name=names.get(row.generated_by),
+        generated_by_name=generated_by_name,
         generated_at=row.generated_at,
     )
-
-
-def _dto_for(session: Session, ctx: OrgContext, row: Export) -> ExportDTO:
-    return _dto(row, identity.member_names(session, ctx, {row.generated_by}))
 
 
 def create_export(
@@ -88,7 +83,7 @@ def create_export(
     elif kind == "checklist_pdf":
         if not isinstance(payload, ChecklistExportInput):
             raise ValidationFailed("The data does not match this kind of export.")
-        if estimate_id is not None:
+        if estimate_id is not None or estimate_tender_id is not None:
             raise ValidationFailed("A checklist export has no estimate.")
         rows = len(payload.rows)
     else:
@@ -117,6 +112,7 @@ def create_export(
         ext, content_type = "pdf", PDF_TYPE
 
     key = f"org/{ctx.organisation_id}/tenders/{tender_id}/exports/{export_id}.{ext}"
+    session.connection()  # open the transaction so the rollback hook below is certain to fire
     storage.put(key, data)  # file first; the row is committed with the request
     delete_on_rollback(session, storage, key)
     row = ExportRepo(session, ctx).add(
@@ -152,12 +148,12 @@ def create_export(
         },
     )
     session.flush()
-    return _dto_for(session, ctx, row)
+    return _dto(row, payload.generated_by_name)
 
 
 def get_export(session: Session, ctx: OrgContext, export_id: UUID) -> ExportDTO:
     ctx.require(Permission.READ)
-    return _dto_for(session, ctx, ExportRepo(session, ctx).get(export_id))
+    return _dto(ExportRepo(session, ctx).get(export_id))
 
 
 def open_export_file(
@@ -166,7 +162,9 @@ def open_export_file(
     """The stored file of an export. Existence is checked within the organisation first."""
     ctx.require(Permission.EXPORT)
     row = ExportRepo(session, ctx).get(export_id)
-    if not storage.exists(row.file_key):
-        raise NotFound("The stored file is missing.")
+    try:
+        handle = storage.open(row.file_key)
+    except FileNotFoundError:
+        raise NotFound("The stored file is missing.") from None
     audit.record(session, ctx, "export", row.id, "export_downloaded", {"kind": row.kind})
-    return _dto_for(session, ctx, row), storage.open(row.file_key)
+    return _dto(row), handle

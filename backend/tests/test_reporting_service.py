@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import pytest
 from openpyxl import load_workbook
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.db.session import session_scope
 from app.infrastructure.storage import LocalVolumeStorage
@@ -106,7 +107,8 @@ def test_estimate_export_row_file_and_label(storage) -> None:
     assert dto.estimate_id == est_id and dto.estimate_version == GOLDEN_INPUT.version
     assert dto.file_name.endswith(".xlsx") and "-DRAFT-" in dto.file_name
     assert dto.row_count == len(GOLDEN_INPUT.lines)
-    assert dto.generated_by == ctx.user_id and dto.generated_by_name == "Owner"
+    assert dto.generated_by == ctx.user_id
+    assert dto.generated_by_name == GOLDEN_INPUT.generated_by_name
     with session_scope() as session:
         row = ExportRepo(session, ctx).get(dto.id)
         stored = storage.open(row.file_key).read()
@@ -276,22 +278,27 @@ def test_cap_is_read_at_call_time(storage, monkeypatch) -> None:
     ctx, tender_id = _ctx(actor), UUID(make_tender(actor))
     monkeypatch.setattr("app.modules.reporting.service.MAX_ROWS", 2)
     assert reporting.max_rows() == 2
-    with session_scope() as session, pytest.raises(ValidationFailed):
+    with session_scope() as session, pytest.raises(ValidationFailed) as err:
         service.create_export(session, ctx, storage, tender_id, "checklist_pdf", _checklist(rows=3))
+    assert err.value.code == "export_too_large"
+    # rejected requirements are not rows, so they do not count toward the cap
+    with session_scope() as session:
+        dto = service.create_export(
+            session,
+            ctx,
+            storage,
+            tender_id,
+            "checklist_pdf",
+            replace(_checklist(rows=1), rejected_count=10_000),
+        )
+    assert dto.row_count == 1
 
 
-def test_file_is_deleted_and_no_row_remains_when_the_row_insert_fails(storage, monkeypatch) -> None:
-    _, ctx, tender_id, est_id = _setup("svc10@example.com")
-
-    real_add = ExportRepo.add
-
-    def boom(self, entity):
-        assert _files(storage), "the file must already be stored when the insert fails"
-        real_add(self, entity)  # the row reaches the database, then the request fails
-        raise RuntimeError("insert failed")
-
-    monkeypatch.setattr(ExportRepo, "add", boom)
-    with pytest.raises(RuntimeError), session_scope() as session:
+def test_file_is_deleted_and_no_row_remains_when_the_row_insert_fails(storage) -> None:
+    _, ctx, tender_id, _ = _setup("svc10@example.com")
+    with pytest.raises(IntegrityError), session_scope() as session:
+        # an estimate that does not exist: the composite foreign key refuses the row at flush,
+        # after the file was stored
         service.create_export(
             session,
             ctx,
@@ -299,18 +306,17 @@ def test_file_is_deleted_and_no_row_remains_when_the_row_insert_fails(storage, m
             tender_id,
             "estimate_xlsx",
             GOLDEN_INPUT,
-            estimate_id=est_id,
+            estimate_id=uuid4(),
             estimate_tender_id=tender_id,
         )
     assert _files(storage) == []
-    monkeypatch.undo()
     with session_scope() as session:
         assert list(ExportRepo(session, ctx).find()) == []
-        created = select(AuditEvent).where(
+        events = select(AuditEvent).where(
             AuditEvent.organisation_id == ctx.organisation_id,
             AuditEvent.action == "export_created",
         )
-        assert session.scalars(created).all() == []
+        assert session.scalars(events).all() == []
 
 
 def test_download_returns_exact_bytes_and_audits(storage) -> None:
@@ -339,6 +345,26 @@ def test_missing_stored_file_is_not_found(storage) -> None:
         storage.delete(ExportRepo(session, ctx).get(dto.id).file_key)
     with session_scope() as session, pytest.raises(NotFound):
         service.open_export_file(session, ctx, storage, dto.id)
+    with session_scope() as session:
+        downloads = select(AuditEvent).where(
+            AuditEvent.entity_id == dto.id, AuditEvent.action == "export_downloaded"
+        )
+        assert session.scalars(downloads).all() == []
+
+
+def test_checklist_export_refuses_an_estimate_tender(storage) -> None:
+    actor = register("svc12b@example.com")
+    ctx, tender_id = _ctx(actor), UUID(make_tender(actor))
+    with session_scope() as session, pytest.raises(ValidationFailed):
+        service.create_export(
+            session,
+            ctx,
+            storage,
+            tender_id,
+            "checklist_pdf",
+            _checklist(),
+            estimate_tender_id=tender_id,
+        )
 
 
 def test_other_organisation_gets_not_found(storage) -> None:
