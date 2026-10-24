@@ -88,7 +88,9 @@ def _invoke_preflight(tmp_path: Path, env_text: str, *flags: str) -> str:
         "Write-Output ('RESULT=' + $r.GetType().Name + ':' + $r)"
     )
     result = subprocess.run(
-        ["pwsh", "-NoProfile", "-NonInteractive", "-Command", command], capture_output=True, text=True
+        ["pwsh", "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
     )
     return result.stdout + result.stderr
 

@@ -30,6 +30,7 @@ docker compose up --build
 - API health: http://127.0.0.1:8080/api/v1/health (and `/api/v1/health/db`)
 - Public link: run the Cloudflare tunnel (`cloudflared`) on the same machine pointing at `http://127.0.0.1:8080`. Cloudflare sets `CF-Connecting-IP`; Caddy turns it (or the TCP peer when absent) into `X-Client-IP`, overwriting anything the client sent, and the API rate-limits on it (`CLIENT_IP_HEADER=X-Client-IP`). For the tunnel (HTTPS) set `ENVIRONMENT=production`, a real `SECRET_KEY` and `COOKIE_SECURE=true` in `.env`; `COOKIE_SECURE=false` is only for local plain http.
 - Postgres: 127.0.0.1:${DB_HOST_PORT:-5432} (local only; set `DB_HOST_PORT` in `.env` if 5432 is taken)
+- Status page (no login): http://127.0.0.1:8080/status
 
 Documents are limited to 25 MB per upload (`MAX_UPLOAD_MB`). Scanned PDFs are read with Tesseract OCR, which is installed in the backend image (English model); no host setup is needed for it.
 
@@ -45,6 +46,20 @@ cd eval && uv run python -m harness score --gen generated --pred ../preds_slice3
 ```
 
 The script registers (or logs in) one account per run; registration is limited to 5 per hour per IP, so reuse `--email`. Results of the Slice 3 gate: `docs/spikes/slice-3-scores.md`.
+
+## Operations (Windows, PowerShell 7)
+
+```powershell
+pwsh scripts/ops/start-demo.ps1 [-Tunnel] [-SkipModel]   # checks, model preload, stack, health, optional public tunnel
+pwsh scripts/ops/start-demo.ps1 -Stop                    # stop the stack and the tunnel (data volumes are kept)
+pwsh scripts/ops/tunnel.ps1 [-Stop]                      # Cloudflare quick tunnel (needs cloudflared); URL in .demo/tunnel-url.txt
+pwsh scripts/ops/backup.ps1 [-Quiesce]                   # backups/<UTC stamp>/ with db.dump, files.tar.gz, manifest.json
+pwsh scripts/ops/restore.ps1 -Backup backups/<stamp> -Verify   # prove it restores; live data untouched
+```
+
+A public tunnel is refused unless `.env` has a real `SECRET_KEY` (32+ characters), a real `POSTGRES_PASSWORD`, `ENVIRONMENT=production` and `COOKIE_SECURE=true` (`scripts/ops_preflight.py`). To prove a restore end to end, restore into a second project: `pwsh scripts/ops/restore.ps1 -Backup backups/<stamp> -Apply -Project inteltps_gate -ComposeFile docker-compose.yml,docker-compose.restore-test.yml -BaseUrl http://127.0.0.1:8081`, then `docker compose -p inteltps_gate -f docker-compose.yml -f docker-compose.restore-test.yml down -v`. `-Apply` refuses the live project `inteltps` unless `-IKnowThisReplacesLiveData` is given. Copy `backups/` off this machine; a backup on the same disk does not survive the disk.
+
+Organisation limits and usage: the Usage page (`/settings/usage`). The Audit page (`/audit`) is for admins and project managers.
 
 ## Develop without Docker
 
