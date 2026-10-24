@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import desc, func
@@ -48,3 +49,23 @@ class VersionRepo(ScopedRepository[DocumentVersion]):
         ):
             version.is_current = False
         self.session.flush()
+
+    def count_since(self, since: datetime) -> int:
+        return (
+            self.session.scalar(
+                self._select()
+                .with_only_columns(func.count(DocumentVersion.id))
+                .where(DocumentVersion.created_at >= since)
+            )
+            or 0
+        )
+
+    def total_bytes(self) -> int:
+        return int(
+            self.session.scalar(
+                self._select().with_only_columns(
+                    func.coalesce(func.sum(DocumentVersion.file_size), 0)
+                )
+            )
+            or 0
+        )

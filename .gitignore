@@ -37,3 +37,7 @@ eval/runs/
 .superpowers/
 preds_*/
 .scratch_runs/
+
+# Ops state: backups and the running tunnel (scripts/ops)
+backups/
+.demo/

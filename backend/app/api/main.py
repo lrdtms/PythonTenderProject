@@ -3,8 +3,11 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.api import status
 from app.api.errors import error_body, register_error_handlers
+from app.api.ratelimit import client_ip, limiter
 from app.api.routers import (
+    audit,
     auth,
     documents,
     estimates,
@@ -17,6 +20,7 @@ from app.api.routers import (
     review,
     suppliers,
     tenders,
+    usage,
 )
 from app.db.session import ping
 from app.infrastructure.model_registry import import_all_models
@@ -57,6 +61,13 @@ def health_db() -> dict[str, str]:
     return {"status": "ok", "database": "reachable"}
 
 
+@app.get("/api/v1/health/status")
+def health_status(request: Request) -> dict[str, str]:
+    """Public and minimal (parts as words only); rate-limited per client address."""
+    limiter.check(f"status:{client_ip(request)}", limit=30, window_seconds=60)
+    return status.get_status()
+
+
 app.include_router(auth.router)
 app.include_router(members.router)
 app.include_router(tenders.router)
@@ -69,3 +80,5 @@ app.include_router(jobs.router)
 app.include_router(matches.router)
 app.include_router(estimates.router)
 app.include_router(exports.router)
+app.include_router(audit.router)
+app.include_router(usage.router)

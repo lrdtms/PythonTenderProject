@@ -1,0 +1,9 @@
+# Second Compose project for proving a restore without touching live data:
+#   docker compose -p inteltps_gate -f docker-compose.yml -f docker-compose.restore-test.yml up -d
+# See scripts/ops/restore.ps1. Caddy listens on 8081 and nothing publishes the database port.
+services:
+  db:
+    ports: !reset []
+  caddy:
+    ports: !override
+      - "127.0.0.1:8081:80"

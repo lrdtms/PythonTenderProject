@@ -164,3 +164,14 @@ class MembershipRepo(ScopedRepository[Membership]):
             .with_for_update()
         )
         return len(self.session.scalars(stmt).all())
+
+    def count_active(self) -> int:
+        return (
+            self.session.scalar(
+                select(func.count(Membership.id)).where(
+                    Membership.organisation_id == self.ctx.organisation_id,
+                    Membership.status == "active",
+                )
+            )
+            or 0
+        )

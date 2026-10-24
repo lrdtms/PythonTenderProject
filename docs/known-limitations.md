@@ -153,3 +153,16 @@ Details, the benchmark and the remaining necessary changes are in [hosted-llm-an
 - The Dockerfile uses `uv:latest` and unpinned apt packages (not reproducible).
 - The SQLAlchemy/Starlette `TestClient` deprecation warning in the test output.
 - A merged supplier cannot be split again; a merge is permanent.
+
+## Slice 6b (audit view, usage limits, operations)
+
+- **Rate limits are in memory** (one process): they reset when the API restarts, and the status endpoint's 30 per minute shares that limiter.
+- **Usage is counted live, not stored.** Storage counts every document version ever uploaded, including versions of archived tenders; archiving frees a tender slot but not storage or the month's uploads.
+- **Downgrading a plan never deletes anything.** An organisation that is over a smaller plan's limits can read and edit but not create more until it is back under (or the month rolls over).
+- **The plan switch is a demo control.** Any admin can switch their organisation's plan; there is no billing, invoice or approval step by design.
+- **Audit view:** no export, retention or deletion, and read access is not audited. The page filters by action, object and date; the API also filters by user id.
+- **Ops scripts are Windows PowerShell 7 only.** Bash equivalents are not provided.
+- **Backups stay on the same disk** unless the user copies the `backups/<stamp>/` directory elsewhere. Row counts in the manifest are exact only if nothing writes during the backup; use `backup.ps1 -Quiesce` (pauses the API and worker) when the stack is in use. `-Apply` into the live project needs an explicit flag and is not exercised by the gate; the gate restores into a second project.
+- **The quick tunnel address changes on every restart** and is recorded in `.demo/tunnel-url.txt`. A named tunnel or Cloudflare Access is documented in the PRD, not scripted.
+- **The tunnel script was not run end to end in the Slice 6b gate** because `cloudflared` is not installed on the build machine (see `docs/spikes/slice-6b-gate.md`).
+- **No demo-account seeding:** accounts are registered through the app.

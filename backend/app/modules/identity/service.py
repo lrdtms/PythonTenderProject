@@ -216,6 +216,11 @@ def reset_member_password(
     audit.record(session, ctx, "membership", membership.id, "password_reset")
 
 
+def count_active_members(session: Session, ctx: OrgContext) -> int:
+    ctx.require(Permission.READ)
+    return MembershipRepo(session, ctx).count_active()
+
+
 def member_names(session: Session, ctx: OrgContext, user_ids: Collection[UUID]) -> dict[UUID, str]:
     ctx.require(Permission.READ)
     return MembershipRepo(session, ctx).names_for(set(user_ids))

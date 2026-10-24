@@ -53,7 +53,7 @@ US-01 to US-05 are carried over unchanged from base spec §2.3. Additions:
 
 ## 5. Functional Requirements
 
-FR-01 to FR-50 from the base spec apply as written. Note: subscription and usage controls (FR-47 to FR-50) are implemented with a plan table and enforced limits but **no payment gateway**. Billing is mocked, and this is a deliberate scope choice.
+FR-01 to FR-50 from the base spec apply as written. Note: subscription and usage controls (FR-47 to FR-50) are implemented with a plan table and enforced limits but **no payment gateway**. Billing is mocked, and this is a deliberate scope choice. **As built (Slice 6b):** two seeded plans, `demo` (the default: 25 active tenders, 200 uploads a month, 1 GB of stored documents, 200 exports a month, 10 members) and `starter` (3, 10, 50 MB, 20, 3). Usage is counted live from the owning tables (never stored counters) and enforced server-side, race-safely, when a tender, document version, export or member is created; a refused action returns 403 `limit_exceeded` and nothing is created. An admin can switch plan (`PUT /usage/plan`, audited); no payment code exists.
 
 Additions and clarifications:
 
@@ -189,7 +189,9 @@ Base endpoints from spec §6.3 remain. **All paths use the `/api/v1` prefix** (t
 | Tasks | `POST /tenders/{id}/tasks`, `GET /tenders/{id}/tasks`, `PATCH /tasks/{id}` |
 | Documents | `GET /documents/{id}/file` (authenticated same-origin download for PDF.js; the signed link was superseded in Slice 2, see ADR-0005/ADR-0007), `POST /documents/{id}/reindex`, `GET /documents/{id}/chunks` (admin/debug) |
 | Exports | `POST /tenders/{id}/exports`, `GET /exports/{id}`, `GET /exports/{id}/download` |
-| Usage | `GET /usage` |
+| Usage | `GET /usage` (plan, limits, current usage), `PUT /usage/plan` (admin; mock plan switch) |
+| Audit | `GET /audit` (admin and project manager; filters, keyset paging), `GET /audit/facets` |
+| Status | `GET /health/status` (public; server, database and model reachability in words, rate-limited) |
 | Q&A (stretch) | `POST /tenders/{id}/ask` |
 
 **Streaming note:** the browser's `EventSource` only supports GET, so the Q&A endpoint is consumed with `fetch` and a `ReadableStream` reader (or switched to GET with a short-lived query token). Everything is served from a single origin through Caddy (no CORS needed), and the ask route is configured not to buffer.

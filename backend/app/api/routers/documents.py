@@ -10,7 +10,9 @@ from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import Ctx, DbSession, Storage
+from app.api.limits import enforce
 from app.config import get_settings
+from app.modules.billing import public as billing
 from app.modules.documents import public as documents
 from app.modules.knowledge import public as knowledge
 
@@ -21,6 +23,12 @@ def _read_upload(file: UploadFile) -> bytes:
     """Read at most the limit plus one byte, so oversize files are rejected without loading them."""
     limit = get_settings().max_upload_mb * 1024 * 1024
     return file.file.read(limit + 1)
+
+
+def _enforce_upload(session, ctx, data: bytes) -> None:
+    """One upload of this size must fit the plan's monthly uploads and its storage."""
+    enforce(session, ctx, billing.Resource.UPLOADS)
+    enforce(session, ctx, billing.Resource.STORAGE_MB, adding=len(data))
 
 
 def _stream(handle: BinaryIO) -> Iterator[bytes]:
@@ -43,15 +51,10 @@ def upload_document(
     kind: Annotated[str, Form()] = "tender_document",
     title: Annotated[str | None, Form()] = None,
 ):
+    data = _read_upload(file)
+    _enforce_upload(session, ctx, data)
     return documents.upload_document(
-        session,
-        ctx,
-        storage,
-        tender_id,
-        kind,
-        file.filename or "document",
-        _read_upload(file),
-        title,
+        session, ctx, storage, tender_id, kind, file.filename or "document", data, title
     )
 
 
@@ -65,8 +68,10 @@ def upload_version(
     storage: Storage,
     file: Annotated[UploadFile, File()],
 ):
+    data = _read_upload(file)
+    _enforce_upload(session, ctx, data)
     return documents.upload_new_version(
-        session, ctx, storage, document_id, file.filename or "document", _read_upload(file)
+        session, ctx, storage, document_id, file.filename or "document", data
     )
 
 

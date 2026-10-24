@@ -12,6 +12,7 @@ from .schemas import (
 from .service import (
     SESSION_LIFETIME,
     change_role,
+    count_active_members,
     create_member,
     list_members,
     login,
@@ -34,6 +35,7 @@ __all__ = [
     "RegisterRequest",
     "ResetPasswordRequest",
     "change_role",
+    "count_active_members",
     "create_member",
     "list_members",
     "login",

@@ -25,7 +25,7 @@ Each backend module is a package `modules/<name>/` containing `public.py` (the o
 |---|---|---|---|---|
 | `kernel` | M1 | Shared types and ports. No I/O | `OrgContext`, `Role`, `SourceRef`, `Money`, `DomainError`s, `LLMPort`, `EmbeddingPort`, `StoragePort`, `JobQueuePort` | none |
 | `identity` | M1 | Users, organisations, memberships, invites, sessions, RBAC | `resolve_context(user_id, org_id) -> OrgContext`, `require_role(ctx, *roles)`, `list_members(ctx)` | users, organisations, memberships, invites, refresh_tokens |
-| `billing` | M1 | Plans and limits (mocked) | `check_and_increment(ctx, metric)` raises `LimitExceeded`; `usage(ctx)` | plans, organisation_usage |
+| `billing` | M1 | Plans and limits (mocked) | `check_limit(session, ctx, resource, count, adding)` raises `LimitExceeded`; `usage_for(session, ctx, counts)`; `set_plan(session, ctx, code, counts)` (as built in 6b: counts are live, supplied by the router from each module's `count_*`; no stored counters) | plans, organisation_plans |
 | `audit` | M1 | Append-only events, with no document text | `record(ctx, entity_type, entity_id, action, safe_metadata)` | audit_events |
 | `tenders` | M1 | Tender workspace and archive | `get(ctx, tender_id) -> TenderDTO` (404 if other org) | tenders |
 | `documents` | M1 | Upload validation, versions, file access | `upload(ctx, tender_id, kind, file) -> (DocumentVersionDTO, job_id)`, `get_version(ctx, id)`, `open_original(ctx, version_id)`, `current_versions(ctx, tender_id)` (downloads are an authenticated same-origin endpoint, not signed links) | documents, document_versions |
@@ -94,7 +94,7 @@ Controls are defined in ADR-0005. Each attack path below names the control and t
 | Duplicate job (double click, re-upload, retry while running) | Partial unique index on active `(job_type, subject_id)` | Enqueue returns the existing job | Same progress bar |
 | Worker crash / OOM kill / laptop sleep | Lease expiry (5 min) | Reaper requeues the job. The stage resumes: chunks with stored results are skipped | Job returns to "running" |
 | Re-run after the user has edited results | Stage replace logic | Only `unreviewed` rows are replaced. Reviewed or corrected rows are never touched | Edits preserved |
-| Plan limit reached | `billing.check_and_increment` at upload | 402/403 with the `LIMIT_EXCEEDED` error code; nothing stored | Usage page link |
+| Plan limit reached | `api.limits.enforce` -> `billing.check_limit` before the create | 402/403 with the `LIMIT_EXCEEDED` error code; nothing stored | Usage page link |
 
 **Throughput reality check (needs measuring on day 1).** A 3-4B Q4 model on the laptop CPU or a partially offloaded GTX 1050 processes prompts at about 30-80 tokens/s and generates at 5-15 tokens/s. With FR-61 mapped over 300-450-token retrieval chunks, a 100-page pack (~150 chunks) needs about 150 calls x 20-55 s, which is **1-2+ hours**. Recommendation: run requirement extraction over **sections of about 1,200-1,500 tokens** (separate from the retrieval chunks; still "every section", so FR-61's recall intent holds). That is about 35 calls and roughly 25-40 minutes. Page provenance comes from locating the `evidence_quote` in the page text. Disable Qwen3 "thinking" output (`think: false`), or it spends tokens on reasoning. Pre-process demo documents.
 
@@ -231,3 +231,10 @@ Workload risk: M3 is the only frontend developer for about 8 screens. Mitigation
 4. **Day 12:** F1 and F4 green, blocking merges.
 5. **Day 25:** Q&A go/no-go (ADR-0009); RLS hardening go/no-go (ADR-0005).
 6. Revisit ADR-0002 (ANN index) and ADR-0006 (Celery) only if F11 or real usage shows the need.
+
+**As built in Slice 6b (audit view, usage limits, operations).**
+
+- `audit` gained a scoped read side: `list_events` (keyset paging on `(created_at, id)`, filters, `VIEW_AUDIT`) and `facets`; the router adds user names through `identity.member_names`. Events with no organisation are never returned. What is written is unchanged (the `SAFE_METADATA_KEYS` allowlist, applied again on read).
+- `billing` holds `plans` (seeded `demo` and `starter`, global reference data, not organisation-owned) and `organisation_plans` (one row per organisation that chose a plan; no row means `demo`). It imports only kernel, db and audit (contract `billing is isolated from the other modules`). `api/limits.py` knows every module: it gathers the five counts (`tenders.count_active`, `documents.count_uploads_since` and `storage_bytes`, `reporting.count_exports_since`, `identity.count_active_members`) and calls `enforce` before the creating service call. `check_limit` takes `pg_advisory_xact_lock` per organisation and resource, so two requests cannot both take the last slot; the lock ends with the request's transaction.
+- `GET /api/v1/health/status` is public and minimal (`api`, `database`, `model` as words; the model check is one `GET /api/tags` against the local Ollama with a 2 s timeout, cached 10 s; only the `fake` provider reports `not_configured`).
+- Operations are PowerShell 7 scripts in `scripts/ops/` (`start-demo`, `tunnel`, `backup`, `restore`, shared `common.ps1`) with the logic that can be unit-tested in stdlib-only Python: `scripts/ops_preflight.py` (config rules for a public tunnel) and `scripts/ops_manifest.py` (backup manifest: checksums, row counts per table, file count). A restore counts as tested only when `restore.ps1 -Verify` (scratch database, live data untouched) or `-Apply` into a second Compose project (`docker-compose.restore-test.yml`) matches the manifest.

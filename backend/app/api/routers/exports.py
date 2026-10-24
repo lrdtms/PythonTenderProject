@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 
 from app.api import estimate_inputs
 from app.api.deps import Ctx, DbSession, Storage
+from app.api.limits import enforce
 from app.api.ratelimit import limiter
 from app.kernel import Conflict, NotFound, OrgContext, Permission
+from app.modules.billing import public as billing
 from app.modules.checklist import public as checklist
 from app.modules.documents import public as documents
 from app.modules.estimates import public as estimates
@@ -201,6 +203,7 @@ def create_export(
     tender = tenders.get_tender(session, ctx, tender_id)  # NotFound across organisations
     ctx.require(Permission.EXPORT)
     limiter.check(f"export:{ctx.user_id}", 10, 60)
+    enforce(session, ctx, billing.Resource.EXPORTS)
     if body.kind == "estimate_xlsx":
         payload, estimate_id, estimate_tender_id = _estimate_payload(
             session, ctx, tender, body.estimate_id

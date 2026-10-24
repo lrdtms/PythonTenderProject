@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
@@ -169,6 +170,16 @@ def upload_new_version(
         version=_version_dto(version, job_id),
         job_id=job_id,
     )
+
+
+def count_uploads_since(session: Session, ctx: OrgContext, since: datetime) -> int:
+    ctx.require(Permission.READ)
+    return VersionRepo(session, ctx).count_since(since)
+
+
+def storage_bytes(session: Session, ctx: OrgContext) -> int:
+    ctx.require(Permission.READ)
+    return VersionRepo(session, ctx).total_bytes()
 
 
 def list_documents(session: Session, ctx: OrgContext, tender_id: UUID) -> list[DocumentDTO]:

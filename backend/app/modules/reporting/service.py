@@ -168,3 +168,8 @@ def open_export_file(
         raise NotFound("The stored file is missing.") from None
     audit.record(session, ctx, "export", row.id, "export_downloaded", {"kind": row.kind})
     return _dto(row), handle
+
+
+def count_exports_since(session: Session, ctx: OrgContext, since: datetime) -> int:
+    ctx.require(Permission.READ)
+    return ExportRepo(session, ctx).count_since(since)

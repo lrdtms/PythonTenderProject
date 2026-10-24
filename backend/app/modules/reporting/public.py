@@ -10,7 +10,7 @@ from .schemas import (
     ExportLine,
     ExportTotals,
 )
-from .service import create_export, get_export, max_rows, open_export_file
+from .service import count_exports_since, create_export, get_export, max_rows, open_export_file
 
 __all__ = [
     "ChecklistExportInput",
@@ -21,6 +21,7 @@ __all__ = [
     "ExportKind",
     "ExportLine",
     "ExportTotals",
+    "count_exports_since",
     "create_export",
     "get_export",
     "max_rows",

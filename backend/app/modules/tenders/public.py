@@ -3,6 +3,7 @@
 from .schemas import TenderCreate, TenderDTO, TenderUpdate
 from .service import (
     archive_tender,
+    count_active,
     create_tender,
     get_tender,
     is_archived,
@@ -15,6 +16,7 @@ __all__ = [
     "TenderDTO",
     "TenderUpdate",
     "archive_tender",
+    "count_active",
     "create_tender",
     "get_tender",
     "is_archived",
