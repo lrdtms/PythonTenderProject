@@ -20,7 +20,7 @@ export function NewVersion({ tenderId, documentId }: { tenderId: string; documen
 
   return (
     <div className="text-sm">
-      <label className="mr-2 font-medium" htmlFor={inputId}>
+      <label className="mr-2 text-zinc-500" htmlFor={inputId}>
         Upload new version
       </label>
       <input

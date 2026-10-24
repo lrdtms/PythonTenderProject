@@ -10,7 +10,7 @@ import { markupError, vatError } from "@/lib/rates";
 type Basis = Estimate["markup_basis"];
 
 const BASIS_LABEL: Record<Basis, string> = { cost: "On cost", selling_price: "On selling price" };
-const INPUT = "rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700";
+const INPUT = "input";
 
 function failure(error: unknown): { code: string | null; text: string } {
   if (error instanceof ApiError) return { code: error.code, text: errorText(error.code, error.message) };
@@ -79,7 +79,7 @@ function Form({ estimate, done, setDone }: { estimate: Estimate; done: boolean; 
     ) : null;
 
   return (
-    <form onSubmit={submit} noValidate aria-label="Estimate settings" className="max-w-xl space-y-4">
+    <form onSubmit={submit} noValidate aria-label="Estimate settings" className="grid max-w-xl gap-4 sm:grid-cols-2">
       <div className="flex flex-col gap-1">
         <label htmlFor="es-currency" className="text-sm font-medium">
           Currency
@@ -122,7 +122,7 @@ function Form({ estimate, done, setDone }: { estimate: Estimate; done: boolean; 
         {err("es-vat-err", errors.vat)}
       </div>
 
-      <fieldset className="space-y-1">
+      <fieldset className="space-y-1 sm:col-span-2">
         <legend className="text-sm font-medium">Markup basis</legend>
         {(Object.keys(BASIS_LABEL) as Basis[]).map((value) => (
           <label key={value} className="flex items-center gap-2 text-sm">
@@ -160,7 +160,7 @@ function Form({ estimate, done, setDone }: { estimate: Estimate; done: boolean; 
       </div>
 
       {error ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+        <p role="alert" className="text-sm text-red-700 sm:col-span-2 dark:text-red-300">
           {error.text}
         </p>
       ) : null}
@@ -169,7 +169,7 @@ function Form({ estimate, done, setDone }: { estimate: Estimate; done: boolean; 
           Settings saved.
         </p>
       ) : null}
-      <button type="submit" disabled={patch.isPending} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
+      <button type="submit" disabled={patch.isPending} className="btn w-fit sm:col-span-2">
         {patch.isPending ? "Saving…" : "Save settings"}
       </button>
     </form>
@@ -181,8 +181,8 @@ export function SettingsCard({ estimate, editable }: { estimate: Estimate; edita
   // Kept here, not in Form: a save refetches the estimate and the new values remount Form.
   const [done, setDone] = useState(false);
   return (
-    <section aria-label="Settings" className="rounded border border-zinc-300 p-4 dark:border-zinc-700">
-      <h2 className="mb-2 text-lg font-medium">Settings</h2>
+    <section aria-label="Settings" className="panel p-5">
+      <h2 className="mb-3 text-base font-semibold">Settings</h2>
       {editable ? (
         <Form
           key={`${estimate.currency}|${estimate.vat_rate}|${estimate.markup_basis}|${estimate.markup_percent}`}

@@ -106,10 +106,10 @@ function QuotationForm({ quotation, onClose }: { quotation: Quotation; onClose: 
       </fieldset>
       {error ? <p role="alert" className="text-red-700 dark:text-red-300">{error}</p> : null}
       <div className="flex gap-2">
-        <button type="submit" disabled={update.isPending || currencyBad} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="submit" disabled={update.isPending || currencyBad} className="btn">
           Save
         </button>
-        <button type="button" disabled={update.isPending} onClick={onClose} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="button" disabled={update.isPending} onClick={onClose} className="btn">
           Cancel
         </button>
       </div>
@@ -137,7 +137,7 @@ export function QuotationPanel({ tenderId, versionId, archived }: Props) {
 
   const missing = (value: string | null) => (value ? formatDate(value) || value : "not given");
   return (
-    <section aria-label="Quotation details" className="mb-4 rounded border border-zinc-300 p-3 dark:border-zinc-700">
+    <section aria-label="Quotation details" className="panel mb-4 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-medium">{quotation.supplier_name}</h2>
@@ -148,7 +148,7 @@ export function QuotationPanel({ tenderId, versionId, archived }: Props) {
           <p className="text-sm">{VAT_LABELS[vatOf(quotation.prices_include_vat)]}</p>
         </div>
         {canReview && !editing ? (
-          <button type="button" onClick={() => setEditing(true)} className="rounded border px-2 py-1 text-sm">
+          <button type="button" onClick={() => setEditing(true)} className="btn">
             Edit details
           </button>
         ) : null}
@@ -156,7 +156,7 @@ export function QuotationPanel({ tenderId, versionId, archived }: Props) {
       {quotation.flags.length > 0 ? (
         <ul className="mt-2 space-y-1 text-sm">
           {quotation.flags.map((code) => (
-            <li key={code} className="rounded border border-amber-500 px-2 py-1">
+            <li key={code} className="notice !py-1">
               Warning: {warningText({ code })}
             </li>
           ))}

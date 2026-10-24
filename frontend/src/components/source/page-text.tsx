@@ -17,7 +17,7 @@ export function PageText({ text, start, end, quote }: Props) {
 
   return (
     <div>
-      <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-zinc-300 p-3 text-sm dark:border-zinc-700">
+      <pre className="max-h-96 overflow-auto whitespace-pre-wrap panel p-3 text-sm">
         {span ? (
           <>
             {span.before}

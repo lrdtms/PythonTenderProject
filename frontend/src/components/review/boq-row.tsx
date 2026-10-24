@@ -58,7 +58,7 @@ function BoqEditor({ row, save, cancel, saving, error }: { row: BoqItem } & Edit
     >
       <label className="block">
         <span className="font-medium">Description</span>
-        <input value={description} maxLength={2000} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded border bg-transparent p-2" />
+        <input value={description} maxLength={2000} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full input !h-auto py-2" />
       </label>
       <div className="flex flex-wrap gap-3">
         <label>
@@ -89,10 +89,10 @@ function BoqEditor({ row, save, cancel, saving, error }: { row: BoqItem } & Edit
       {empty ? <p role="alert" className={err}>The description cannot be empty.</p> : null}
       {error ? <p role="alert" className={err}>{error}</p> : null}
       <div className="flex gap-2">
-        <button type="submit" disabled={saving || invalid} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="submit" disabled={saving || invalid} className="btn">
           Save
         </button>
-        <button type="button" disabled={saving} onClick={cancel} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="button" disabled={saving} onClick={cancel} className="btn">
           Cancel
         </button>
       </div>
@@ -128,7 +128,7 @@ export function BoqRow({ row, versionId, selected, onSelect, archived = false, c
       summary={
         <>
           <p className="text-sm">
-            {row.item_no ? <span className="mr-2 font-mono text-xs">{row.item_no}</span> : null}
+            {row.item_no ? <span className="mr-2 text-xs">{row.item_no}</span> : null}
             {row.description}
           </p>
           {originalDescription ? <p className="mt-1 text-xs text-zinc-500">Originally: {originalDescription}</p> : null}

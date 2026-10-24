@@ -46,7 +46,7 @@ export function JobProgress({ jobId, tenderId, pollMs, archived = false, version
                 retry.reset();
                 retry.mutate(job.id);
               }}
-              className="mt-1 rounded border border-red-600 px-3 py-1 disabled:opacity-50"
+              className="btn btn-danger btn-sm mt-1"
             >
               {retry.isPending ? "Retrying…" : "Retry"}
             </button>

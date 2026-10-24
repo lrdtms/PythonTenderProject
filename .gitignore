@@ -41,3 +41,7 @@ preds_*/
 # Ops state: backups and the running tunnel (scripts/ops)
 backups/
 .demo/
+
+# Local design-tool artifacts (taste-skill working files)
+.taste-skill/
+.taste-sheet.txt

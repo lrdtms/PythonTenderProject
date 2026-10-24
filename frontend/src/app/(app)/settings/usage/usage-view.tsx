@@ -52,7 +52,7 @@ function PlanSwitch({ current, plans }: { current: string; plans: { code: string
       <label className="flex flex-col gap-1 text-sm">
         Plan
         <select
-          className="rounded border bg-transparent p-1"
+          className="input"
           value={code}
           onChange={(e) => {
             setCode(e.target.value);
@@ -66,7 +66,7 @@ function PlanSwitch({ current, plans }: { current: string; plans: { code: string
           ))}
         </select>
       </label>
-      <button type="submit" disabled={change.isPending || code === current} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
+      <button type="submit" disabled={change.isPending || code === current} className="btn">
         Switch plan
       </button>
       <p className="basis-full text-xs text-zinc-500">This is a demo plan switch. No payment is taken.</p>
@@ -85,7 +85,7 @@ export function UsageView() {
 
   return (
     <section>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Usage</h1>
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Usage</h1>
       {usage.isPending ? (
         <p role="status" className="text-sm text-zinc-500">
           Loading usage…

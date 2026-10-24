@@ -17,7 +17,7 @@ import {
   warningLabel,
 } from "@/lib/match-text";
 
-const BUTTON = "rounded border px-2 py-1 text-xs disabled:opacity-50";
+const BUTTON = "btn btn-sm";
 
 function warningCodes(evidence: unknown): string[] {
   if (typeof evidence !== "object" || evidence === null) return [];
@@ -58,12 +58,12 @@ export function CandidateRow({
   const decided = s.decided_at ? `Decided by ${s.decided_by_name ?? "a team member"} on ${formatDate(s.decided_at)}` : null;
 
   return (
-    <li className="rounded border border-zinc-300 p-3 dark:border-zinc-700 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-4">
+    <li className="rounded-lg bg-[var(--raised)] p-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-4">
       <div className="min-w-0">
         <p className="text-sm font-medium">{s.supplier.name}</p>
         <p className="text-sm">{q.description}</p>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-          {q.sku ? <span className="rounded border border-zinc-400 px-1.5 py-0.5">SKU {q.sku}</span> : null}
+          {q.sku ? <span className="rounded bg-[var(--active)] px-1.5 py-0.5">SKU {q.sku}</span> : null}
           <span>Unit: {q.unit ?? "not given"}</span>
           <span>Quantity: {q.quantity ?? "not given"}</span>
           <span>Unit price: {priceText(q)}</span>
@@ -77,7 +77,7 @@ export function CandidateRow({
         </div>
         {s.classification !== "clear" && warnings.length === 0 ? <p className="mt-1 text-xs">{reasonText(s)}</p> : null}
         <details className="mt-2 text-xs">
-          <summary className="cursor-pointer underline">Why this match</summary>
+          <summary className="cursor-pointer text-zinc-500 hover:text-[var(--ink)]">Why this match</summary>
           <dl className="mt-1 space-y-0.5">
             <div className="flex gap-2">
               <dt className="font-medium">Match score</dt>

@@ -78,15 +78,16 @@ function CreateMember() {
   }
 
   return (
-    <form onSubmit={submit} className="mb-8 space-y-3 rounded border border-zinc-300 p-4 dark:border-zinc-700" aria-label="Add a member">
-      <h2 className="text-lg font-medium">Add a member</h2>
+    <details className="group mb-6">
+      <summary className="btn btn-primary w-fit list-none group-open:mb-4 [&::-webkit-details-marker]:hidden">Add a member</summary>
+    <form onSubmit={submit} className="panel space-y-3 p-4" aria-label="Add a member">
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name" required value={name} onChange={(e) => (touch(), setName(e.target.value))} />
         <Field label="Email" type="email" required autoComplete="off" value={email} onChange={(e) => (touch(), setEmail(e.target.value))} />
         <Field label="Temporary password" type="password" required autoComplete="new-password" value={password} onChange={(e) => (touch(), setPassword(e.target.value))} />
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium">Role</span>
-          <select value={role} onChange={(e) => (touch(), setRole(e.target.value as Role))} className="rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
+          <select value={role} onChange={(e) => (touch(), setRole(e.target.value as Role))} className="input">
             {ROLES.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
@@ -102,10 +103,11 @@ function CreateMember() {
         </p>
       ) : null}
       {added ? <p role="status" className="text-sm text-green-700 dark:text-green-300">Member added.</p> : null}
-      <button type="submit" disabled={create.isPending} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
+      <button type="submit" disabled={create.isPending} className="btn">
         {create.isPending ? "Adding…" : "Add member"}
       </button>
     </form>
+    </details>
   );
 }
 
@@ -159,7 +161,7 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
               if (losesAdmin(role)) setPendingRole(role);
               else applyRole(role);
             }}
-            className="rounded border bg-transparent p-1"
+            className="input"
           >
             {ROLES.map((r) => (
               <option key={r.value} value={r.value}>
@@ -286,7 +288,7 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <button type="submit" disabled={busy} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
+          <button type="submit" disabled={busy} className="btn">
             Set password
           </button>
           <p className="basis-full text-xs text-zinc-500">
@@ -314,7 +316,7 @@ export function MembersView() {
   if (!canManage) {
     return (
       <div>
-        <h1 className="mb-2 text-2xl font-semibold tracking-tight">Members</h1>
+        <h1 className="mb-2 text-[22px] font-semibold leading-tight">Members</h1>
         <p>Only an admin can manage members.</p>
       </div>
     );
@@ -322,7 +324,7 @@ export function MembersView() {
 
   return (
     <section>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Members</h1>
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Members</h1>
       <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
         People in {me.organisation_name}. An organisation always keeps at least one active admin.
       </p>

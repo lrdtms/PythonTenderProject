@@ -63,7 +63,7 @@ function JobBar({ kind, job }: { kind: string; job: Job }) {
   const { done, total } = progressBounds(job);
   const determinate = job.status === "running" && total > 0;
   return (
-    <div className="flex flex-wrap items-center gap-2 text-zinc-700 dark:text-zinc-300">
+    <div className="flex flex-wrap items-center gap-2 text-[var(--ink)]">
       <progress
         aria-label={`${kindLabel(kind)} extraction progress`}
         className="align-middle"
@@ -75,7 +75,7 @@ function JobBar({ kind, job }: { kind: string; job: Job }) {
   );
 }
 
-const BUTTON = "rounded border px-3 py-1 text-sm disabled:opacity-50";
+const BUTTON = "btn btn-sm";
 
 /** Cancel for an active job, with an inline confirmation. Only one row's cancel is in flight at a time. */
 function CancelControl({ job, cancel }: { job: Job; cancel: UseMutationResult<Job, Error, string> }) {
@@ -93,7 +93,7 @@ function CancelControl({ job, cancel }: { job: Job; cancel: UseMutationResult<Jo
     );
   }
   return (
-    <span role="group" aria-label="Confirm cancellation" aria-live="polite" className="flex flex-wrap items-center gap-2 rounded border p-2">
+    <span role="group" aria-label="Confirm cancellation" aria-live="polite" className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--sheet)] p-2">
       <span>Cancel this extraction? Work already done on this run is discarded.</span>
       <button
         ref={confirmRef}
@@ -178,7 +178,7 @@ export function ExtractionPanel({ versionId, ready, archived = false, pollMs }: 
   const refusal = request.error instanceof ApiError ? (REFUSALS[request.error.code] ?? request.error.message) : request.error ? "Could not start the extraction." : null;
 
   return (
-    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+    <div className="rounded-lg bg-[var(--raised)] p-3">
       <h3 className="text-sm font-semibold">Extraction</h3>
       {status.error ? <StaleNote message="Could not refresh the status." onCheckAgain={() => void status.refetch()} /> : null}
       {kinds.length === 0 ? <p className="py-2 text-sm text-zinc-600 dark:text-zinc-400">Extraction has not run yet.</p> : null}
@@ -200,7 +200,7 @@ export function ExtractionPanel({ versionId, ready, archived = false, pollMs }: 
             type="button"
             disabled={busy}
             onClick={() => request.mutate(deep)}
-            className="rounded border border-zinc-400 px-3 py-1 disabled:opacity-50"
+            className="btn"
           >
             {request.isPending ? "Starting…" : "Run extraction again"}
           </button>

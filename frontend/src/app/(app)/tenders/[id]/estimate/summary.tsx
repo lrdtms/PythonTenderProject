@@ -14,35 +14,35 @@ export function Summary({ estimate }: { estimate: Estimate }) {
     ["VAT", money(t?.vat_total)],
   ];
   return (
-    <section aria-label="Summary" className="rounded border border-zinc-300 p-4 dark:border-zinc-700">
-      <h2 className="mb-2 text-lg font-medium">Summary</h2>
+    <section aria-label="Summary" className="panel p-5">
+      <h2 className="mb-3 text-base font-semibold">Summary</h2>
       {estimate.incomplete ? (
-        <p className="mb-2 text-sm text-amber-700 dark:text-amber-300">
+        <p className="notice mb-3">
           These figures are partial: lines that are unresolved or changed are left out.
         </p>
       ) : null}
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-sm">
+      <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1.5 text-sm">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
-            <dt className="font-medium">{label}</dt>
-            <dd>
+            <dt className="text-zinc-500">{label}</dt>
+            <dd className="num text-right">
               {value}
               {estimate.incomplete ? <span className="ml-1 text-xs text-amber-700 dark:text-amber-300">(partial)</span> : null}
             </dd>
           </div>
         ))}
-        <dt className="font-medium">Total inc VAT</dt>
-        <dd>
-          <span className="font-semibold">{money(t?.total_inc_vat)}</span>
+        <dt className="mt-2 self-start border-t border-zinc-200 pt-4 font-medium">Total inc VAT</dt>
+        <dd className="num mt-2 border-t border-zinc-200 pt-3 text-right">
+          <span className="text-[28px] font-semibold leading-tight">{money(t?.total_inc_vat)}</span>
           {estimate.incomplete ? <span className="ml-1 text-xs text-amber-700 dark:text-amber-300">(partial)</span> : null}
           {estimate.incomplete ? (
-            <span className="mt-0.5 block text-amber-700 dark:text-amber-300">
+            <span className="mt-0.5 block text-sm text-amber-700 dark:text-amber-300">
               {`Incomplete: excludes ${open} ${open === 1 ? "line" : "lines"}`}
             </span>
           ) : null}
         </dd>
       </dl>
-      <p className="mt-3 text-sm">
+      <p className="num mt-4 text-sm text-zinc-500">
         {estimate.priced} priced · {estimate.excluded} excluded · {estimate.unresolved} unresolved · {estimate.changed} changed
       </p>
     </section>

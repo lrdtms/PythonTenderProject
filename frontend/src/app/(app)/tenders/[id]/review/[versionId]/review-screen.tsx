@@ -10,6 +10,7 @@ import { ApiError } from "@/api/errors";
 import { useBoqItems, useQuotationItems, useRequirements, versionQueryOptions } from "@/api/review";
 import { tenderQueryOptions } from "@/api/tenders";
 import { useCan } from "@/components/auth-gate";
+import { SkeletonRows } from "@/components/skeleton-rows";
 import { BoqRow } from "@/components/review/boq-row";
 import { QuotationPanel } from "@/components/review/quotation-panel";
 import { QuotationRow } from "@/components/review/quotation-row";
@@ -159,7 +160,7 @@ export function ReviewScreen() {
             if (!version.data) void version.refetch();
             if (!documents.data) void documents.refetch();
           }}
-          className="rounded border px-3 py-1 text-sm"
+          className="btn"
         >
           Try again
         </button>
@@ -187,7 +188,7 @@ export function ReviewScreen() {
         setTab(value);
         setSelectedId(null);
       }}
-      className={`rounded-t border-b-2 px-3 py-2 text-sm ${tab === value ? "border-blue-600 font-medium" : "border-transparent"}`}
+      className={`border-b-2 px-3 py-2 text-sm ${tab === value ? "border-blue-600 font-medium" : "border-transparent"}`}
     >
       {label} ({count})
     </button>
@@ -196,25 +197,25 @@ export function ReviewScreen() {
   return (
     <section>
       <p className="mb-2 text-sm">
-        <Link href={`/tenders/${tenderId}`} className="underline">
+        <Link href={`/tenders/${tenderId}`} className="text-zinc-500 hover:text-[var(--ink)]">
           ← Back to the tender
         </Link>
       </p>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Review: {v.filename}</h1>
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Review: {v.filename}</h1>
       {archived ? (
-        <p className="mb-3 rounded border border-zinc-400 p-3 text-sm">This tender is archived and read-only.</p>
+        <p className="notice mb-3">This tender is archived and read-only.</p>
       ) : null}
       {!canReview && !archived ? (
         <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">You can read this review but not change it.</p>
       ) : null}
 
       {linkedMissing ? (
-        <p role="status" className="mb-3 rounded border border-zinc-400 p-3 text-sm">
+        <p role="status" className="notice mb-3">
           The linked requirement is no longer in this document.
         </p>
       ) : null}
       {replaced ? (
-        <p role="alert" className="mb-3 rounded border border-amber-500 p-3 text-sm">
+        <p role="alert" className="notice mb-3">
           {replaced}{" "}
           <button type="button" onClick={() => setReplaced(null)} className="underline">
             Dismiss
@@ -241,16 +242,16 @@ export function ReviewScreen() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className={pane === "rows" ? "" : "hidden lg:block"}>
           {isQuotation ? (
-            <h2 className="mb-3 border-b border-zinc-300 pb-2 text-sm font-medium dark:border-zinc-700">
+            <h2 className="mb-3 border-b border-zinc-200 pb-2 text-sm font-medium">
               Quotation items ({countLabel(quotes.rows.length, quotes.hasNextPage)})
             </h2>
           ) : (
-            <div role="tablist" className="mb-3 flex gap-1 border-b border-zinc-300 dark:border-zinc-700">
+            <div role="tablist" className="mb-3 flex gap-1 border-b border-zinc-200">
               {tabButton("requirements", "Requirements", countLabel(requirements.rows.length, requirements.hasNextPage))}
               {tabButton("boq", "BoQ lines", countLabel(boq.rows.length, boq.hasNextPage))}
             </div>
           )}
-          {list.isPending ? <p role="status" className="text-sm text-zinc-500">Loading rows…</p> : null}
+          {list.isPending ? <SkeletonRows label="Loading rows…" rows={5} height={96} /> : null}
           {list.isError ? (
             <p role="alert" className="text-sm text-red-700 dark:text-red-300">
               Could not load the rows.
@@ -333,8 +334,8 @@ export function ReviewScreen() {
           <p className="mt-3 text-xs text-zinc-500">Keys: arrows move, c confirm, r reject, e edit.</p>
         </div>
 
-        <div className={pane === "source" ? "" : "hidden lg:block"}>
-          <h2 className="mb-2 text-lg font-medium">Source</h2>
+        <div className={pane === "source" ? "lg:sticky lg:top-4 lg:self-start" : "hidden lg:sticky lg:top-4 lg:block lg:self-start"}>
+          <h2 className="mb-2 text-base font-semibold">Source</h2>
           {selected ? (
             <SourceViewer versionId={versionId} fileFormat={v.file_format} source={source} />
           ) : (

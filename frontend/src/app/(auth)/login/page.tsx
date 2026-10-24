@@ -45,7 +45,7 @@ export default function LoginPage() {
         </p>
       ) : null}
       <button type="submit" disabled={login.isPending}
-        className="rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+        className="btn btn-primary">
         {login.isPending ? "Signing in…" : "Sign in"}
       </button>
       <p className="text-sm">

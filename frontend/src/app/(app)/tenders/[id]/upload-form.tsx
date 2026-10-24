@@ -64,11 +64,11 @@ export function UploadForm({ tenderId }: { tenderId: string }) {
   const shown = problem ?? (uploadDocument.error instanceof ApiError ? uploadDocument.error.message : uploadDocument.error ? "The upload failed. Try again." : null);
 
   return (
-    <form onSubmit={submit} className="mb-8 grid gap-4 rounded border border-zinc-300 p-4 sm:grid-cols-2 dark:border-zinc-700">
+    <form onSubmit={submit} className="panel mb-8 grid gap-4 p-4 sm:grid-cols-2">
       <h2 className="text-lg font-medium sm:col-span-2">Upload a document</h2>
       <div className="flex flex-col gap-1">
         <label htmlFor={kindId} className="text-sm font-medium">Document type</label>
-        <select id={kindId} value={kind} onChange={(e) => setKind(e.target.value)} className="rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700">
+        <select id={kindId} value={kind} onChange={(e) => setKind(e.target.value)} className="input">
           {KINDS.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
@@ -101,7 +101,7 @@ export function UploadForm({ tenderId }: { tenderId: string }) {
       {shown ? <p role="alert" className="text-sm text-red-600 sm:col-span-2">{shown}</p> : null}
       {done ? <p role="status" className="text-sm text-green-700 sm:col-span-2 dark:text-green-300">Uploaded. Processing has started.</p> : null}
       <div className="sm:col-span-2">
-        <button type="submit" disabled={uploadDocument.isPending} className="rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+        <button type="submit" disabled={uploadDocument.isPending} className="btn btn-primary">
           {uploadDocument.isPending ? "Uploading…" : "Upload"}
         </button>
       </div>

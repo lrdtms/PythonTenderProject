@@ -7,7 +7,9 @@ import { useParams } from "next/navigation";
 import { documentsQueryOptions } from "@/api/documents";
 import { ApiError } from "@/api/errors";
 import { tenderQueryOptions } from "@/api/tenders";
+import { SkeletonRows } from "@/components/skeleton-rows";
 import { StaleNote } from "@/components/stale-note";
+import { TenderTabs } from "@/components/tender-tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { tenderStatusLabel, tenderTone } from "@/lib/status-text";
@@ -56,13 +58,13 @@ export function TenderWorkspace() {
   return (
     <section>
       <p className="mb-2 text-sm">
-        <Link href="/tenders" className="underline">
+        <Link href="/tenders" className="text-zinc-500 hover:text-[var(--ink)]">
           ← Tenders
         </Link>
       </p>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t.title}</h1>
+          <h1 className="text-[22px] font-semibold leading-tight">{t.title}</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             {[t.reference_number, t.client_name, t.location].filter(Boolean).join(" · ")}
             {t.closing_at ? ` · closes ${formatDateTime(t.closing_at)}` : ""}
@@ -71,27 +73,12 @@ export function TenderWorkspace() {
         <StatusBadge tone={tenderTone(t.status)} label={tenderStatusLabel(t.status)} />
       </header>
       {archived ? (
-        <p className="mb-4 rounded border border-zinc-400 p-3 text-sm">This tender is archived and read-only.</p>
+        <p className="notice mb-4">This tender is archived and read-only.</p>
       ) : null}
 
-      <p className="mb-4 text-sm">
-        <Link href={`/tenders/${id}/checklist`} className="underline">
-          Requirements checklist
-        </Link>
-        {" · "}
-        <Link href={`/tenders/${id}/suppliers`} className="underline">
-          Compare suppliers
-        </Link>
-        {" · "}
-        <Link href={`/tenders/${id}/estimate`} className="underline">
-          Estimate
-        </Link>
-      </p>
+      <TenderTabs id={id} current="documents" />
 
-      {!archived ? <UploadForm tenderId={id} /> : null}
-
-      <h2 className="mb-2 text-lg font-medium">Documents</h2>
-      {documents.isPending ? <p role="status" className="text-sm text-zinc-500">Loading documents…</p> : null}
+      {documents.isPending ? <SkeletonRows label="Loading documents…" rows={3} height={72} /> : null}
       {documents.error && !documents.data ? (
         <p role="alert" className="text-sm text-red-600">
           {documents.error instanceof ApiError ? documents.error.message : "Could not load the documents."}
@@ -109,6 +96,12 @@ export function TenderWorkspace() {
             <DocumentCard key={d.id} document={d} tenderId={id} archived={archived} />
           ))}
         </ul>
+      ) : null}
+      {!archived ? (
+        <details className="group mt-8">
+          <summary className="btn w-fit list-none group-open:mb-4 [&::-webkit-details-marker]:hidden">Add a document</summary>
+          <UploadForm tenderId={id} />
+        </details>
       ) : null}
     </section>
   );
