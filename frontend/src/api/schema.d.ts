@@ -519,6 +519,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/health/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Status
+         * @description Public and minimal (parts as words only); rate-limited per client address.
+         */
+        get: operations["health_status_api_v1_health_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -3465,6 +3485,28 @@ export interface operations {
         };
     };
     health_db_api_v1_health_db_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    health_status_api_v1_health_status_get: {
         parameters: {
             query?: never;
             header?: never;
