@@ -19,6 +19,7 @@ import {
 import { tenderQueryOptions } from "@/api/tenders";
 import { useCan } from "@/components/auth-gate";
 import { ExportButton } from "@/components/export-button";
+import { TenderTabs } from "@/components/tender-tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { errorText } from "@/lib/estimate-words";
 import { formatDateTime } from "@/lib/format";
@@ -31,8 +32,8 @@ import { StatusActions } from "./status-actions";
 import { Summary } from "./summary";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SELECT = "rounded border bg-transparent p-1 text-sm";
-const BUTTON = "rounded border px-3 py-1 text-sm disabled:opacity-50";
+const SELECT = "input";
+const BUTTON = "btn";
 
 const STATUS_LABEL: Record<string, string> = { draft: "Draft", reviewed: "Reviewed", approved: "Approved" };
 
@@ -95,15 +96,15 @@ function EstimateBody({
   return (
     <>
       {frozen ? (
-        <div className="mb-3 text-sm text-zinc-700 dark:text-zinc-300">
+        <div className="mb-3 text-sm text-[var(--ink)]">
           <Who label="Reviewed" userId={estimate.reviewed_by} name={estimate.reviewed_by_name} at={estimate.reviewed_at} />
           <Who label="Approved" userId={estimate.approved_by} name={estimate.approved_by_name} at={estimate.approved_at} />
         </div>
       ) : null}
 
-      <div className="mb-4 grid gap-4 md:grid-cols-2">
-        <SettingsCard estimate={estimate} editable={editable} />
+      <div className="mb-6 grid items-start gap-6 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <Summary estimate={estimate} />
+        <SettingsCard estimate={estimate} editable={editable} />
       </div>
 
       <StatusActions estimate={estimate} hasDraft={hasDraft} archived={archived} onCreated={onCreated} />
@@ -139,8 +140,8 @@ function EstimateBody({
 
       {sections.map((section, i) => (
         <section key={`${i}-${section.name ?? ""}`} className="mb-6">
-          <h2 className="mb-2 text-lg font-medium">{section.name ?? "No section"}</h2>
-          <ul className="space-y-3">
+          <h2 className="mb-2 text-base font-semibold">{section.name ?? "No section"}</h2>
+          <ul className="space-y-2">
             {section.lines.map((line) => (
               <LineRow
                 key={line.id}
@@ -288,16 +289,17 @@ export function EstimateView() {
   return (
     <section>
       <p className="mb-2 text-sm">
-        <Link href={`/tenders/${id}`} className="underline">
+        <Link href={`/tenders/${id}`} className="text-zinc-500 hover:text-[var(--ink)]">
           ← Back to the tender
         </Link>
       </p>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Estimate: {tender.data.title}</h1>
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Estimate: {tender.data.title}</h1>
+      <TenderTabs id={id} current="estimate" />
       <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
         Every BoQ line with the confirmed supplier prices that may fit it, in the order the quotes were read. Prices are
         shown as quoted; no price is chosen for you.
       </p>
-      {archived ? <p className="mb-4 rounded border border-zinc-400 p-3 text-sm">This tender is archived and read-only.</p> : null}
+      {archived ? <p className="notice mb-4">This tender is archived and read-only.</p> : null}
       {body}
     </section>
   );

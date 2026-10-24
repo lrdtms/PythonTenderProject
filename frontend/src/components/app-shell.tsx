@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
 
 import { useLogout } from "@/api/session";
 import type { Role } from "@/api/types";
@@ -16,71 +16,81 @@ const ROLE_LABELS: Record<Role, string> = {
   reviewer: "Reviewer",
 };
 
+function NavLink({ href, pathname, onNavigate, children }: { href: string; pathname: string; onNavigate: () => void; children: ReactNode }) {
+  const current = pathname === href || pathname.startsWith(`${href}/`);
+  return (
+    <Link href={href} className="nav-item" aria-current={current ? "page" : undefined} onClick={onNavigate}>
+      {children}
+    </Link>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const me = useSession();
   const router = useRouter();
+  const pathname = usePathname() ?? "";
   const logout = useLogout();
+  // On a phone the sidebar is a full-screen menu; on a desktop it is always shown (see globals.css).
+  const [menuOpen, setMenuOpen] = useState(false);
+  const close = () => setMenuOpen(false);
+  const can = (permission: string) => me.permissions.includes(permission);
+  const admin = can("manage_members") || can("view_audit") || can("manage_pricing");
+
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="shell">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:p-2 focus:text-black"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-10 focus:rounded focus:bg-white focus:p-2 focus:text-black"
       >
         Skip to content
       </a>
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <nav aria-label="Main" className="flex items-center gap-6">
-          <Link href="/tenders" className="text-lg font-semibold tracking-tight">
-            IntelTPS
-          </Link>
-          <Link href="/tenders" className="text-sm hover:underline">
-            Tenders
-          </Link>
-          <Link href="/suppliers" className="text-sm hover:underline">
-            Suppliers
-          </Link>
-          {me.permissions.includes("manage_members") ? (
-            <Link href="/members" className="text-sm hover:underline">
-              Members
-            </Link>
-          ) : null}
-          <Link href="/settings/usage" className="text-sm hover:underline">
-            Usage
-          </Link>
-          {me.permissions.includes("view_audit") ? (
-            <Link href="/audit" className="text-sm hover:underline">
-              Audit
-            </Link>
-          ) : null}
-          {me.permissions.includes("manage_pricing") ? (
-            <Link href="/settings/pricing" className="text-sm hover:underline">
-              Pricing
-            </Link>
-          ) : null}
-        </nav>
-        <div className="flex items-center gap-4 text-sm">
-          <span>{me.organisation_name}</span>
-          <span>
-            {me.name} ({ROLE_LABELS[me.role]})
+      <header className="shell-head">
+        <Link href="/tenders" className="shell-brand" onClick={close}>
+          <span className="shell-mark" aria-hidden="true">I</span>
+          IntelTPS
+        </Link>
+        <div className="flex min-w-0 items-center gap-3 text-sm">
+          <span className="hidden min-w-0 truncate text-zinc-500 sm:inline">
+            {me.organisation_name} · {me.name}, {ROLE_LABELS[me.role]}
           </span>
           <button
             type="button"
             disabled={logout.isPending}
             onClick={() => logout.mutate(undefined, { onSuccess: () => router.replace("/login") })}
-            className="rounded border border-zinc-300 px-3 py-1 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="btn"
           >
             Sign out
           </button>
+          <button
+            type="button"
+            className="btn menu-button"
+            aria-expanded={menuOpen}
+            aria-controls="main-nav"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? "Close" : "Menu"}
+          </button>
         </div>
       </header>
-      {logout.isError ? (
-        <p role="alert" className="bg-red-100 px-4 py-2 text-sm text-red-900">
-          Could not sign out. Try again.
-        </p>
-      ) : null}
-      <main id="main" className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-8">
-        {children}
-      </main>
+      <nav id="main-nav" aria-label="Main" className="shell-side" data-open={menuOpen}>
+        <NavLink href="/tenders" pathname={pathname} onNavigate={close}>Tenders</NavLink>
+        <NavLink href="/suppliers" pathname={pathname} onNavigate={close}>Suppliers</NavLink>
+        <NavLink href="/settings/usage" pathname={pathname} onNavigate={close}>Usage</NavLink>
+        {admin ? <p className="nav-group">Organisation</p> : null}
+        {can("manage_members") ? <NavLink href="/members" pathname={pathname} onNavigate={close}>Members</NavLink> : null}
+        {can("manage_pricing") ? <NavLink href="/settings/pricing" pathname={pathname} onNavigate={close}>Pricing</NavLink> : null}
+        {can("view_audit") ? <NavLink href="/audit" pathname={pathname} onNavigate={close}>Audit</NavLink> : null}
+      </nav>
+      <div className="shell-sheet">
+        {logout.isError ? (
+          <p role="alert" className="notice m-4">
+            Could not sign out. Try again.
+          </p>
+        ) : null}
+        <main id="main" className="w-full max-w-[1440px] p-4 sm:p-6 lg:p-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

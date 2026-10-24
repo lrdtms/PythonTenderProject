@@ -60,7 +60,7 @@ export function LineRow({
   const old = line.status === "changed";
   const amounts = AMOUNTS.filter(([, key]) => line[key] !== null && line[key] !== undefined);
   return (
-    <li id={`line-${line.id}`} className="rounded border border-zinc-300 p-3 dark:border-zinc-700">
+    <li id={`line-${line.id}`} className="panel p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-sm font-medium">
           {line.item_no ? `${line.item_no} ` : ""}

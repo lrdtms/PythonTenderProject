@@ -56,7 +56,7 @@ function QuotationEditor({ row, save, cancel, saving, error }: { row: QuotationI
     >
       <label className="block">
         <span className="font-medium">Description</span>
-        <input value={description} maxLength={2000} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded border bg-transparent p-2" />
+        <input value={description} maxLength={2000} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full input !h-auto py-2" />
       </label>
       <div className="flex flex-wrap gap-3">
         <label>
@@ -81,10 +81,10 @@ function QuotationEditor({ row, save, cancel, saving, error }: { row: QuotationI
       {empty ? <p role="alert" className={err}>The description cannot be empty.</p> : null}
       {error ? <p role="alert" className={err}>{error}</p> : null}
       <div className="flex gap-2">
-        <button type="submit" disabled={saving || invalid} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="submit" disabled={saving || invalid} className="btn">
           Save
         </button>
-        <button type="button" disabled={saving} onClick={cancel} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="button" disabled={saving} onClick={cancel} className="btn">
           Cancel
         </button>
       </div>
@@ -119,7 +119,7 @@ export function QuotationRow({ row, versionId, selected, onSelect, archived = fa
       onReplaced={onReplaced}
       chips={
         <>
-          {row.sku ? <span className="rounded border px-1.5 py-0.5 font-mono text-xs">{row.sku}</span> : null}
+          {row.sku ? <span className="rounded border px-1.5 py-0.5 text-xs">{row.sku}</span> : null}
           {row.flags.map((f) => (
             <StatusBadge key={f} tone="warning" label={flagLabel(f)} />
           ))}

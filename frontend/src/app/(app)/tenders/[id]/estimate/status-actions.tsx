@@ -13,7 +13,8 @@ import { useCan } from "@/components/auth-gate";
 
 import { ErrorNotice } from "./error-notice";
 
-const BUTTON = "rounded border px-3 py-1 text-sm disabled:opacity-50";
+const BUTTON = "btn";
+const PRIMARY = "btn btn-primary";
 
 /** Mark reviewed, Approve, Reopen and New version, shown by permission and by the state of the estimate. */
 export function StatusActions({
@@ -57,7 +58,7 @@ export function StatusActions({
           <button
             type="button"
             disabled={pending}
-            className={BUTTON}
+            className={PRIMARY}
             onClick={() => {
               clear();
               review.mutate(estimate.id);
@@ -70,7 +71,7 @@ export function StatusActions({
           <button
             type="button"
             disabled={pending}
-            className={BUTTON}
+            className={PRIMARY}
             onClick={() => {
               clear();
               setConfirming(true);
@@ -80,7 +81,7 @@ export function StatusActions({
           </button>
         ) : null}
         {showApprove && confirming ? (
-          <span role="group" aria-label="Confirm approval" aria-live="polite" className="flex flex-wrap items-center gap-2 rounded border p-2 text-sm">
+          <span role="group" aria-label="Confirm approval" aria-live="polite" className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--raised)] p-2 text-sm">
             <span>Approve this estimate? It can no longer be changed.</span>
             <button
               ref={confirmRef}

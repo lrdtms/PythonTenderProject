@@ -47,14 +47,14 @@ function RequirementEditor({ row, save, cancel, saving, error }: { row: Requirem
           value={description}
           maxLength={2000}
           onChange={(e) => setDescription(e.target.value)}
-          className="mt-1 w-full rounded border bg-transparent p-2"
+          className="mt-1 w-full input !h-auto py-2"
           rows={3}
         />
       </label>
       <div className="flex flex-wrap gap-3">
         <label>
           <span className="mr-1 font-medium">Type</span>
-          <select value={type} onChange={(e) => setType(e.target.value)} className="rounded border bg-transparent p-1">
+          <select value={type} onChange={(e) => setType(e.target.value)} className="input">
             {REQUIREMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {requirementTypeLabel(t)}
@@ -64,7 +64,7 @@ function RequirementEditor({ row, save, cancel, saving, error }: { row: Requirem
         </label>
         <label>
           <span className="mr-1 font-medium">Status</span>
-          <select value={mandatory} onChange={(e) => setMandatory(e.target.value)} className="rounded border bg-transparent p-1">
+          <select value={mandatory} onChange={(e) => setMandatory(e.target.value)} className="input">
             {MANDATORY_STATUSES.map((m) => (
               <option key={m} value={m}>
                 {mandatoryLabel(m)}
@@ -84,10 +84,10 @@ function RequirementEditor({ row, save, cancel, saving, error }: { row: Requirem
         </p>
       ) : null}
       <div className="flex gap-2">
-        <button type="submit" disabled={saving || empty} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="submit" disabled={saving || empty} className="btn">
           Save
         </button>
-        <button type="button" disabled={saving} onClick={cancel} className="rounded border px-2 py-1 disabled:opacity-50">
+        <button type="button" disabled={saving} onClick={cancel} className="btn">
           Cancel
         </button>
       </div>

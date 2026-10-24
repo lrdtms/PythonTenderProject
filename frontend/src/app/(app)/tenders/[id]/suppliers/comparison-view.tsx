@@ -11,13 +11,14 @@ import { quotationsQueryOptions } from "@/api/quotations";
 import { tenderQueryOptions } from "@/api/tenders";
 import type { MatchLine as MatchLineData } from "@/api/types";
 import { useCan } from "@/components/auth-gate";
+import { TenderTabs } from "@/components/tender-tabs";
 import { matchErrorText } from "@/lib/match-text";
 
 import { MatchLine } from "./match-line";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SELECT = "rounded border bg-transparent p-1 text-sm";
-const BUTTON = "rounded border px-3 py-1 text-sm disabled:opacity-50";
+const SELECT = "input";
+const BUTTON = "btn";
 
 type Section = { name: string | null; lines: MatchLineData[] };
 
@@ -100,31 +101,32 @@ export function ComparisonView() {
   return (
     <section>
       <p className="mb-2 text-sm">
-        <Link href={`/tenders/${id}`} className="underline">
+        <Link href={`/tenders/${id}`} className="text-zinc-500 hover:text-[var(--ink)]">
           ← Back to the tender
         </Link>
       </p>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Supplier comparison: {tender.data.title}</h1>
-      <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Supplier comparison: {tender.data.title}</h1>
+      <TenderTabs id={id} current="suppliers" />
+      <p className="mb-4 text-sm text-zinc-500">
         Each line of the bill of quantities with the supplier quotes that may fit it, in the order the quotes were read.
         Prices are shown as quoted; confirm the match you want to use.
       </p>
 
-      <p className="mb-3 text-sm" aria-live="polite">
+      <p className="num mb-4 rounded-lg bg-[var(--raised)] px-4 py-3 text-sm" aria-live="polite">
         Loaded: {lines.length} {lines.length === 1 ? "line" : "lines"} · {awaiting} awaiting a decision · {confirmed} with a confirmed match · {noMatch} with no supplier match{list.hasNextPage ? " (more lines are not loaded yet)" : ""}
       </p>
 
       <div className="mb-3 flex flex-wrap items-end gap-3" role="group" aria-label="Filters">
-        <label className="text-sm">
-          <span className="mr-1 font-medium">Classification</span>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-xs text-zinc-500">Classification</span>
           <select value={classification} onChange={(e) => setClassification(e.target.value)} className={SELECT}>
             <option value="">All</option>
             <option value="clear">Clear match</option>
             <option value="ambiguous">Needs a decision</option>
           </select>
         </label>
-        <label className="text-sm">
-          <span className="mr-1 font-medium">Status</span>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-xs text-zinc-500">Status</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className={SELECT}>
             <option value="">All</option>
             <option value="suggested">Suggested</option>
@@ -132,8 +134,8 @@ export function ComparisonView() {
             <option value="rejected">Rejected</option>
           </select>
         </label>
-        <label className="text-sm">
-          <span className="mr-1 font-medium">Supplier</span>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-xs text-zinc-500">Supplier</span>
           <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={SELECT}>
             <option value="">All</option>
             {suppliers.map((s) => (
@@ -143,7 +145,7 @@ export function ComparisonView() {
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-1 text-sm">
+        <label className="flex h-9 items-center gap-2 text-sm">
           <input type="checkbox" checked={onlyWithSuggestions} onChange={(e) => setOnlyWithSuggestions(e.target.checked)} />
           Only lines with a suggestion
         </label>
@@ -159,7 +161,7 @@ export function ComparisonView() {
                 run.reset();
                 confirmClear.mutate();
               }}
-              className={BUTTON}
+              className="btn btn-primary"
             >
               Confirm all clear matches ({clearOpen})
             </button>
@@ -178,7 +180,7 @@ export function ComparisonView() {
         </button>
       </div>
       {canReview ? (
-        <p className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">
+        <p className="mb-3 text-xs text-zinc-500">
           Confirms every clear match in this tender, including lines not shown. Rival matches, edited items, quotes
           expiring before closing and cable notation differences are skipped.
         </p>
@@ -215,7 +217,7 @@ export function ComparisonView() {
 
       {sections.map((section, i) => (
         <section key={`${i}-${section.name ?? ""}`} className="mb-6">
-          <h2 className="mb-2 text-lg font-medium">{section.name ?? "No section"}</h2>
+          <h2 className="mb-2 text-base font-semibold">{section.name ?? "No section"}</h2>
           <ul className="space-y-3">
             {section.lines.map((line) => (
               <MatchLine

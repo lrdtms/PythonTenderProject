@@ -12,6 +12,7 @@ import { tenderQueryOptions } from "@/api/tenders";
 import type { Requirement } from "@/api/types";
 import { useCan } from "@/components/auth-gate";
 import { ExportButton } from "@/components/export-button";
+import { TenderTabs } from "@/components/tender-tabs";
 import { StatusBadge } from "@/components/status-badge";
 import {
   MANDATORY_STATUSES,
@@ -99,7 +100,7 @@ export function ChecklistView() {
   const filtered = !!(reviewStatus || requirementType || mandatory);
 
   const row = (r: Requirement) => (
-    <li key={r.id} className="rounded border border-zinc-300 p-3 dark:border-zinc-700">
+    <li key={r.id} className="panel p-3">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <StatusBadge tone={reviewTone(r.review_status)} label={reviewStatusLabel(r.review_status)} />
         <StatusBadge tone="neutral" label={mandatoryLabel(r.mandatory_status)} />
@@ -125,11 +126,12 @@ export function ChecklistView() {
   return (
     <section>
       <p className="mb-2 text-sm">
-        <Link href={`/tenders/${id}`} className="underline">
+        <Link href={`/tenders/${id}`} className="text-zinc-500 hover:text-[var(--ink)]">
           ← Back to the tender
         </Link>
       </p>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Checklist: {tender.data.title}</h1>
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Checklist: {tender.data.title}</h1>
+      <TenderTabs id={id} current="checklist" />
       <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
         Requirements from the current version of every document. Open a requirement in review to see its source or change it.
       </p>
@@ -204,7 +206,7 @@ export function ChecklistView() {
 
       {groups.map((g) => (
         <section key={g.type} aria-labelledby={`group-${g.type}`} className="mb-6">
-          <h2 id={`group-${g.type}`} className="mb-2 text-lg font-medium">
+          <h2 id={`group-${g.type}`} className="mb-2 text-base font-semibold">
             {requirementTypeLabel(g.type)} ({g.rows.length}{list.hasNextPage ? "+" : ""})
           </h2>
           <ul className="space-y-2">{g.rows.map(row)}</ul>
@@ -222,7 +224,7 @@ export function ChecklistView() {
             type="button"
             disabled={list.isFetchingNextPage}
             onClick={() => void list.fetchNextPage()}
-            className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+            className="btn"
           >
             Load more
           </button>

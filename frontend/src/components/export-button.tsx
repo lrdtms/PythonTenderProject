@@ -71,7 +71,7 @@ export function ExportButton({ tenderId, kind, estimateId, label, draftNote }: P
       <div>
         <button
           type="button"
-          className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+          className="btn"
           disabled={create.isPending}
           aria-describedby={showNote ? noteId : undefined}
           onClick={run}
@@ -84,7 +84,7 @@ export function ExportButton({ tenderId, kind, estimateId, label, draftNote }: P
           {exportErrorText(create.error)}
         </p>
       )}
-      <p role="status" aria-live="polite" className="text-sm text-zinc-800 dark:text-zinc-200">
+      <p role="status" aria-live="polite" className="text-sm text-[var(--ink)]">
         {done && (
           <>
             Downloaded{" "}

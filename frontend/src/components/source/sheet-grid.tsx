@@ -29,7 +29,7 @@ export function SheetGrid({ table, range }: Props) {
   const lastRow = table.first_row + table.rows.length - 1;
   const scrollRow = bounds && bounds.lastRow >= table.first_row && bounds.firstRow <= lastRow ? Math.max(bounds.firstRow, table.first_row) : null;
   return (
-    <div className="max-h-96 overflow-auto rounded border border-zinc-300 dark:border-zinc-700">
+    <div className="max-h-96 overflow-auto panel">
       <table className="min-w-full border-collapse text-xs">
         <thead>
           <tr>

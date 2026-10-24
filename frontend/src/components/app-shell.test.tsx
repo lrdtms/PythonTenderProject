@@ -9,7 +9,7 @@ import { AppShell } from "./app-shell";
 import { AuthGate } from "./auth-gate";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }), usePathname: () => "/tenders" }));
 
 const fetchMock = vi.fn();
 beforeEach(() => {

@@ -38,7 +38,7 @@ export function AuditView() {
   if (!canView) {
     return (
       <div>
-        <h1 className="mb-2 text-2xl font-semibold tracking-tight">Audit</h1>
+        <h1 className="mb-2 text-[22px] font-semibold leading-tight">Audit</h1>
         <p>You do not have access to the audit trail.</p>
       </div>
     );
@@ -49,7 +49,7 @@ export function AuditView() {
 
   return (
     <section>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Audit</h1>
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Audit</h1>
       <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">What happened in your organisation, newest first.</p>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">

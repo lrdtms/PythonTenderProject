@@ -10,7 +10,7 @@ import { markupError, vatError } from "@/lib/rates";
 type Basis = PricingDefaults["markup_basis"];
 
 const BASIS_LABEL: Record<Basis, string> = { cost: "On cost", selling_price: "On selling price" };
-const INPUT = "rounded border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700";
+const INPUT = "input";
 
 type Errors = { currency?: string; vat?: string; markup?: string };
 
@@ -66,7 +66,7 @@ function EditForm({ saved, done, setDone }: { saved: PricingDefaults | null; don
     ) : null;
 
   return (
-    <form onSubmit={submit} noValidate aria-label="Pricing defaults" className="max-w-xl space-y-4">
+    <form onSubmit={submit} noValidate aria-label="Pricing defaults" className="panel grid max-w-xl gap-4 p-5 sm:grid-cols-2">
       <div className="flex flex-col gap-1">
         <label htmlFor="pd-currency" className="text-sm font-medium">
           Currency
@@ -112,7 +112,7 @@ function EditForm({ saved, done, setDone }: { saved: PricingDefaults | null; don
         {err("pd-vat-err", errors.vat)}
       </div>
 
-      <fieldset className="space-y-1">
+      <fieldset className="space-y-1 sm:col-span-2">
         <legend className="text-sm font-medium">Markup basis</legend>
         {(Object.keys(BASIS_LABEL) as Basis[]).map((value) => (
           <label key={value} className="flex items-center gap-2 text-sm">
@@ -128,7 +128,7 @@ function EditForm({ saved, done, setDone }: { saved: PricingDefaults | null; don
         ))}
       </fieldset>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 sm:col-span-2">
         <label htmlFor="pd-markup" className="text-sm font-medium">
           Default markup (%)
         </label>
@@ -150,7 +150,7 @@ function EditForm({ saved, done, setDone }: { saved: PricingDefaults | null; don
       </div>
 
       {save.error ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+        <p role="alert" className="text-sm text-red-700 sm:col-span-2 dark:text-red-300">
           {serverMessage(save.error)}
         </p>
       ) : null}
@@ -159,7 +159,7 @@ function EditForm({ saved, done, setDone }: { saved: PricingDefaults | null; don
           Pricing defaults saved.
         </p>
       ) : null}
-      <button type="submit" disabled={save.isPending} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
+      <button type="submit" disabled={save.isPending} className="btn w-fit sm:col-span-2">
         {save.isPending ? "Saving…" : "Save pricing defaults"}
       </button>
     </form>
@@ -204,7 +204,7 @@ export function PricingForm() {
 
   return (
     <div>
-      <h1 className="mb-2 text-2xl font-semibold tracking-tight">Pricing defaults</h1>
+      <h1 className="mb-2 text-[22px] font-semibold leading-tight">Pricing defaults</h1>
       <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
         {canManage
           ? "These values start every new estimate. Changing them does not alter estimates already created."

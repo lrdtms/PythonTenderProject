@@ -51,8 +51,9 @@ function CreateSupplier({ onStart }: { onStart: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="mb-8 space-y-3 rounded border border-zinc-300 p-4 dark:border-zinc-700" aria-label="Add a supplier">
-      <h2 className="text-lg font-medium">Add a supplier</h2>
+    <details className="group mb-6">
+      <summary className="btn btn-primary w-fit list-none group-open:mb-4 [&::-webkit-details-marker]:hidden">Add a supplier</summary>
+    <form onSubmit={submit} className="panel space-y-3 p-4" aria-label="Add a supplier">
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name" required maxLength={200} value={name} onChange={(e) => (touch(), setName(e.target.value))} />
         <Field label="Notes" value={notes} onChange={(e) => (touch(), setNotes(e.target.value))} />
@@ -67,10 +68,11 @@ function CreateSupplier({ onStart }: { onStart: () => void }) {
           {supplierErrorText(create.error)}
         </p>
       ) : null}
-      <button type="submit" disabled={create.isPending} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
+      <button type="submit" disabled={create.isPending} className="btn">
         {create.isPending ? "Adding…" : "Add supplier"}
       </button>
     </form>
+    </details>
   );
 }
 
@@ -176,7 +178,7 @@ function SupplierRow({
             onChange={(e) => setName(e.target.value)}
           />
           <Field label={`Notes for ${supplier.name}`} value={notes} onChange={(e) => setNotes(e.target.value)} />
-          <button type="submit" disabled={busy} aria-label={update.isPending ? undefined : `Save ${supplier.name}`} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
+          <button type="submit" disabled={busy} aria-label={update.isPending ? undefined : `Save ${supplier.name}`} className="btn">
             {update.isPending ? "Saving…" : "Save"}
           </button>
           <button
@@ -187,7 +189,7 @@ function SupplierRow({
               setError(null);
               closeEditor();
             }}
-            className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+            className="btn"
           >
             Cancel
           </button>
@@ -245,7 +247,7 @@ function SupplierRow({
                 value={target ? targetId : ""}
                 disabled={busy}
                 onChange={(e) => setTargetId(e.target.value)}
-                className="rounded border bg-transparent p-1"
+                className="input"
               >
                 <option value="">Choose a supplier…</option>
                 {others.map((o) => (
@@ -287,7 +289,7 @@ export function SuppliersView() {
 
   return (
     <section>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Suppliers</h1>
+      <h1 className="mb-1 text-[22px] font-semibold leading-tight">Suppliers</h1>
       <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
         Everyone who has quoted, across all tenders. Merging combines two entries for the same company and cannot be undone.
       </p>

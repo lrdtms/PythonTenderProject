@@ -47,7 +47,7 @@ type Props = {
   editor: (api: EditorApi) => ReactNode;
 };
 
-const BUTTON = "rounded border px-2 py-1 text-sm disabled:opacity-50";
+const BUTTON = "btn btn-sm";
 
 export function RowShell({
   kind, versionId, row, selected, onSelect, archived, command, editing: editingProp, onEditingChange, onReplaced, summary, chips, editor,
@@ -92,7 +92,7 @@ export function RowShell({
     <li
       id={`row-${row.id}`}
       aria-current={selected ? "true" : undefined}
-      className={`rounded border p-3 ${selected ? "border-blue-600 ring-1 ring-blue-600" : "border-zinc-300 dark:border-zinc-700"}`}
+      className={`panel p-3 ${selected ? "!border-blue-600 ring-1 ring-blue-600" : ""}`}
     >
       <button
         type="button"

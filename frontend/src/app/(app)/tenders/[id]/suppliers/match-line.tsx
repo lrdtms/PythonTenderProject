@@ -17,8 +17,8 @@ export function MatchLine({
 }) {
   const b = line.boq;
   return (
-    <li className="rounded border border-zinc-300 p-3 dark:border-zinc-700">
-      <p className="text-sm font-medium">
+    <li className="panel p-4">
+      <p className="font-medium">
         {b.item_no ? `${b.item_no} ` : ""}
         {b.description}
       </p>
